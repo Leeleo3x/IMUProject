@@ -5,10 +5,19 @@
 #ifndef PROJECT_QUATERNIONSPLINE_H
 #define PROJECT_QUATERNIONSPLINE_H
 
+#include <iostream>
 
-class QuaternionSpline {
+#include <Eigen/Eigen>
 
-};
+namespace IMUProject{
+
+	namespace QuaternionUtility{
+
+
+
+	}
+
+}//namespace IMUProject
 
 
 #endif //PROJECT_QUATERNIONSPLINE_H
