@@ -30,7 +30,9 @@ def interpolateAngularRate(gyro_data, output_timestamp):
 
     for i in range(N_input):
         record = gyro_data[i, 1:4]
-        gyro_quat[i] = quaternion.as_float_array(quaternion.from_euler_angles(record[0], record[1], record[2]))
+        q = quaternion.from_euler_angles(record[0], record[1], record[2])
+
+        gyro_quat[i] = quaternion.as_float_array()
 
     np.savetxt(args.dir + '/quat.txt', gyro_quat, '%.6f')
 
