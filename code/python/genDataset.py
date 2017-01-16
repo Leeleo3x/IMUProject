@@ -1,9 +1,11 @@
 #pylint: disable=C0103,C0111,C0301
 
+import math
 import argparse
 import numpy as np
 import quaternion
 import quaternion.quaternion_time_series
+
 
 def estimateOffset(input_data, K=100):
     assert input_data.shape[0] >= K
@@ -15,6 +17,12 @@ def adjustAxis(input_data):
     input_data[:, [2, 3]] = input_data[:, [3, 2]]
     # invert x, y axis
     input_data[:, 1:2] *= -1
+
+
+def normalizeEularAngle(input):
+    """Normalize eular angle to -pi/2 to pi/2"""
+    input[input < -math.pi / 2] += math.pi
+    input[input > math.pi / 2] -= math.pi
 
 def interpolateAngularRateSpline(gyro_data, output_timestamp):
     # convert angular velocity to quaternion
@@ -35,6 +43,7 @@ def interpolateAngularRateSpline(gyro_data, output_timestamp):
     for i in range(N_output):
         output_eular[i, 1:] = quaternion.as_euler_angles(gyro_interpolated[i])
 
+    normalizeEularAngle(output_eular[:, 1:])
     return output_eular
 
 
@@ -60,7 +69,6 @@ def interpolateAngularRateLinear(gyro_data, output_timestamp):
             result[i, 1:] = quaternion.as_euler_angles(q_inter)
         else:
             ptr += 1
-
     return result
 
 
@@ -68,7 +76,6 @@ def interpolateAcceleration(acce_data, output_timestamp):
     offset = estimateOffset(acce_data)
     for record in gyro_data:
         acce_data[:,1:] -= offset
-
     return gyro_data
 
 
@@ -82,6 +89,7 @@ def testEularToQuaternion(eular_input):
     for i in range(eular_input.shape[0]):
         q = quaternion.from_euler_angles(eular_input[i, 0], eular_input[i, 1], eular_input[i, 2])
         eular_ret[i, :] = quaternion.as_euler_angles(q)
+    normalizeEularAngle(eular_ret)
     return eular_ret
 
 
@@ -96,8 +104,8 @@ if __name__ == '__main__':
     acce_data = np.genfromtxt(args.dir+'/acce.txt')
     gyro_data = np.genfromtxt(args.dir+'/gyro.txt')
 
-    #test_gyro = testEularToQuaternion(gyro_data[:, 1:])
-    #np.savetxt(args.dir+'/output_test.txt', test_gyro, '%.6f')
+    # test_gyro = testEularToQuaternion(gyro_data[:, 1:])
+    # np.savetxt(args.dir+'/output_test.txt', test_gyro, '%.6f')
 
     # adjust axis
     adjustAxis(acce_data)
@@ -105,7 +113,6 @@ if __name__ == '__main__':
 
     # Generate dataset
     output_timestamp = pose_data[:, 0]
-
     print('Interpolate gyro data.')
     output_gyro = interpolateAngularRateSpline(gyro_data, output_timestamp)
     output_gyro_linear = interpolateAngularRateLinear(gyro_data, output_timestamp)
