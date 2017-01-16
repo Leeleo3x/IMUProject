@@ -1,8 +1,8 @@
 #pylint: disable=C0103,C0111,C0301
 
 import argparse
-import shutil
 import os
+from datetime import datetime
 
 import numpy as np
 import scipy.interpolate
@@ -35,6 +35,9 @@ def adjustAxis(input_data):
     # invert x, y axis
     input_data[:, 1:2] *= -1
 
+def extractGravity(acce):
+    """Extract gravity from accelerometer"""
+    
 
 def interpolateAngularRateSpline(gyro_data, output_timestamp):
     # convert angular velocity to quaternion
@@ -83,8 +86,10 @@ def interpolate3DVectorLinear(input, output_timestamp):
     return np.concatenate([output_timestamp[:, np.newaxis], interpolated], axis=1)
 
 
-def writeFile(path, data):
+def writeFile(path, data, header=''):
     with open(path, 'w') as f:
+        if len(header) > 0:
+            f.write(header + '\n')
         for row in data:
             f.write('{:.0f}'.format(row[0]))
             for j in range(data.shape[1] - 1):
@@ -143,7 +148,6 @@ if __name__ == '__main__':
     # writeFile(args.dir + '/output_gyro.txt', output_gyro)
     #
     output_gyro_linear = interpolateAngularRateLinear(gyro_data, output_timestamp)
-    #
     print('Interpolate the acceleration data')
     output_accelerometer_linear = interpolate3DVectorLinear(acce_data, output_timestamp)
     output_linacce_linear = interpolate3DVectorLinear(linacce_data, output_timestamp)
@@ -156,3 +160,9 @@ if __name__ == '__main__':
     writeFile(output_folder + '/gravity_linear.txt', output_gravity_linear)
     writeFile(output_folder + '/combined_linear.txt', output_acce_combined)
     writeFile(output_folder + '/acce_linear.txt', output_accelerometer_linear)
+
+    dataset_all = np.concatenate([output_gyro_linear, output_linacce_linear[:, 1:],
+                                  output_gravity_linear[:, 1:]], axis=1)
+    writeFile(output_folder + '/data.txt', dataset_all,
+              '# {}, timestamp, gyro (quaternion), linear acceleration, gravity'.format(datetime.now()))
+    print('Dataset written to ' + output_folder + '/data.txt')
