@@ -90,7 +90,8 @@ if __name__ == '__main__':
 
     print('Interpolate gyro data.')
     output_gyro = interpolateAngularRate(gyro_data, output_timestamp)
-    np.savetxt(args.dir+'/output_gyro.txt', output_gyro[:,1:], '%.6f')
+    np.savetxt(args.dir+'/output_gyro.txt', output_gyro[:, 1:], '%.6f')
+
 
 
     #output_acce = interpolateAcceleration(acce_data, output_timestamp)
