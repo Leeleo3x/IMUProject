@@ -18,29 +18,26 @@ def computeIntervalVariance(input, N=100, step=10):
     plt.plot(np.linalg.norm(range_list))
 
 
-def estimateOffset(input_data, N=200, K=100):
-    # assert input_data.shape[0] >= K
-    # sample_point = np.arange(0, min(400, input_data.shape[0]), 10)
-    # range_list = [np.linalg.norm(np.var(input_data[s:s+K, :], axis=0), axis=0) for s in sample_point]
-    # min_var = min(range_list)
-    # min_ind = sample_point[range_list.index(min_var)]
-    # return np.average(input_data[min_ind:min_ind+K], axis=0)
-
-    # Assume the device is static from 2s to 3s
-    return np.average(input_data[N:N+K], axis=0)
-
-
 # for Tango development kit
 def adjustAxis(input_data):
     # first swap y and z
     input_data[:, [2, 3]] = input_data[:, [3, 2]]
-    # invert x, y axis
-    input_data[:, 1:2] *= -1
+    # invert x, z axis
+    input_data[:, [1, 3]] *= -1
 
 
 def extractGravity(acce):
     """Extract gravity from accelerometer"""
-    
+    pass
+
+
+def analysisError(pose_data):
+    position = np.linalg.norm(pose_data[-1, 1:4] - pose_data[0, 1:4])
+    q_start = quaternion.quaternion(pose_data[0, -4], pose_data[0, -3], pose_data[0, -2], pose_data[0, -1])
+    q_end = quaternion.quaternion(pose_data[-1, -4], pose_data[-1, -3], pose_data[-1, -2], pose_data[-1, -1])
+    q_diff = q_start.inverse() * q_end
+    return position, 2 * math.acos(q_diff.w)
+
 
 def interpolateAngularRateSpline(gyro_data, output_timestamp):
     # convert angular velocity to quaternion
@@ -99,18 +96,29 @@ def writeFile(path, data, header=''):
                 f.write(' {:.6f}'.format(row[j+1]))
             f.write('\n')
 
-def writeTrajectoryToPly(path, positions):
+
+def writeTrajectoryToPly(path, positions, gravity=np.array([0, 0, 0])):
     """
     Write camera poses to ply file.
     :param path: File path
     :param positions: N x 3 array of positions
+    :param gravity: gravity direction
     :return: None
     """
-    positions_data = np.empty((positions.shape[0],), dtype=[('x', 'f4'), ('y', 'f4'), ('z', 'f4')])
-    positions_data[:] = [tuple(i) for i in positions]
+    assert gravity.ndim == 1, 'Gravity should be a 3d vector'
+    assert gravity.shape[0] == 3, 'Gravity should be a 3d vector'
+    gravity_length = 1
+    vertex_type = [('x', 'f4'), ('y', 'f4'), ('z', 'f4'), ('red', 'u1'), ('green', 'u1'), ('blue', 'u1')]
+    positions_data = np.empty((positions.shape[0],), dtype=vertex_type)
+    positions_data[:] = [tuple([*i, 0, 255, 0]) for i in positions]
+    if np.linalg.norm(gravity) >= 0.1:
+        gravity_sample = np.linspace(0.0, gravity_length, 1000)
+        gravity_points = np.empty((gravity_sample.shape[0],), dtype=vertex_type)
+        gravity_points[:] = [tuple([*(gravity * dis), 255, 0, 0]) for dis in np.nditer(gravity_sample)]
+        positions_data = np.concatenate([positions_data, gravity_points], axis=0)
+
     vertex_element = plyfile.PlyElement.describe(positions_data, 'vertex')
     plyfile.PlyData([vertex_element], text=True).write(path)
-
 
 def testEularToQuaternion(eular_input):
     eular_ret = np.empty(eular_input.shape)
@@ -120,7 +128,7 @@ def testEularToQuaternion(eular_input):
     return eular_ret
 
 
-def rotationMatrixFromUnitVectors(v1, v2):
+def rotationMatrixFromTwoVectors(v1, v2):
     """
     Using Rodrigues rotationformula
     https://en.wikipedia.org/wiki/Rodrigues%27_rotation_formula
@@ -141,11 +149,37 @@ def rotationMatrixFromUnitVectors(v1, v2):
     return np.identity(3) + math.sqrt(1 - theta * theta) * K + np.dot((1 - theta) * K * K, v1)
 
 
-def alignWithGravity(pose, gravity, target=np.array([0,1,0])):
+def quaternionFromTwoVectors(v1, v2):
+    """
+    Compute quaternion from two vectors
+    :param v1:
+    :param v2:
+    :return Quaternion representation of rotation between v1 and v2
+    """
+    v1n = v1 / np.linalg.norm(v1)
+    v2n = v2 / np.linalg.norm(v2)
+    w = np.cross(v1n, v2n)
+    q = np.array([1.0 + np.dot(v1n, v2n), *w])
+    q /= np.linalg.norm(q)
+    return quaternion.quaternion(*q)
+
+
+def alignWithGravity(poses, gravity, local_g_direction=np.array([0, 0, -1])):
     """
     Adjust pose such that the gravity is at $target$ direction
+    @:param poses: N x 7 array, each row is position + orientation (quaternion). The array will be modified in place.
+    @:param gravity: real gravity direction
+    @:param local_g_direction: z direction before alignment
+    @:return None.
     """
-    R = rotationMatrixFromUnitVectors()
+    assert poses.ndim == 2, 'Expect 2 dimensional array input'
+    assert poses.shape[1] == 7, 'Expect Nx7 array input'
+    rotor = quaternionFromTwoVectors(local_g_direction, gravity)
+    for pose in poses:
+        distance = np.linalg.norm(pose[0:3])
+        position_n = pose[0:3] / distance
+        pose[0:3] = distance * (rotor * quaternion.quaternion(0.0, *position_n) * rotor.conjugate()).vec
+        pose[-4:] = quaternion.as_float_array(rotor * quaternion.quaternion(*pose[-4:]) * rotor.conjugate())
 
 
 if __name__ == '__main__':
@@ -161,25 +195,38 @@ if __name__ == '__main__':
     linacce_data = np.genfromtxt(args.dir+'/linacce.txt')
     gravity_data = np.genfromtxt(args.dir+'/gravity.txt')
 
+    # Error analysis
+    position_error, angular_error = analysisError(pose_data)
+    print('Positional error: {:.6f}(m), angular error: {:.6f}(rad)\n'.format(position_error, angular_error))
+
+
     output_folder = args.dir + '/processed'
     if not os.path.isdir(output_folder):
         os.makedirs(output_folder)
 
-    # write trajectory to ply file
-    print("Writing trajectory to ply file")
-    writeTrajectoryToPly(output_folder + '/trajectory.ply', pose_data[:, 1:4])
+    # adjust axis
+    adjustAxis(acce_data)
+    adjustAxis(gyro_data)
+    adjustAxis(linacce_data)
+    adjustAxis(gravity_data)
 
-    linacce_offset = estimateOffset(linacce_data[:, 1:])
+    linacce_offset = np.average(linacce_data[200:300, 1:4], axis=0)
     print('Linear acceleration offset: ', linacce_offset)
     linacce_data[:, 1:] -= linacce_offset
     gravity_data[:, 1:] += linacce_offset
+    initial_gravity = np.average(gravity_data[200:300, 1:4], axis=0)
+    initial_gravity /= np.linalg.norm(initial_gravity)
+    print('Initial gravity: ', initial_gravity)
+    # write trajectory to ply file
+    print("Writing trajectory to ply file")
+    writeTrajectoryToPly(output_folder + '/trajectory.ply', pose_data[:, 1:4], initial_gravity)
+
+    alignWithGravity(pose_data[:, 1:], initial_gravity)
+    print('Writing aligned trajectory to ply file')
+    writeTrajectoryToPly(output_folder + '/trajectory_aligned.ply', pose_data[:, 1:4], initial_gravity)
 
     # test_gyro = testEularToQuaternion(gyro_data[:, 1:])
     # np.savetxt(args.dir+'/output_test.txt', test_gyro, '%.6f')
-
-    # adjust axis
-    # adjustAxis(acce_data)
-    # adjustAxis(gyro_data)
 
     # convert the gyro data to quaternion
     # gyro_quat = np.empty([gyro_data.shape[0], 5])
@@ -195,22 +242,22 @@ if __name__ == '__main__':
     # output_gyro = interpolateAngularRateSpline(gyro_data, output_timestamp)
     # writeFile(args.dir + '/output_gyro.txt', output_gyro)
     #
-    output_gyro_linear = interpolateAngularRateLinear(gyro_data, output_timestamp)
-    print('Interpolate the acceleration data')
-    output_accelerometer_linear = interpolate3DVectorLinear(acce_data, output_timestamp)
-    output_linacce_linear = interpolate3DVectorLinear(linacce_data, output_timestamp)
-    output_gravity_linear = interpolate3DVectorLinear(gravity_data, output_timestamp)
-    output_acce_combined = np.concatenate([output_timestamp[:, np.newaxis],
-                                          output_linacce_linear[:, 1:] + output_gravity_linear[:, 1:]], axis=1)
-
-    writeFile(output_folder + '/output_gyro_linear.txt', output_gyro_linear)
-    writeFile(output_folder + '/linacce_linear.txt', output_linacce_linear)
-    writeFile(output_folder + '/gravity_linear.txt', output_gravity_linear)
-    writeFile(output_folder + '/combined_linear.txt', output_acce_combined)
-    writeFile(output_folder + '/acce_linear.txt', output_accelerometer_linear)
-
-    dataset_all = np.concatenate([output_gyro_linear, output_linacce_linear[:, 1:],
-                                  output_gravity_linear[:, 1:]], axis=1)
-    writeFile(output_folder + '/data.txt', dataset_all,
-              '# {}, timestamp, gyro (quaternion), linear acceleration, gravity'.format(datetime.now()))
-    print('Dataset written to ' + output_folder + '/data.txt')
+    # output_gyro_linear = interpolateAngularRateLinear(gyro_data, output_timestamp)
+    # print('Interpolate the acceleration data')
+    # output_accelerometer_linear = interpolate3DVectorLinear(acce_data, output_timestamp)
+    # output_linacce_linear = interpolate3DVectorLinear(linacce_data, output_timestamp)
+    # output_gravity_linear = interpolate3DVectorLinear(gravity_data, output_timestamp)
+    # output_acce_combined = np.concatenate([output_timestamp[:, np.newaxis],
+    #                                       output_linacce_linear[:, 1:] + output_gravity_linear[:, 1:]], axis=1)
+    #
+    # writeFile(output_folder + '/output_gyro_linear.txt', output_gyro_linear)
+    # writeFile(output_folder + '/linacce_linear.txt', output_linacce_linear)
+    # writeFile(output_folder + '/gravity_linear.txt', output_gravity_linear)
+    # writeFile(output_folder + '/combined_linear.txt', output_acce_combined)
+    # writeFile(output_folder + '/acce_linear.txt', output_accelerometer_linear)
+    #
+    # dataset_all = np.concatenate([output_gyro_linear, output_linacce_linear[:, 1:],
+    #                               output_gravity_linear[:, 1:]], axis=1)
+    # writeFile(output_folder + '/data.txt', dataset_all,
+    #           '# {}, timestamp, gyro (quaternion), linear acceleration, gravity'.format(datetime.now()))
+    # print('Dataset written to ' + output_folder + '/data.txt')

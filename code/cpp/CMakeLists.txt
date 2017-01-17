@@ -8,7 +8,5 @@ find_package(Gflags REQUIRED)
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
-add_subdirectory(algorithm)
 add_subdirectory(utility)
 
-add_subdirectory(genDataSet)
