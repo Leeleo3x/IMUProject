@@ -10,6 +10,7 @@ import scipy.interpolate
 import quaternion
 import quaternion.quaternion_time_series
 import matplotlib.pyplot as plt
+import plyfile
 
 
 def computeIntervalVariance(input, N=100, step=10):
@@ -35,6 +36,7 @@ def adjustAxis(input_data):
     input_data[:, [2, 3]] = input_data[:, [3, 2]]
     # invert x, y axis
     input_data[:, 1:2] *= -1
+
 
 def extractGravity(acce):
     """Extract gravity from accelerometer"""
@@ -97,6 +99,19 @@ def writeFile(path, data, header=''):
                 f.write(' {:.6f}'.format(row[j+1]))
             f.write('\n')
 
+def writeTrajectoryToPly(path, positions):
+    """
+    Write camera poses to ply file.
+    :param path: File path
+    :param positions: N x 3 array of positions
+    :return: None
+    """
+    positions_data = np.empty((positions.shape[0],), dtype=[('x', 'f4'), ('y', 'f4'), ('z', 'f4')])
+    positions_data[:] = [tuple(i) for i in positions]
+    vertex_element = plyfile.PlyElement.describe(positions_data, 'vertex')
+    plyfile.PlyData([vertex_element], text=True).write(path)
+
+
 def testEularToQuaternion(eular_input):
     eular_ret = np.empty(eular_input.shape)
     for i in range(eular_input.shape[0]):
@@ -109,18 +124,29 @@ def rotationMatrixFromUnitVectors(v1, v2):
     """
     Using Rodrigues rotationformula
     https://en.wikipedia.org/wiki/Rodrigues%27_rotation_formula
+    :param v1: starting vector
+    :param v2: ending vector
+    :return 3x3 rotation matrix
     """
+    v1 /= np.linalg.norm(v1)
+    v2 /= np.linalg.norm(v2)
     theta = np.dot(v1, v2)
     if theta == 1:
         return np.identity(3)
     if theta == -1:
         raise ValueError
-    v1 /= np.linalg.norm(v1)
-    v2 /= np.linalg.norm(v2)
     k = np.cross(v1, v2)
     k /= np.linalg.norm(k)
     K = np.matrix([[0, -k[2], k[1]], [k[2], 0, -k[0]], [-k[1], k[0], 0]])
     return np.identity(3) + math.sqrt(1 - theta * theta) * K + np.dot((1 - theta) * K * K, v1)
+
+
+def alignWithGravity(pose, gravity, target=np.array([0,1,0])):
+    """
+    Adjust pose such that the gravity is at $target$ direction
+    """
+    R = rotationMatrixFromUnitVectors()
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -138,6 +164,10 @@ if __name__ == '__main__':
     output_folder = args.dir + '/processed'
     if not os.path.isdir(output_folder):
         os.makedirs(output_folder)
+
+    # write trajectory to ply file
+    print("Writing trajectory to ply file")
+    writeTrajectoryToPly(output_folder + '/trajectory.ply', pose_data[:, 1:4])
 
     linacce_offset = estimateOffset(linacce_data[:, 1:])
     print('Linear acceleration offset: ', linacce_offset)
