@@ -1,5 +1,6 @@
 #pylint: disable=C0103,C0111,C0301
 
+import math
 import argparse
 import os
 from datetime import datetime
@@ -103,6 +104,23 @@ def testEularToQuaternion(eular_input):
         eular_ret[i, :] = quaternion.as_euler_angles(q)
     return eular_ret
 
+
+def rotationMatrixFromUnitVectors(v1, v2):
+    """
+    Using Rodrigues rotationformula
+    https://en.wikipedia.org/wiki/Rodrigues%27_rotation_formula
+    """
+    theta = np.dot(v1, v2)
+    if theta == 1:
+        return np.identity(3)
+    if theta == -1:
+        raise ValueError
+    v1 /= np.linalg.norm(v1)
+    v2 /= np.linalg.norm(v2)
+    k = np.cross(v1, v2)
+    k /= np.linalg.norm(k)
+    K = np.matrix([[0, -k[2], k[1]], [k[2], 0, -k[0]], [-k[1], k[0], 0]])
+    return np.identity(3) + math.sqrt(1 - theta * theta) * K + np.dot((1 - theta) * K * K, v1)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
