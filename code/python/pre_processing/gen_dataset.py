@@ -11,6 +11,7 @@ import quaternion
 import quaternion.quaternion_time_series
 import matplotlib.pyplot as plt
 import plyfile
+import pandas
 
 
 def computeIntervalVariance(input, N=100, step=10):
@@ -214,16 +215,12 @@ if __name__ == '__main__':
     print('Linear acceleration offset: ', linacce_offset)
     linacce_data[:, 1:] -= linacce_offset
     gravity_data[:, 1:] += linacce_offset
-    initial_gravity = np.average(gravity_data[200:300, 1:4], axis=0)
-    initial_gravity /= np.linalg.norm(initial_gravity)
-    print('Initial gravity: ', initial_gravity)
-    # write trajectory to ply file
     print("Writing trajectory to ply file")
-    writeTrajectoryToPly(output_folder + '/trajectory.ply', pose_data[:, 1:4], initial_gravity)
+    writeTrajectoryToPly(output_folder + '/trajectory.ply', pose_data[:, 1:4])
 
-    alignWithGravity(pose_data[:, 1:], initial_gravity)
-    print('Writing aligned trajectory to ply file')
-    writeTrajectoryToPly(output_folder + '/trajectory_aligned.ply', pose_data[:, 1:4], initial_gravity)
+    # alignWithGravity(pose_data[:, 1:], initial_gravity)
+    # print('Writing aligned trajectory to ply file')
+    # writeTrajectoryToPly(output_folder + '/trajectory_aligned.ply', pose_data[:, 1:4], initial_gravity)
 
     # test_gyro = testEularToQuaternion(gyro_data[:, 1:])
     # np.savetxt(args.dir+'/output_test.txt', test_gyro, '%.6f')
@@ -238,26 +235,41 @@ if __name__ == '__main__':
     #
     # Generate dataset
     output_timestamp = pose_data[:, 0]
-    # print('Interpolate gyro data.')
-    # output_gyro = interpolateAngularRateSpline(gyro_data, output_timestamp)
-    # writeFile(args.dir + '/output_gyro.txt', output_gyro)
-    #
-    # output_gyro_linear = interpolateAngularRateLinear(gyro_data, output_timestamp)
-    # print('Interpolate the acceleration data')
-    # output_accelerometer_linear = interpolate3DVectorLinear(acce_data, output_timestamp)
-    # output_linacce_linear = interpolate3DVectorLinear(linacce_data, output_timestamp)
-    # output_gravity_linear = interpolate3DVectorLinear(gravity_data, output_timestamp)
-    # output_acce_combined = np.concatenate([output_timestamp[:, np.newaxis],
-    #                                       output_linacce_linear[:, 1:] + output_gravity_linear[:, 1:]], axis=1)
-    #
-    # writeFile(output_folder + '/output_gyro_linear.txt', output_gyro_linear)
-    # writeFile(output_folder + '/linacce_linear.txt', output_linacce_linear)
-    # writeFile(output_folder + '/gravity_linear.txt', output_gravity_linear)
-    # writeFile(output_folder + '/combined_linear.txt', output_acce_combined)
-    # writeFile(output_folder + '/acce_linear.txt', output_accelerometer_linear)
-    #
-    # dataset_all = np.concatenate([output_gyro_linear, output_linacce_linear[:, 1:],
-    #                               output_gravity_linear[:, 1:]], axis=1)
+    print('Interpolate gyro data.')
+    output_gyro = interpolateAngularRateSpline(gyro_data, output_timestamp)
+    writeFile(args.dir + '/output_gyro.txt', output_gyro)
+
+    output_gyro_linear = interpolateAngularRateLinear(gyro_data, output_timestamp)
+    print('Interpolate the acceleration data')
+    output_accelerometer_linear = interpolate3DVectorLinear(acce_data, output_timestamp)
+    output_linacce_linear = interpolate3DVectorLinear(linacce_data, output_timestamp)
+    output_gravity_linear = interpolate3DVectorLinear(gravity_data, output_timestamp)
+
+    # write individual files for convenience
+    writeFile(output_folder + '/output_gyro_linear.txt', output_gyro_linear)
+    writeFile(output_folder + '/linacce_linear.txt', output_linacce_linear)
+    writeFile(output_folder + '/gravity_linear.txt', output_gravity_linear)
+    writeFile(output_folder + '/acce_linear.txt', output_accelerometer_linear)
+
+    # construct a Pandas DataFrame
+    column_list = 'time,gyro_w,gyro_x,gyro_y,gyro_z,acce_x'.split(',') + \
+                  'acce_y,acce_z,linacce_x,linacce_y,linacce_z,grav_x,grav_y,grav_z'.split(',') +\
+                  'pos_x,pos_y,pos_z,ori_w,ori_x,ori_y,ori_z'.split(',')
+
+    print(column_list)
+
+    data_pandas = pandas.DataFrame(np.concatenate([output_gyro_linear,
+                                                   output_accelerometer_linear[:, 1:],
+                                                   output_linacce_linear[:, 1:],
+                                                   output_gravity_linear[:, 1:],
+                                                   pose_data[:, 1:4],
+                                                   pose_data[:, -4:]], axis=1),
+                                   columns=column_list)
+
+    data_pandas.to_csv(output_folder + '/data.csv')
+    # dataset_all = np.concatenate([output_gyro_linear, output_accelerometer_linear[:, 1:], output_linacce_linear[:, 1:],
+    #                               output_gravity_linear[:, 1:], pose_data[:, 1:]], axis=1)
     # writeFile(output_folder + '/data.txt', dataset_all,
-    #           '# {}, timestamp, gyro (quaternion), linear acceleration, gravity'.format(datetime.now()))
-    # print('Dataset written to ' + output_folder + '/data.txt')
+    #           '# {}\n# timestamp, gyro (quaternion), accelerometer, '
+    #           'linear acceleration, gravity, position, orientation(quaternion)'.format(datetime.now()))
+    print('Dataset written to ' + output_folder + '/data.txt')
