@@ -19,6 +19,7 @@ if __name__ == '__main__':
     parser.add_argument('--step', default=50, type=int)
     parser.add_argument('--feature', default='direct', type=str)
     parser.add_argument('--frq_threshold', default=100, type=int)
+    parser.add_argument('--only_on', default='', type=str)
 
     args = parser.parse_args()
 
@@ -41,6 +42,10 @@ if __name__ == '__main__':
         motion_type = 'unknown'
         if len(info) == 2:
             motion_type = info[1]
+
+        if len(args.only_on) > 0 and args.only_on != motion_type:
+            print('Only use ' + args.only_on, ', skip current dataset')
+            continue
 
         print('Loading dataset ' + data_path)
         data_all = pandas.read_csv(data_path)
@@ -69,7 +74,7 @@ if __name__ == '__main__':
     print('------------------\nProperties')
     print('Dimension of feature matrix: ', features_all.shape)
     print('Dimension of target vector: ', targets_all.shape)
-
+    print('Number of training samples in each category:')
     for k in features_dict.keys():
         features_dict[k] = np.concatenate(features_dict[k], axis=0)
         targets_dict[k] = np.concatenate(targets_dict[k], axis=0).flatten()
@@ -78,7 +83,8 @@ if __name__ == '__main__':
     print('Training SVM')
     regressor = svm.SVR(C=5.0, epsilon=0.2)
     regressor.fit(features_all, targets_all)
-    print('Training score: ', regressor.score(features_all, targets_all))
 
+    print('------------------\nPerformance')
+    print('Training score: ', regressor.score(features_all, targets_all))
     for k in features_dict.keys():
         print('Training score on {}: {}'.format(k, regressor.score(features_dict[k], targets_dict[k])))
