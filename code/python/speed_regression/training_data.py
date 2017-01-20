@@ -7,11 +7,11 @@ import matplotlib.pyplot as plt
 
 
 class TrainingDataOption:
-    def __init__(self, sample_step=50, window_size=300, method='direct', frq_threshold=100):
+    def __init__(self, sample_step=50, window_size=300, feature='direct', frq_threshold=100):
         self.sample_step_ = sample_step
         self.window_size_ = window_size
         self.frq_threshold_ = frq_threshold
-        self.feature_ = method
+        self.feature_ = feature
         self.nanoToSec = 1000000000.0
 
 
