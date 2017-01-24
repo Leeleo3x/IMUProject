@@ -3,16 +3,20 @@ import argparse
 import numpy as np
 import pandas
 from scipy.fftpack import fft
+from scipy.ndimage.filters import gaussian_filter1d
 import matplotlib.pyplot as plt
 
 
 class TrainingDataOption:
-    def __init__(self, sample_step=50, window_size=300, method='direct', frq_threshold=100):
+    def __init__(self, sample_step=50, window_size=300, feature='direct', frq_threshold=100,
+                 feature_smooth_sigma=None, speed_smooth_sigma=0.0):
         self.sample_step_ = sample_step
         self.window_size_ = window_size
         self.frq_threshold_ = frq_threshold
-        self.feature_ = method
+        self.feature_ = feature
         self.nanoToSec = 1000000000.0
+        self.feature_smooth_sigma_ = feature_smooth_sigma
+        self.speed_smooth_sigma_ = speed_smooth_sigma
 
 
 class SpeedRegressionTrainData:
@@ -22,8 +26,8 @@ class SpeedRegressionTrainData:
         self.option_ = option
 
     @staticmethod
-    def compute_speed(pose_data, time, ind):
-        return np.linalg.norm(pose_data[ind+1] - pose_data[ind-1]) / (time[ind+1] - time[ind-1])
+    def compute_speed(pose_data, time, ind, r=1):
+        return np.linalg.norm(pose_data[ind+r] - pose_data[ind-r]) / (time[ind+r] - time[ind-r])
 
     def compute_fourier_feature(self, data):
         """
@@ -60,8 +64,11 @@ class SpeedRegressionTrainData:
             print('Feature type not supported: ' + self.option_.feature_)
             raise ValueError
 
-        speed = [self.compute_speed(pose_data.values, data_all['time'].values, ind) * self.option_.nanoToSec
-                 for ind in sample_points]
+        speed = np.array([self.compute_speed(pose_data.values, data_all['time'].values, ind) *
+                          self.option_.nanoToSec for ind in sample_points])
+
+        if self.option_.speed_smooth_sigma_ > 0:
+            speed = gaussian_filter1d(speed, self.option_.speed_smooth_sigma_)
 
         return pandas.DataFrame(local_imu_list), pandas.DataFrame(speed)
 
@@ -74,6 +81,7 @@ if __name__ == '__main__':
     parser.add_argument('--step', default=50, type=int)
     parser.add_argument('--feature', default='direct', type=str)
     parser.add_argument('--frq_threshold', default=100, type=int)
+    parser.add_argument('--speed_smooth_sigma', default=2.0, type=float)
 
     args = parser.parse_args()
 
@@ -81,19 +89,16 @@ if __name__ == '__main__':
     print('Loading dataset ' + data_dir + '/data.csv')
     data_all = pandas.read_csv(data_dir + '/data.csv')
 
-    option = TrainingDataOption()
+    option = TrainingDataOption(window_size=args.window, sample_step=args.step, frq_threshold=args.frq_threshold,
+                                feature=args.feature, speed_smooth_sigma=args.speed_smooth_sigma)
     data_factory = SpeedRegressionTrainData(option)
 
     # Create a small sample for testing
     N = data_all.shape[0]
     imu_columns = ['gyro_w', 'gyro_x', 'gyro_y', 'gyro_z', 'acce_x', 'acce_y', 'acce_z']
-    data_sample = data_all[imu_columns][1000:1500]
 
-    # testing for fourier feature
-    fourier_vector = data_factory.compute_fourier_feature(data_sample)
-    plt.figure()
-    for i in range(fourier_vector.shape[1]):
-        # will ignore the direct component for clearance
-        plt.plot(fourier_vector[1:, i])
-    plt.legend(imu_columns)
+    print('Test smoothing speed data')
+    _, speed_smoothed = data_factory.CreateTrainingData(data_all, imu_columns=imu_columns)
+
+    plt.plot(speed_smoothed)
     plt.show()
