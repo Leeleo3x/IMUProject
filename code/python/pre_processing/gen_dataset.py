@@ -200,6 +200,8 @@ if __name__ == '__main__':
     total_length = 0.0
     length_dict = {}
     for dataset in dataset_list:
+        if len(dataset.strip()) == 0:
+            continue
         info = dataset.split(',')
         motion_type = 'unknown'
         if len(info) == 2:
