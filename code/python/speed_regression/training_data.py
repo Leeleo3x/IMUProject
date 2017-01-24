@@ -33,7 +33,7 @@ class SpeedRegressionTrainData:
         """
         theta = self.option_.frq_threshold_
         farray = fft(data, axis=0)
-        return np.abs(farray[0:theta, :])
+        return np.abs(farray[1:theta, :])
 
     def CreateTrainingData(self, data_all, imu_columns):
         """
@@ -54,7 +54,8 @@ class SpeedRegressionTrainData:
             local_imu_list = [list(data_used[ind-self.option_.window_size_:ind].values.flatten())
                               for ind in sample_points]
         elif self.option_.feature_ == 'fourier':
-            local_imu_list = [self.compute_fourier_feature(data_used[ind-self.option_.window_size_:ind].values).flatten()
+            local_imu_list = [self.compute_fourier_feature(data_used[ind-self.option_.window_size_:ind].values)
+                                  .flatten('F')
                               for ind in sample_points]
         else:
             print('Feature type not supported: ' + self.option_.feature_)
