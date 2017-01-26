@@ -202,6 +202,8 @@ if __name__ == '__main__':
     for dataset in dataset_list:
         if len(dataset.strip()) == 0:
             continue
+        if dataset[0] == '#':
+            continue
         info = dataset.split(',')
         motion_type = 'unknown'
         if len(info) == 2:
@@ -289,7 +291,8 @@ if __name__ == '__main__':
             print('Dataset written to ' + output_folder + '/data.txt')
 
         length = (data_pandas['time'].values[-1] - data_pandas['time'].values[0]) / nano_to_sec
-        print(info[0] + ', length: ', length)
+        hertz = data_pandas.shape[0] / length
+        print(info[0] + ', length: {}s, sample rate: {:.2f}Hz'.format(length, hertz))
         if motion_type not in length_dict:
             length_dict[motion_type] = length
         else:

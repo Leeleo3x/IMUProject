@@ -3,24 +3,24 @@ import warnings
 import os
 
 from sklearn import svm
-from sklearn.metrics import log_loss
 from sklearn.externals import joblib
+from sklearn.metrics import mean_squared_error
 import numpy as np
-import matplotlib.pyplot as plt
 import pandas
 
 import training_data as td
+import grid_search
 
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument('list')
     parser.add_argument('--window', default=300, type=int)
-    parser.add_argument('--step', default=50, type=int)
+    parser.add_argument('--step', default=10, type=int)
     parser.add_argument('--feature', default='direct', type=str)
-    parser.add_argument('--frq_threshold', default=100, type=int)
+    parser.add_argument('--frq_threshold', default=50, type=int)
     parser.add_argument('--only_on', default='', type=str)
-    parser.add_argument('--split_ratio', default=0.25, type=float)
+    parser.add_argument('--split_ratio', default=0.3, type=float)
     parser.add_argument('--output', default='', type=str)
     parser.add_argument('--C', default=None, type=float)
     parser.add_argument('--e', default=None, type=float)
@@ -31,11 +31,8 @@ if __name__ == '__main__':
         dataset_list = [s.strip('\n') for s in f.readlines()]
 
     root_dir = os.path.dirname(args.list)
-    features_all = []
-    targets_all = []
-
-    features_dict = {}
-    targets_dict = {}
+    training_set_all = []
+    training_dict = {}
 
     for dataset in dataset_list:
         if len(dataset) > 0 and dataset[0] == '#':
@@ -60,78 +57,48 @@ if __name__ == '__main__':
         print('Creating training set')
         options = td.TrainingDataOption(sample_step=args.step, window_size=args.window,
                                         feature=args.feature, frq_threshold=args.frq_threshold)
-        data_factory = td.SpeedRegressionTrainData(option=options)
 
         imu_columns = ['gyro_w', 'gyro_x', 'gyro_y', 'gyro_z', 'acce_x', 'acce_y', 'acce_z']
-        features, targets = data_factory.CreateTrainingData(data_all=data_all, imu_columns=imu_columns)
-        features_all.append(features)
-        targets_all.append(targets)
+        training_set = td.get_training_data(data_all=data_all, imu_columns=imu_columns, options)
+        training_set_all.append(training_set)
 
         # append the dataset to different motion for more detailed performance report
-        if motion_type not in features_dict:
-            features_dict[motion_type] = [features]
-            targets_dict[motion_type] = [targets]
+        if motion_type not in training_dict:
+            training_dict[motion_type] = [training_set]
         else:
-            features_dict[motion_type].append(features)
-            targets_dict[motion_type].append(targets)
+            training_dict[motion_type].append(training_set)
 
-    assert len(features_all) > 0, 'No data was loaded'
-    features_all = np.concatenate(features_all, axis=0)
-    targets_all = np.concatenate(targets_all, axis=0).flatten()
+    assert len(training_set_all) > 0, 'No data was loaded'
+    training_set_all = np.concatenate(training_set_all, axis=0)
     print('------------------\nProperties')
-    print('Dimension of feature matrix: ', features_all.shape)
-    print('Dimension of target vector: ', targets_all.shape)
     print('Number of training samples in each category:')
-    for k in features_dict.keys():
-        features_dict[k] = np.concatenate(features_dict[k], axis=0)
-        targets_dict[k] = np.concatenate(targets_dict[k], axis=0).flatten()
-    for k, v in features_dict.items():
+    for k in training_dict.keys():
+        training_dict[k] = np.concatenate(training_dict[k], axis=0)
+    for k, v in training_dict.items():
         print(k + ': {}'.format(v.shape[0]))
 
     print('Training SVM')
     bestC = 0
     bestE = 0
 
-    total_samples = targets_all.shape[0]
-    validation_mask = np.random.rand(total_samples) < args.split_ratio
-    features_validation = features_all[validation_mask]
-    targets_validation = targets_all[validation_mask]
-    features_train = features_all[~validation_mask]
-    targets_train = targets_all[~validation_mask]
-    assert targets_validation.shape[0] + targets_train.shape[0] == total_samples
-    print('Size of training set: {}, validation set: {}'.format(targets_train.shape[0], targets_validation.shape[0]))
-
     if args.C is None or args.e is None:
         # run grid search
-        bestScore = -np.inf
-
-        for c in [0.01, 0.5, 1.0, 2.0, 5.0, 10.0, 20.0, 30.0, 50.0]:
-            for e in [0.01, 0.05, 0.1, 0.5, 1.0, 5.0, 10.0]:
-                print('**********************\nTry with c={}, e={}'.format(c, e))
-                regressor = svm.SVR(C=c, epsilon=e)
-                regressor.fit(features_train, targets_train)
-
-                valid_score = regressor.score(features_validation, targets_validation)
-                train_score = regressor.score(features_train, targets_train)
-
-                if valid_score > bestScore:
-                    bestC = c
-                    bestE = e
-                    bestScore = valid_score
-                print('Training score: {}, validation score: {}'.format(train_score, valid_score))
-                # for k in features_dict.keys():
-                #     print('Training score on {}: {}'.format(k, regressor.score(features_dict[k], targets_dict[k])))
-        print('All done. Optimal parameter: C={}, e={}, score={}'.format(bestC, bestE, bestScore))
+        search_dict = {'c': [0.1, 0.5, 1.0, 5.0, 1.0, 20.0, 30.0, 50.0],
+                       'e': [0.01, 0.05, 0.1, 0.5, 1.0]}
+        grid_searcher = grid_search.SVRGridSearch(search_dict)
+        best_param, best_score = grid_searcher.run(training_set_all)
+        bestC = best_param['c']
+        bestE = best_param['e']
+        print('All done. Optimal parameter: C={}, e={}, score={}'.format(bestC, bestE, best_score))
     else:
         bestC = args.C
         bestE = args.e
 
     print('Train with parameter C={}, e={}'.format(bestC, bestE))
     regressor = svm.SVR(C=bestC, epsilon=bestE)
-    regressor.fit(features_train, targets_train)
-    print('Training score: {}, validation score: {}'
-          .format(regressor.score(features_train, targets_train),
-                  regressor.score(features_validation, targets_validation)))
+    regressor.fit(training_set_all[:, :-1], training_set_all[:, -1])
+    score = mean_squared_error(regressor.predict(training_set_all[:, :-1]), training_set_all[:, -1])
+    print('Training score:', score)
     if len(args.output) > 0:
         joblib.dump(regressor, args.output)
         print('Model written to ' + args.output)
