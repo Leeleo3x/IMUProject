@@ -8,8 +8,8 @@ from sklearn.metrics import mean_squared_error
 import numpy as np
 import pandas
 
-import training_data as td
-import grid_search
+from speed_regression import training_data as td
+from speed_regression import grid_search
 
 if __name__ == '__main__':
 
@@ -59,7 +59,7 @@ if __name__ == '__main__':
                                         feature=args.feature, frq_threshold=args.frq_threshold)
 
         imu_columns = ['gyro_w', 'gyro_x', 'gyro_y', 'gyro_z', 'acce_x', 'acce_y', 'acce_z']
-        training_set = td.get_training_data(data_all=data_all, imu_columns=imu_columns, options)
+        training_set = td.get_training_data(data_all=data_all, imu_columns=imu_columns, option=options)
         training_set_all.append(training_set)
 
         # append the dataset to different motion for more detailed performance report
