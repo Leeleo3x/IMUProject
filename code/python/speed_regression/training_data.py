@@ -9,8 +9,8 @@ import matplotlib.pyplot as plt
 
 
 class TrainingDataOption:
-    def __init__(self, sample_step=50, window_size=300, feature='direct', frq_threshold=100,
-                 feature_smooth_sigma=None, speed_smooth_sigma=0.0):
+    def __init__(self, sample_step=50, window_size=200, feature='direct', frq_threshold=50,
+                 feature_smooth_sigma=None, speed_smooth_sigma=50.0):
         self.sample_step_ = sample_step
         self.window_size_ = window_size
         self.frq_threshold_ = frq_threshold

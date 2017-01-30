@@ -4,12 +4,14 @@ import os
 
 from sklearn import svm
 from sklearn.externals import joblib
-from sklearn.metrics import mean_squared_error
+from sklearn.model_selection import GridSearchCV
 import numpy as np
 import pandas
 
-from speed_regression import training_data as td
-from speed_regression import grid_search
+# from speed_regression import training_data as td
+# from speed_regression import grid_search
+import training_data as td
+import grid_search
 
 if __name__ == '__main__':
 
@@ -24,6 +26,7 @@ if __name__ == '__main__':
     parser.add_argument('--output', default='', type=str)
     parser.add_argument('--C', default=None, type=float)
     parser.add_argument('--e', default=None, type=float)
+    parser.add_argument('--g', default=None, type=float)
 
     args = parser.parse_args()
 
@@ -33,6 +36,9 @@ if __name__ == '__main__':
     root_dir = os.path.dirname(args.list)
     training_set_all = []
     training_dict = {}
+
+    options = td.TrainingDataOption(sample_step=args.step, window_size=args.window,
+                                    feature=args.feature, frq_threshold=args.frq_threshold)
 
     for dataset in dataset_list:
         if len(dataset) > 0 and dataset[0] == '#':
@@ -55,10 +61,7 @@ if __name__ == '__main__':
         data_all = pandas.read_csv(data_path)
 
         print('Creating training set')
-        options = td.TrainingDataOption(sample_step=args.step, window_size=args.window,
-                                        feature=args.feature, frq_threshold=args.frq_threshold)
-
-        imu_columns = ['gyro_w', 'gyro_x', 'gyro_y', 'gyro_z', 'acce_x', 'acce_y', 'acce_z']
+        imu_columns = ['gyro_w', 'gyro_x', 'gyro_y', 'gyro_z', 'linacce_x', 'linacce_y', 'linacce_z']
         training_set = td.get_training_data(data_all=data_all, imu_columns=imu_columns, option=options)
         training_set_all.append(training_set)
 
@@ -81,24 +84,37 @@ if __name__ == '__main__':
     bestC = 0
     bestE = 0
 
-    if args.C is None or args.e is None:
+    regressor = None
+    if args.C is None or args.e is None or args.g is None:
         # run grid search
-        search_dict = {'c': [0.1, 0.5, 1.0, 5.0, 1.0, 20.0, 30.0, 50.0],
-                       'e': [0.01, 0.05, 0.1, 0.5, 1.0]}
-        grid_searcher = grid_search.SVRGridSearch(search_dict)
-        best_param, best_score = grid_searcher.run(training_set_all)
-        bestC = best_param['c']
-        bestE = best_param['e']
-        print('All done. Optimal parameter: C={}, e={}, score={}'.format(bestC, bestE, best_score))
+        # search_dict = {'c': [0.1, 0.5, 1.0, 5.0, 1.0, 20.0, 30.0, 50.0],
+        #                'e': [0.01, 0.05, 0.1, 0.5, 1.0]}
+        # grid_searcher = grid_search.SVRGridSearch(search_dict)
+        # best_param, best_score = grid_searcher.run(training_set_all)
+        print('Running grid search')
+        search_dict = {'C': [0.01, 0.1, 1.0, 10.0, 100.0, 1000.0],
+                       'epsilon': [0.001, 0.01, 0.1, 1.0],
+                       'gamma': [0.0001, 0.001, 0.01, 0.1],
+                       'kernel': ['rbf']}
+        grid_searcher = GridSearchCV(svm.SVR(), search_dict, n_jobs=6, verbose=2)
+        grid_searcher.fit(training_set_all[:, :-1], training_set_all[:, -1])
+        # bestC = best_param['c']
+        # bestE = best_param['e']
+        bestC = grid_searcher.best_params_['C']
+        bestE = grid_searcher.best_params_['epsilon']
+        bestG = grid_searcher.best_params_['gamma']
+        print('All done. Optimal parameter: C={}, e={}, g={}, score={}'
+              .format(bestC, bestE, bestG, grid_searcher.best_score_))
+        regressor = grid_searcher.best_estimator_
     else:
-        bestC = args.C
-        bestE = args.e
+        print('Train with parameter C={}, e={}, gamma={}'.format(args.C, args.e, args.g))
+        regressor = svm.SVR(C=args.C, epsilon=args.e, gamma=args.g)
+        regressor.fit(training_set_all[:, :-1], training_set_all[:, -1])
+        # score = mean_squared_error(regressor.predict(training_set_all[:, :-1]), training_set_all[:, -1])
+        score = regressor.score(training_set_all[:, :-1], training_set_all[:, -1]);
+        print('Training score:', score)
 
-    print('Train with parameter C={}, e={}'.format(bestC, bestE))
-    regressor = svm.SVR(C=bestC, epsilon=bestE)
-    regressor.fit(training_set_all[:, :-1], training_set_all[:, -1])
-    score = mean_squared_error(regressor.predict(training_set_all[:, :-1]), training_set_all[:, -1])
-    print('Training score:', score)
+    # write model to file
     if len(args.output) > 0:
         joblib.dump(regressor, args.output)
         print('Model written to ' + args.output)

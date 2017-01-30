@@ -37,10 +37,10 @@ class SVRGridSearch:
         c, e = param_dict['c'], param_dict['e']
         regressor = svm.SVR(C=c, epsilon=e)
         regressor.fit(self.training_set_[:, :-1], self.training_set_[:, -1])
-        #score = regressor.score(self.validation_set_[:, :-1], self.validation_set_[:, -1])
-        score = mean_squared_error(regressor.predict(self.validation_set_[:, :-1]), self.validation_set_[:, -1])
+        score = regressor.score(self.validation_set_[:, :-1], self.validation_set_[:, -1])
+        # score = mean_squared_error(regressor.predict(self.validation_set_[:, :-1]), self.validation_set_[:, -1])
         print('param: C={}, e={}, score={}'.format(c, e, score))
-        if score < self.best_score_:
+        if score > self.best_score_:
             self.best_score_ = score
             self.best_param_['c'] = c
             self.best_param_['e'] = e
@@ -48,8 +48,7 @@ class SVRGridSearch:
     def run(self, data, hold_off_ratio=0.3):
         """
         Run grid search
-        :param train: training set, Nxd array
-        :param target: ground truth value, Nx1 array
+        :param data: training data, N x (d+1) array, where the last column is the target
         :param hold_off_ratio: ratio of hold_off validation set
         :return: dictionary of optimal parameter, optimal r2 score
         """
