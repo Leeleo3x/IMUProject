@@ -17,8 +17,8 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument('list')
-    parser.add_argument('--window', default=300, type=int)
-    parser.add_argument('--step', default=10, type=int)
+    parser.add_argument('--window', default=200, type=int)
+    parser.add_argument('--step', default=50, type=int)
     parser.add_argument('--feature', default='direct', type=str)
     parser.add_argument('--frq_threshold', default=50, type=int)
     parser.add_argument('--only_on', default='', type=str)
@@ -92,11 +92,11 @@ if __name__ == '__main__':
         # grid_searcher = grid_search.SVRGridSearch(search_dict)
         # best_param, best_score = grid_searcher.run(training_set_all)
         print('Running grid search')
-        search_dict = {'C': [0.01, 0.1, 1.0, 10.0, 100.0, 1000.0],
+        search_dict = {'C': [0.01, 0.1, 1.0, 10.0, 100.0],
                        'epsilon': [0.001, 0.01, 0.1, 1.0],
                        'gamma': [0.0001, 0.001, 0.01, 0.1],
                        'kernel': ['rbf']}
-        grid_searcher = GridSearchCV(svm.SVR(), search_dict, n_jobs=6, verbose=2)
+        grid_searcher = GridSearchCV(svm.SVR(), search_dict, n_jobs=6, verbose=3)
         grid_searcher.fit(training_set_all[:, :-1], training_set_all[:, -1])
         # bestC = best_param['c']
         # bestE = best_param['e']
