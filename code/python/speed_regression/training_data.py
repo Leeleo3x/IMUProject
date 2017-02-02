@@ -9,27 +9,31 @@ import matplotlib.pyplot as plt
 
 
 class TrainingDataOption:
-    def __init__(self, sample_step=50, window_size=200, feature='direct', frq_threshold=50,
+    def __init__(self, sample_step=50, window_size=200, feature='direct', frq_threshold=50, discard_direct=False,
                  feature_smooth_sigma=None, speed_smooth_sigma=50.0):
         self.sample_step_ = sample_step
         self.window_size_ = window_size
         self.frq_threshold_ = frq_threshold
         self.feature_ = feature
         self.nanoToSec = 1000000000.0
+        self.discard_direct_ = discard_direct
         self.feature_smooth_sigma_ = feature_smooth_sigma
         self.speed_smooth_sigma_ = speed_smooth_sigma
 
 
 #@jit
-def compute_fourier_features(data, samples, window_size, threshold):
+def compute_fourier_features(data, samples, window_size, threshold, discard_direct=False):
     """
     Compute fourier coefficients as feature vector
     :param data: NxM array for N samples with M dimensions
     :return: Nxk array
     """
-    features = np.empty([samples.shape[0], data.shape[1] * (threshold - 1)], dtype=np.float)
+    skip = 0
+    if discard_direct:
+        skip = 1
+    features = np.empty([samples.shape[0], data.shape[1] * (threshold - skip)], dtype=np.float)
     for i in range(samples.shape[0]):
-        features[i, :] = np.abs(fft(data[samples[i]-window_size:samples[i]], axis=0)[1:threshold]).flatten()
+        features[i, :] = np.abs(fft(data[samples[i]-window_size:samples[i]], axis=0)[skip:threshold]).flatten()
     return features
 
 
@@ -70,7 +74,8 @@ def get_training_data(data_all, imu_columns, option):
         #local_imu_list = compute_direct_features(data_used, sample_points, option.window_size_)
         local_imu_list = [data_used[ind - option.window_size_:ind].flatten() for ind in sample_points]
     elif option.feature_ == 'fourier':
-        local_imu_list = compute_fourier_features(data_used, sample_points, option.window_size_, option.frq_threshold_)
+        local_imu_list = compute_fourier_features(data_used, sample_points, option.window_size_, option.frq_threshold_,
+                                                  option.discard_direct_)
         # local_imu_list = [compute_fourier_feature(data_used[ind-option.window_size_:ind].values, option.frq_threshold_)
         #                   .flatten('F') for ind in sample_points]
     else:

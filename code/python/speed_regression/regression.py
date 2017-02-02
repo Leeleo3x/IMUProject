@@ -23,6 +23,7 @@ if __name__ == '__main__':
     parser.add_argument('--frq_threshold', default=50, type=int)
     parser.add_argument('--only_on', default='', type=str)
     parser.add_argument('--split_ratio', default=0.3, type=float)
+    parser.add_argument('--discard_direct', default=False, type=bool)
     parser.add_argument('--output', default='', type=str)
     parser.add_argument('--C', default=None, type=float)
     parser.add_argument('--e', default=None, type=float)
