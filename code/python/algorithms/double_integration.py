@@ -1,9 +1,18 @@
+import sys
+import os
 import numpy as np
 import quaternion
 import scipy.integrate as integrate
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
+sys.path.append(os.path.dirname(os.path.abspath(__file__) + '/..'))
+from utility.write_trajectory_to_ply import write_ply_to_file
+
+
+imu_to_tango_global = np.matrix([[1.0, 0.0, 0.0],
+                                [0.0, 0.0, 1.0],
+                                [0.0, -1.0, 0.0]])
 
 def IMU_double_integration(t, rotation, acceleration):
     """
@@ -21,8 +30,21 @@ def IMU_double_integration(t, rotation, acceleration):
 
     quats = quaternion.as_quat_array(rotation)
     # convert the acceleration vector to world coordinate frame
-    result = [np.dot(quaternion.as_rotation_matrix(quats[i]), acceleration[i, :])
-              for i in range(acceleration.shape[0])]
+
+    print('acce: ')
+    print(acceleration[0, :])
+    print('rotation matrix:')
+    print(quats[0])
+    rot_matrix = quaternion.as_rotation_matrix(quats[0])
+    print(rot_matrix)
+    print('rotated')
+    print(np.dot(rot_matrix, acceleration[0, :]))
+
+    result = np.array([np.dot(quaternion.as_rotation_matrix(quats[i]),
+                              acceleration[i, :])
+                       for i in range(acceleration.shape[0])])
+    result[:, [0, 1, 2]] = result[:, [0, 2, 1]]
+    result[:, 2] *= -1
     # double integration with trapz rule
     result = integrate.cumtrapz(integrate.cumtrapz(result, t, axis=0, initial=0), t, axis=0, initial=0)
     return result
@@ -36,6 +58,7 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument('dir', type=str)
+    parser.add_argument('--output', type=str)
 
     args = parser.parse_args()
     data_all = pandas.read_csv(args.dir + '/processed/data.csv')
@@ -46,28 +69,14 @@ if __name__ == '__main__':
 
     linacce = data_all[['linacce_x', 'linacce_y', 'linacce_z']].values
     positions = IMU_double_integration(t=time_stamp, rotation=rotations, acceleration=linacce)
-    plt.figure()
 
-    rot_vec_sample = np.arange(0, positions.shape[0], 100, dtype=np.int)
-    quat_array = quaternion.as_quat_array(rotations[rot_vec_sample])
-
-    # array used for visualize oritation
-    orientation_sampled = np.empty([rot_vec_sample.shape[0], 3], dtype=np.float)
-    for i in range(rot_vec_sample.shape[0]):
-        q = quat_array[i]
-        rotated = q * quaternion.quaternion(0, 0, 0, -1) * q.conj()
-        orientation_sampled[i, :] = rotated.vec
-    orientation_position = positions_gt[rot_vec_sample]
-
-    ax = plt.subplot(111, projection='3d')
-    heading = int(positions.shape[0] / 10)
-    # ax.plot(positions[:heading, 0], positions[:heading, 1], 'r')
-    # ax.plot(positions[heading:, 0], positions[heading:, 1], 'b')
-
-    positions_gt_sampled = positions_gt[rot_vec_sample]
-    ax.plot(positions_gt[:, 0], positions_gt[:, 1], positions_gt[:, 2], 'g')
-    ax.quiver(positions_gt_sampled[:, 0], positions_gt_sampled[:, 1], positions_gt_sampled[:, 2],
-              orientation_sampled[:, 0], orientation_sampled[:, 1], orientation_sampled[:, 2],
-              length=0.1)
-    plt.show()
-
+    # plt.figure()
+    # ax = plt.subplot(111, projection='3d')
+    # heading = int(positions.shape[0] / 10)
+    # ax.plot(positions[:heading, 0], positions[:heading, 1], positions[:heading, 2], 'r')
+    # ax.plot(positions[heading:, 0], positions[heading:, 1], positions[heading:, 2], 'b')
+    # ax.plot(positions_gt[:, 0], positions_gt[:, 1], positions_gt[:, 2], 'g')
+    # plt.show()
+    if args.output is not None:
+        write_ply_to_file(path=args.output, position=positions, orientation=rotations)
+        print('Write ply to ' + args.output)

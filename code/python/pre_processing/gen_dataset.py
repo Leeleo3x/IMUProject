@@ -1,10 +1,15 @@
 #pylint: disable=C0103,C0111,C0301
 
+"""
+Modification 02/02/17
+1. Remove 'adjustAxis'. Now the imu coordinate frame is the same with tango device frame
+2. Use Eular angle for gyro data. Interpolate linearly
+3. Swap indices of Tango orientation from [x,y,z,w] to [w,x,y,z]
+"""
+import sys
+import os
 import math
 import argparse
-import os
-from datetime import datetime
-
 import numpy as np
 import scipy.interpolate
 import quaternion
@@ -12,6 +17,8 @@ import quaternion.quaternion_time_series
 import matplotlib.pyplot as plt
 import plyfile
 import pandas
+sys.path.append(os.path.dirname(os.path.abspath(__file__)) + '/..')
+from utility.write_trajectory_to_ply import write_ply_to_file
 
 
 def computeIntervalVariance(input, N=100, step=10):
@@ -22,9 +29,10 @@ def computeIntervalVariance(input, N=100, step=10):
 # for Tango development kit
 def adjustAxis(input_data):
     # first swap y and z
-    input_data[:, [2, 3]] = input_data[:, [3, 2]]
-    # invert x, z axis
-    input_data[:, [1, 3]] *= -1
+    # input_data[:, [2, 3]] = input_data[:, [3, 2]]
+    # # invert z axis
+    # input_data[:, 3] *= -1
+    pass
 
 
 def extractGravity(acce):
@@ -215,6 +223,9 @@ if __name__ == '__main__':
         else:
             print('------------------\nProcessing ' + data_root, ', type: ' + motion_type)
             pose_data = np.genfromtxt(data_root+'/pose.txt')
+            # swap tango's orientation from [x,y,z,w] to [w,x,y,z]
+            pose_data[:, [-4, -3, -2, -1]] = pose_data[:, [-1, -4, -3, -2]]
+
             acce_data = np.genfromtxt(data_root+'/acce.txt')
             gyro_data = np.genfromtxt(data_root+'/gyro.txt')
             linacce_data = np.genfromtxt(data_root+'/linacce.txt')
@@ -229,18 +240,19 @@ if __name__ == '__main__':
                 os.makedirs(output_folder)
 
             # adjust axis
-            adjustAxis(acce_data)
-            adjustAxis(gyro_data)
-            adjustAxis(linacce_data)
-            adjustAxis(gravity_data)
+            # adjustAxis(acce_data)
+            # adjustAxis(gyro_data)
+            # adjustAxis(linacce_data)
+            # adjustAxis(gravity_data)
 
+            # estimate bias of linear acceleration, assuming the device is static from 2 sec to 3 sec
             linacce_offset = np.average(linacce_data[200:300, 1:4], axis=0)
             print('Linear acceleration offset: ', linacce_offset)
             linacce_data[:, 1:] -= linacce_offset
             gravity_data[:, 1:] += linacce_offset
             print("Writing trajectory to ply file")
-            writeTrajectoryToPly(output_folder + '/trajectory.ply', pose_data[:, 1:4])
-
+            write_ply_to_file(path=output_folder + '/trajectory.ply', position=pose_data[:, 1:4],
+                              orientation=pose_data[:, -4:])
             # alignWithGravity(pose_data[:, 1:], initial_gravity)
             # print('Writing aligned trajectory to ply file')
             # writeTrajectoryToPly(output_folder + '/trajectory_aligned.ply', pose_data[:, 1:4], initial_gravity)
@@ -259,10 +271,12 @@ if __name__ == '__main__':
             # Generate dataset
             output_timestamp = pose_data[:, 0]
             print('Interpolate gyro data.')
-            output_gyro = interpolateAngularRateSpline(gyro_data, output_timestamp)
-            writeFile(data_root + '/output_gyro.txt', output_gyro)
+            # output_gyro = interpolateAngularRateSpline(gyro_data, output_timestamp)
+            # output_gyro = interpolate3DVectorLinear(gyro_data, output_timestamp)
+            # writeFile(data_root + '/output_gyro.txt', output_gyro)
 
-            output_gyro_linear = interpolateAngularRateLinear(gyro_data, output_timestamp)
+            # output_gyro_linear = interpolateAngularRateLinear(gyro_data, output_timestamp)
+            output_gyro_linear = interpolate3DVectorLinear(gyro_data, output_timestamp)
             print('Interpolate the acceleration data')
             output_accelerometer_linear = interpolate3DVectorLinear(acce_data, output_timestamp)
             output_linacce_linear = interpolate3DVectorLinear(linacce_data, output_timestamp)
@@ -275,8 +289,8 @@ if __name__ == '__main__':
             writeFile(output_folder + '/acce_linear.txt', output_accelerometer_linear)
 
             # construct a Pandas DataFrame
-            column_list = 'time,gyro_w,gyro_x,gyro_y,gyro_z,acce_x'.split(',') + \
-                          'acce_y,acce_z,linacce_x,linacce_y,linacce_z,grav_x,grav_y,grav_z'.split(',') +\
+            column_list = 'time,gyro_x,gyro_y,gyro_z,acce_x'.split(',') + \
+                          'acce_y,acce_z,linacce_x,linacce_y,linacce_z,grav_x,grav_y,grav_z'.split(',') + \
                           'pos_x,pos_y,pos_z,ori_w,ori_x,ori_y,ori_z'.split(',')
 
             data_pandas = pandas.DataFrame(np.concatenate([output_gyro_linear,
@@ -284,8 +298,7 @@ if __name__ == '__main__':
                                                            output_linacce_linear[:, 1:],
                                                            output_gravity_linear[:, 1:],
                                                            pose_data[:, 1:4],
-                                                           pose_data[:, -4:]], axis=1),
-                                           columns=column_list)
+                                                           pose_data[:, -4:]], axis=1), columns=column_list)
 
             data_pandas.to_csv(output_folder + '/data.csv')
             print('Dataset written to ' + output_folder + '/data.txt')

@@ -11,7 +11,6 @@ import pandas
 # from speed_regression import training_data as td
 # from speed_regression import grid_search
 import training_data as td
-import grid_search
 
 if __name__ == '__main__':
 
@@ -62,7 +61,7 @@ if __name__ == '__main__':
         data_all = pandas.read_csv(data_path)
 
         print('Creating training set')
-        imu_columns = ['gyro_w', 'gyro_x', 'gyro_y', 'gyro_z', 'linacce_x', 'linacce_y', 'linacce_z']
+        imu_columns = ['gyro_x', 'gyro_y', 'gyro_z', 'linacce_x', 'linacce_y', 'linacce_z']
         training_set = td.get_training_data(data_all=data_all, imu_columns=imu_columns, option=options)
         training_set_all.append(training_set)
 
