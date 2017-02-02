@@ -7,4 +7,6 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument('dir', type=str)
-    parser
+
+    args = parser.parse_args()
+    data_all = pandas.read_csv(args.dir + '/process/data.csv')
