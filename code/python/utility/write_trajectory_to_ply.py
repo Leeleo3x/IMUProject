@@ -23,8 +23,12 @@ def write_ply_to_file(path, position, orientation,
     # local_y = quaternion.quaternion(0.0, 0.0, 0.0, -1.0)
     # local_z = quaternion.quaternion(0.0, 0.0, 1.0, 0.0)
     local_axis = np.array([[1.0, 0.0, 0.0],
-                          [0.0, 0.0, 1.0],
-                          [0.0, -1.0, 0.0]])
+                          [0.0, 1.0, 0.0],
+                          [0.0, 0.0, 1.0]])
+
+    local_axis2 = np.array([[1.0, 0.0, 0.0],
+                           [0.0, 0.0, 1.0],
+                           [0.0, -1.0, 0.0]])
 
     # first compute three axis direction as unit vector in global frame
     # glob_ori_x = np.empty([num_sample, 3], dtype=float)
@@ -38,10 +42,22 @@ def write_ply_to_file(path, position, orientation,
 
     # temporal array to store axis vertices at each sampled location
     # global_axes = np.empty([3, 3], dtype=float)
+    print(local_axis2)
+    rm = quaternion.as_rotation_matrix(quaternion.quaternion(*orientation[1000]))
+    print(rm)
+    print(np.dot(local_axis2, rm))
+    rm[:, [1, 2]] = rm[:, [2, 1]]
+    rm[:, 1] *= -1
+    print(rm)
+
     app_vertex = np.empty([3 * kpoints], dtype=vertex_type)
     for i in range(num_sample):
         q = quaternion.quaternion(*orientation[sample_pt[i]])
-        global_axes = np.matmul(quaternion.as_rotation_matrix(q), local_axis)
+        # global_axes = np.matmul(quaternion.as_rotation_matrix(q), local_axis)
+        # global_axes = np.matmul(local_axis2, quaternion.as_rotation_matrix(q))
+        global_axes = quaternion.as_rotation_matrix(q)
+        # global_axes[:, [1, 2]] = global_axes[:, [2,1 ]]
+        # global_axes[:, 1] *= -1
         # global_axes[0] = (q * local_x * q.conj()).vec
         # global_axes[1] = (q * local_y * q.conj()).vec
         # global_axes[2] = (q * local_z * q.conj()).vec

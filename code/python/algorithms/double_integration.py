@@ -14,6 +14,11 @@ imu_to_tango_global = np.matrix([[1.0, 0.0, 0.0],
                                 [0.0, 0.0, 1.0],
                                 [0.0, -1.0, 0.0]])
 
+# imu_to_tango_global = np.matrix([[1.0, 0.0, 0.0],
+#                                 [0.0, 1.0, 0.0],
+#                                 [0.0, 0.0, 1.0]])
+
+
 def IMU_double_integration(t, rotation, acceleration):
     """
     Compute position and orientation by integrating angular velocity and double integrating acceleration
@@ -31,28 +36,19 @@ def IMU_double_integration(t, rotation, acceleration):
     quats = quaternion.as_quat_array(rotation)
     # convert the acceleration vector to world coordinate frame
 
-    print('acce: ')
-    print(acceleration[0, :])
-    print('rotation matrix:')
-    print(quats[0])
-    rot_matrix = quaternion.as_rotation_matrix(quats[0])
-    print(rot_matrix)
-    print('rotated')
-    print(np.dot(rot_matrix, acceleration[0, :]))
-
-    result = np.array([np.dot(quaternion.as_rotation_matrix(quats[i]),
-                              acceleration[i, :])
-                       for i in range(acceleration.shape[0])])
-    result[:, [0, 1, 2]] = result[:, [0, 2, 1]]
-    result[:, 2] *= -1
+    result = np.empty([quats.shape[0], 3], dtype=float)
+    for i in range(acceleration.shape[0]):
+        result[i, :] = np.dot(quaternion.as_rotation_matrix(quats[i]),
+                              np.dot(imu_to_tango_global, acceleration[i, :].reshape([3, 1]))).flatten()
     # double integration with trapz rule
-    result = integrate.cumtrapz(integrate.cumtrapz(result, t, axis=0, initial=0), t, axis=0, initial=0)
-    return result
+    position = integrate.cumtrapz(integrate.cumtrapz(result, t, axis=0, initial=0), t, axis=0, initial=0)
+    return position
 
 
 if __name__ == '__main__':
     import argparse
     import pandas
+    from scipy.ndimage.filters import gaussian_filter1d
 
     nano_to_sec = 1e09
 
@@ -68,6 +64,10 @@ if __name__ == '__main__':
     positions_gt = data_all[['pos_x', 'pos_y', 'pos_z']].values
 
     linacce = data_all[['linacce_x', 'linacce_y', 'linacce_z']].values
+    linacce = gaussian_filter1d(linacce, axis=0, sigma=50.0)
+    # linacce[:, [0, 2]] = 0.0
+    linacce[:, 2] = 0.0
+
     positions = IMU_double_integration(t=time_stamp, rotation=rotations, acceleration=linacce)
 
     # plt.figure()
