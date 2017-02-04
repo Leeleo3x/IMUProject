@@ -10,15 +10,6 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__) + '/..'))
 from utility.write_trajectory_to_ply import write_ply_to_file
 
 
-imu_to_tango_global = np.matrix([[1.0, 0.0, 0.0],
-                                [0.0, 0.0, 1.0],
-                                [0.0, -1.0, 0.0]])
-
-# imu_to_tango_global = np.matrix([[1.0, 0.0, 0.0],
-#                                 [0.0, 1.0, 0.0],
-#                                 [0.0, 0.0, 1.0]])
-
-
 def IMU_double_integration(t, rotation, acceleration):
     """
     Compute position and orientation by integrating angular velocity and double integrating acceleration
@@ -38,8 +29,9 @@ def IMU_double_integration(t, rotation, acceleration):
 
     result = np.empty([quats.shape[0], 3], dtype=float)
     for i in range(acceleration.shape[0]):
-        result[i, :] = np.dot(quaternion.as_rotation_matrix(quats[i]),
-                              np.dot(imu_to_tango_global, acceleration[i, :].reshape([3, 1]))).flatten()
+        if i < 100:
+            print(np.dot(quaternion.as_rotation_matrix(quats[i]), acceleration[i, :]).flatten())
+        result[i, :] = np.dot(quaternion.as_rotation_matrix(quats[i]), acceleration[i, :]).flatten()
     # double integration with trapz rule
     position = integrate.cumtrapz(integrate.cumtrapz(result, t, axis=0, initial=0), t, axis=0, initial=0)
     return position
@@ -65,8 +57,8 @@ if __name__ == '__main__':
 
     linacce = data_all[['linacce_x', 'linacce_y', 'linacce_z']].values
     linacce = gaussian_filter1d(linacce, axis=0, sigma=50.0)
-    # linacce[:, [0, 2]] = 0.0
-    linacce[:, 2] = 0.0
+    # linacce[:, [0, 1]] = 0.0
+    # linacce[:, 2] = 0.0
 
     positions = IMU_double_integration(t=time_stamp, rotation=rotations, acceleration=linacce)
 
