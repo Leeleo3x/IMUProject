@@ -24,14 +24,17 @@ def IMU_double_integration(t, rotation, acceleration):
     assert t.shape[0] == acceleration.shape[0]
     assert rotation.shape[1] == 4
 
-    quats = quaternion.as_quat_array(rotation)
+    # quats = quaternion.as_quat_array(rotation)
     # convert the acceleration vector to world coordinate frame
 
-    result = np.empty([quats.shape[0], 3], dtype=float)
+    result = np.empty([acceleration.shape[0], 3], dtype=float)
     for i in range(acceleration.shape[0]):
-        if i < 100:
-            print(np.dot(quaternion.as_rotation_matrix(quats[i]), acceleration[i, :]).flatten())
-        result[i, :] = np.dot(quaternion.as_rotation_matrix(quats[i]), acceleration[i, :]).flatten()
+        q = quaternion.quaternion(*rotation[i])
+        result[i, :] = np.dot(quaternion.as_rotation_matrix(q), acceleration[i, :].reshape([3, 1])).flatten()
+        if i == 0:
+            print(quaternion.as_rotation_matrix(q))
+            print(acceleration[i, :])
+            print(result[i, :])
     # double integration with trapz rule
     position = integrate.cumtrapz(integrate.cumtrapz(result, t, axis=0, initial=0), t, axis=0, initial=0)
     return position
@@ -56,7 +59,8 @@ if __name__ == '__main__':
     positions_gt = data_all[['pos_x', 'pos_y', 'pos_z']].values
 
     linacce = data_all[['linacce_x', 'linacce_y', 'linacce_z']].values
-    linacce = gaussian_filter1d(linacce, axis=0, sigma=50.0)
+    # linacce = gaussian_filter1d(linacce, axis=0, sigma=20.0)
+    # linacce[:300, :] = 0.0
     # linacce[:, [0, 1]] = 0.0
     # linacce[:, 2] = 0.0
 
@@ -70,5 +74,5 @@ if __name__ == '__main__':
     # ax.plot(positions_gt[:, 0], positions_gt[:, 1], positions_gt[:, 2], 'g')
     # plt.show()
     if args.output is not None:
-        write_ply_to_file(path=args.output, position=positions, orientation=rotations)
+        write_ply_to_file(path=args.output, position=positions, orientation=rotations, acceleration=linacce)
         print('Write ply to ' + args.output)

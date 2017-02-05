@@ -20,6 +20,7 @@ def write_ply_to_file(path, position, orientation, acceleration = None, length =
     if acceleration is not None:
         assert acceleration.shape[0] == num_cams
         max_acceleration = max(np.linalg.norm(acceleration, axis=1))
+        print('max_acceleration: ', max_acceleration)
         num_axis = 4
 
     sample_pt = np.arange(0, num_cams, interval, dtype=int)
@@ -44,7 +45,13 @@ def write_ply_to_file(path, position, orientation, acceleration = None, length =
         if acceleration is not None:
             local_axis[:, -1] = acceleration[sample_pt[i]].flatten() / max_acceleration
 
-        global_axes = np.matmul(quaternion.as_rotation_matrix(q), np.matmul(np.identity(3, dtype=float), local_axis))
+        global_axes = np.matmul(quaternion.as_rotation_matrix(q), local_axis)
+        # if i == 0:
+        #     print('-------------\nwrite_ply_file')
+        #     print('rotation\n', quaternion.as_rotation_matrix(q))
+        #     print('acceleration:', acceleration[sample_pt[i]])
+        #     print('local axis: ', local_axis[:, -1])
+        #     print(global_axes[:, 3])
         for k in range(num_axis):
             for j in range(kpoints):
                 axes_pts = position[sample_pt[i]].flatten() + global_axes[:, k].flatten() * j * length / kpoints
@@ -70,7 +77,11 @@ if __name__ == '__main__':
     linacce = data_all[['linacce_x', 'linacce_y', 'linacce_z']].values
     gravity = data_all[['grav_x', 'grav_y', 'grav_z']].values
     position = data_all[['pos_x', 'pos_y', 'pos_z']].values
+    gravity *= -1
+
+    print(linacce[0:500:20])
+    print(np.linalg.norm(linacce[0:500:20], axis=1))
 
     print('Writing ply file')
-    write_ply_to_file(path=args.output, position=position, orientation=orientation, acceleration=linacce)
+    write_ply_to_file(path=args.output, position=position, orientation=orientation, acceleration=linacce, interval=20)
     print('File writing to ' + args.output)

@@ -226,10 +226,11 @@ if __name__ == '__main__':
             # swap tango's orientation from [x,y,z,w] to [w,x,y,z]
             pose_data[:, [-4, -3, -2, -1]] = pose_data[:, [-1, -4, -3, -2]]
 
-            acce_data = np.genfromtxt(data_root+'/acce.txt')
-            gyro_data = np.genfromtxt(data_root+'/gyro.txt')
-            linacce_data = np.genfromtxt(data_root+'/linacce.txt')
-            gravity_data = np.genfromtxt(data_root+'/gravity.txt')
+            # drop the head
+            acce_data = np.genfromtxt(data_root+'/acce.txt')[args.skip:]
+            gyro_data = np.genfromtxt(data_root+'/gyro.txt')[args.skip:]
+            linacce_data = np.genfromtxt(data_root+'/linacce.txt')[args.skip:]
+            gravity_data = np.genfromtxt(data_root+'/gravity.txt')[args.skip:]
 
             # Error analysis
             position_error, angular_error = analysisError(pose_data)
@@ -245,11 +246,14 @@ if __name__ == '__main__':
             # adjustAxis(linacce_data)
             # adjustAxis(gravity_data)
 
-            # estimate bias of linear acceleration, assuming the device is static from 2 sec to 3 sec
-            linacce_offset = np.average(linacce_data[200:300, 1:4], axis=0)
-            print('Linear acceleration offset: ', linacce_offset)
-            linacce_data[:, 1:] -= linacce_offset
-            gravity_data[:, 1:] += linacce_offset
+            # estimate bias of linear acceleration, assuming the device is static in the first second (excluding the
+            # skipped record
+            static_time = 100
+            # linacce_offset = np.average(linacce_data[:static_time, 1:4], axis=0)
+            # linacce_offset = np.array([0.02698849, -0.03915907, -0.49456808])
+            # print('Linear acceleration offset: ', linacce_offset)
+            # linacce_data[:, 1:] -= linacce_offset
+            # gravity_data[:, 1:] += linacce_offset
             print("Writing trajectory to ply file")
             write_ply_to_file(path=output_folder + '/trajectory.ply', position=pose_data[:, 1:4],
                               orientation=pose_data[:, -4:])
