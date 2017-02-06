@@ -10,4 +10,5 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
 add_subdirectory(visualization)
 add_subdirectory(utility)
+add_subdirectory(imu_optimization)
 
