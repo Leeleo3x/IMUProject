@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 
 
 class TrainingDataOption:
-    def __init__(self, sample_step=50, window_size=200, feature='direct', frq_threshold=50, discard_direct=False,
+    def __init__(self, sample_step=10, window_size=200, feature='fourier', frq_threshold=10, discard_direct=False,
                  feature_smooth_sigma=None, speed_smooth_sigma=50.0):
         self.sample_step_ = sample_step
         self.window_size_ = window_size
