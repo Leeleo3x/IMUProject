@@ -47,7 +47,7 @@ def compute_direct_features(data, samples, window_size):
     #         for ind in samples]
 
 
-def get_training_data(data_all, imu_columns, option):
+def get_training_data(data_all, imu_columns, option, sample_points=None):
     """
     Create training data.
     :param data_all: The whole dataset. Must include 'time' column and all columns inside imu_columns
@@ -55,10 +55,13 @@ def get_training_data(data_all, imu_columns, option):
     :return: [Nx(d+1)] array. Target value is appended at back
     """
     N = data_all.shape[0]
-    sample_points = np.arange(option.window_size_,
-                              N - 1,
-                              option.sample_step_,
-                              dtype=int)
+    if sample_points is None:
+        sample_points = np.arange(option.window_size_,
+                                  N - 1,
+                                  option.sample_step_,
+                                  dtype=int)
+    assert sample_points[-1] < N
+
     pose_data = data_all[['pos_x', 'pos_y', 'pos_z']].values
     data_used = data_all[imu_columns].values
     time_stamp = data_all['time'].values / 1e09

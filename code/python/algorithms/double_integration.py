@@ -31,10 +31,6 @@ def IMU_double_integration(t, rotation, acceleration):
     for i in range(acceleration.shape[0]):
         q = quaternion.quaternion(*rotation[i])
         result[i, :] = np.dot(quaternion.as_rotation_matrix(q), acceleration[i, :].reshape([3, 1])).flatten()
-        if i == 0:
-            print(quaternion.as_rotation_matrix(q))
-            print(acceleration[i, :])
-            print(result[i, :])
     # double integration with trapz rule
     position = integrate.cumtrapz(integrate.cumtrapz(result, t, axis=0, initial=0), t, axis=0, initial=0)
     return position
