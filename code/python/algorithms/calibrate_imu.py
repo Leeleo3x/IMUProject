@@ -3,7 +3,9 @@ import math
 from scipy.interpolate import interp1d
 from numba import jit
 
-
+asdfsadfj
+jaskdjf;lkasd
+;klaj;ska;df
 #@jit
 def allan_plot(t, omega, pts=200):
     """
