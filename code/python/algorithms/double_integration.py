@@ -10,7 +10,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__) + '/..'))
 from utility.write_trajectory_to_ply import write_ply_to_file
 
 
-def IMU_double_integration(t, rotation, acceleration, no_transform=False):
+def IMU_double_integration(t, rotation, acceleration, no_transform=False, only_xy=False):
     """
     Compute position and orientation by integrating angular velocity and double integrating acceleration
     Expect the drift to be as large as hell
@@ -30,7 +30,7 @@ def IMU_double_integration(t, rotation, acceleration, no_transform=False):
     # convert the acceleration vector to world coordinate frame
 
     if no_transform:
-        result = linacce
+        result = acceleration
     else:
         result = np.empty([acceleration.shape[0], 3], dtype=float)
         for i in range(acceleration.shape[0]):
@@ -38,6 +38,8 @@ def IMU_double_integration(t, rotation, acceleration, no_transform=False):
             result[i, :] = np.dot(quaternion.as_rotation_matrix(q), acceleration[i, :].reshape([3, 1])).flatten()
     # double integration with trapz rule
     position = integrate.cumtrapz(integrate.cumtrapz(result, t, axis=0, initial=0), t, axis=0, initial=0)
+    if only_xy:
+        position[:, 2] = 0
     return position
 
 
