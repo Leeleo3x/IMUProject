@@ -10,27 +10,32 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__) + '/..'))
 from utility.write_trajectory_to_ply import write_ply_to_file
 
 
-def IMU_double_integration(t, rotation, acceleration):
+def IMU_double_integration(t, rotation, acceleration, no_transform=False):
     """
     Compute position and orientation by integrating angular velocity and double integrating acceleration
     Expect the drift to be as large as hell
     :param t: time sequence, Nx1 array
     :param rotation: device orientation as quaternion, Nx4 array
     :param acceleration: acceleration data, Nx3 array
+    :param no_transform: if set to true, assume acceleration vectors to be inside the global frame
     :return: position: Nx3 array
     """
     # Sanity check
     assert t.shape[0] == rotation.shape[0]
     assert t.shape[0] == acceleration.shape[0]
-    assert rotation.shape[1] == 4
+    if not no_transform:
+        assert rotation.shape[1] == 4
 
     # quats = quaternion.as_quat_array(rotation)
     # convert the acceleration vector to world coordinate frame
 
-    result = np.empty([acceleration.shape[0], 3], dtype=float)
-    for i in range(acceleration.shape[0]):
-        q = quaternion.quaternion(*rotation[i])
-        result[i, :] = np.dot(quaternion.as_rotation_matrix(q), acceleration[i, :].reshape([3, 1])).flatten()
+    if no_transform:
+        result = linacce
+    else:
+        result = np.empty([acceleration.shape[0], 3], dtype=float)
+        for i in range(acceleration.shape[0]):
+            q = quaternion.quaternion(*rotation[i])
+            result[i, :] = np.dot(quaternion.as_rotation_matrix(q), acceleration[i, :].reshape([3, 1])).flatten()
     # double integration with trapz rule
     position = integrate.cumtrapz(integrate.cumtrapz(result, t, axis=0, initial=0), t, axis=0, initial=0)
     return position

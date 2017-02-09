@@ -1,5 +1,8 @@
+import warnings
 import numpy as np
+import quaternion
 from scipy.optimize import least_squares
+
 FLAGS = None
 
 
@@ -7,21 +10,23 @@ class SpeedMagnitudeFunctor:
     def __init__(self, time_stamp, linacce, target_speed, speed_ind, variable_ind, sigma_a=0.1, sigma_s=0.01):
         """
         Construct a functor
-        :param time_stamp: time_stamp of the linear acceleration
+        :param time_stamp: time_stamp of the linear acceleration in seconds
         :param linacce: the raw linear acceleration signal
         :param speed_ind: the indice of target speed
         :param variable_ind: the index inside the linacce of optimizing variables
         :param sigma_a: weighting factor for data term
         :param sigma_s: weighting factor for speed coherence term
         """
+        if time_stamp[0] > 1e08:
+            warnings.warn('The value of time_stamp is large, forgot to convert to seconds?')
         assert variable_ind[-1] > speed_ind[-1], \
             print('variable_ind[-1]:{}, speed_ind[-1]:{}'.format(variable_ind[-1], speed_ind[-1]))
         self.variable_ind_ = variable_ind
         self.time_stamp_ = time_stamp
-        nano_to_sec = 1e09
-        self.interval_ = (self.time_stamp_[1:variable_ind[-1]] - self.time_stamp_[:variable_ind[-1]-1]) / nano_to_sec
+        self.interval_ = (self.time_stamp_[1:variable_ind[-1]] - self.time_stamp_[:variable_ind[-1]-1])
         # any records after the last speed sample is useless
         self.linacce_ = linacce[:variable_ind[-1]]
+        # Store the rotation matrix
 
         # predicted speed
         self.target_speed_ = target_speed
@@ -60,9 +65,9 @@ class SpeedMagnitudeFunctor:
         # append the initial bias at the end for convenience
         x = np.concatenate([x, self.initial_bias_], axis=0)
         corrected_linacce = self.linacce_ + self.alpha_[:, None] * x[self.inverse_ind_ - 1] \
-                            + (1.0 - self.alpha_[:, None]) * x[self.inverse_ind_]
+                                          + (1.0 - self.alpha_[:, None]) * x[self.inverse_ind_]
+        delta_speed = (corrected_linacce[1:] + corrected_linacce[:-1]) * self.interval_[:, None] / 2.0
 
-        delta_speed = (corrected_linacce[1:] + corrected_linacce[:-1]) / 2 * self.interval_[:, None]
         speed = np.linalg.norm(np.cumsum(delta_speed, axis=0), axis=1)
         # Next, compute the difference between integrated speed and target speed.
         # Notice that there is one element's off between $speed and $target_speed.
@@ -87,11 +92,12 @@ class SpeedMagnitudeFunctor:
         return corrected_linacce
 
 
-def optimize_linear_acceleration(time_stamp, linacce,  speed_ind, regressed_speed, param,
+def optimize_linear_acceleration(time_stamp, orientation, linacce,  speed_ind, regressed_speed, param,
                                  initial=None, sparse_location=None, verbose=0):
     """
     Optimize linear acceleration with regressed speed
     :param time_stamp: the time stamp of linear acceleration
+    :param orientation: orientation at each time stamp in the form of quaternion
     :param linacce: linear acceleration
     :param speed_ind: indics of predicted speed
     :param regressed_speed:
@@ -106,12 +112,19 @@ def optimize_linear_acceleration(time_stamp, linacce,  speed_ind, regressed_spee
         sparse_location = speed_ind.copy()
         sparse_location[-1] += 1
     if initial is None:
-        initial = np.zeros(variable_ind.shape[0] * 3, dtype=float)
-    assert initial.shape[0] == variable_ind.shape[0] * 3
+        initial = np.zeros(sparse_location.shape[0] * 3, dtype=float)
+    assert initial.shape[0] == sparse_location.shape[0] * 3
     assert initial.ndim == 1
+    assert orientation.shape[0] == linacce.shape[0]
+
+    # first convert the acceleration to the global coordinate frame
+    directed_acce = np.empty(linacce.shape, dtype=float)
+    for i in range(orientation.shape[0]):
+        rot = quaternion.as_rotation_matrix(quaternion.quaternion(*orientation[i]))
+        directed_acce[i] = np.dot(rot, linacce[i, :].transpose()).flatten()
 
     cost_functor = SpeedMagnitudeFunctor(time_stamp=time_stamp,
-                                         linacce=linacce,
+                                         linacce=directed_acce,
                                          target_speed=regressed_speed,
                                          speed_ind=speed_ind,
                                          variable_ind=sparse_location,
@@ -119,8 +132,8 @@ def optimize_linear_acceleration(time_stamp, linacce,  speed_ind, regressed_spee
                                          sigma_s=param['sigma_s'])
     optimizer = least_squares(cost_functor, initial, jac='3-point', verbose=verbose)
     corrected = linacce.copy()
-    corrected[:variable_ind[-1]] = cost_functor.correct_acceleration(corrected[:variable_ind[-1]],
-                                                                     optimizer.x.reshape([-1, 3]))
+    corrected[:sparse_location[-1]] = cost_functor.correct_acceleration(corrected[:sparse_location[-1]],
+                                                                        optimizer.x.reshape([-1, 3]))
     return optimizer, corrected
 
 
@@ -159,6 +172,7 @@ if __name__ == '__main__':
     time_stamp = data_all['time'].values
     time_stamp -= time_stamp[0]
 
+    orientation = data_all[['ori_w', 'ori_x', 'ori_y', 'ori_z']].values
     linacce = data_all[['linacce_x', 'linacce_y', 'linacce_z']].values
 
     test_N = linacce.shape[0]
@@ -183,6 +197,7 @@ if __name__ == '__main__':
     print('Solving...')
     start_t = time.clock()
     optimizer, corrected = optimize_linear_acceleration(time_stamp=time_stamp,
+                                                        orientation=orientation,
                                                         linacce=linacce,
                                                         speed_ind=speed_ind,
                                                         regressed_speed=predicted_speed,
