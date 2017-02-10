@@ -31,7 +31,7 @@ class SparseAccelerationBiasFunctor:
         self.linacce_ = linacce[:variable_ind[-1]]
 
         self.speed_ind_ = speed_ind
-        self.initial_bias_ = np.zeros([1, 3], dtype=float)
+        self.initial_bias_ = np.zeros([1, self.linacce_.shape[1]], dtype=float)
         # Pre-compute the interpolation coefficients
         # y[i] = alpha[i-1] * x[i-1] + (1.0 - alpha[i-1]) * x[i]
         self.alpha_ = np.empty((self.variable_ind_[-1]), dtype=float)
@@ -79,7 +79,7 @@ class SpeedMagnitudeFunctor(SparseAccelerationBiasFunctor):
         :return: The loss vector
         """
         loss = np.copy(x)
-        x = x.reshape([-1, 3])
+        x = x.reshape([-1, self.linacce_.shape[1]])
         # first add regularization term
         # add data term
         # first compute corrected linear acceleration
@@ -197,14 +197,14 @@ def optimize_linear_acceleration(time_stamp, orientation, linacce,  speed_ind, r
     corrected[:sparse_location[-1]] = cost_functor.correct_acceleration(corrected[:sparse_location[-1]],
                                                                         optimizer.x.reshape([-1, 3]))
 
-    print('Initial speed at constraint:')
-    cum_speed = np.cumsum((linacce[1:] + linacce[:-1]) * (time_stamp[1:] - time_stamp[:-1])[:, None] / 2.0, axis=0)
-    print(cum_speed[speed_ind] - 1)
-    print('final loss vector:')
-    print(cost_functor(optimizer.x)[variable_ind.shape[0]:])
-    corrected_speed = np.cumsum((corrected[1:] + corrected[:-1]) * (time_stamp[1:]-time_stamp[:-1])[:, None] / 2.0, axis=0)
-    print('corrected speed at constraint:')
-    print(corrected_speed[speed_ind - 1])
+    # print('Initial speed at constraint:')
+    # cum_speed = np.cumsum((linacce[1:] + linacce[:-1]) * (time_stamp[1:] - time_stamp[:-1])[:, None] / 2.0, axis=0)
+    # print(cum_speed[speed_ind] - 1)
+    # print('final loss vector:')
+    # print(cost_functor(optimizer.x)[variable_ind.shape[0]:])
+    # corrected_speed = np.cumsum((corrected[1:] + corrected[:-1]) * (time_stamp[1:]-time_stamp[:-1])[:, None] / 2.0, axis=0)
+    # print('corrected speed at constraint:')
+    # print(corrected_speed[speed_ind - 1])
 
     return optimizer, corrected
 
@@ -228,12 +228,12 @@ if __name__ == '__main__':
     parser.add_argument('dir', type=str)
     parser.add_argument('model', type=str)
     parser.add_argument('--calibration', type=str, default=None)
-    parser.add_argument('--method', type=str, default='zero_speed')
+    parser.add_argument('--method', type=str, default='speed_magnitude')
     parser.add_argument('--output', type=str)
     parser.add_argument('--step', type=int, default=50)
     parser.add_argument('--verbose', type=int, default=2)
     parser.add_argument('--sigma_a', type=float, default=0.1)
-    parser.add_argument('--sigma_s', type=float, default=0.2)
+    parser.add_argument('--sigma_s', type=float, default=0.5)
     parser.add_argument('--sigma_z', type=float, default=1.0)
     FLAGS = parser.parse_args()
 
