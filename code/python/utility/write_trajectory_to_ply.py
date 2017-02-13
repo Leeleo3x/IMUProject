@@ -3,7 +3,9 @@ import plyfile
 import quaternion
 
 
-def write_ply_to_file(path, position, orientation, acceleration = None, length = 1.0, kpoints=200, interval=100):
+def write_ply_to_file(path, position, orientation, acceleration=None,
+                      imu_to_tango=None, local_axis=None,
+                      length=1.0, kpoints=100, interval=100):
     """
     Visualize camera trajectory as ply file
     :param path: path to save
@@ -26,32 +28,27 @@ def write_ply_to_file(path, position, orientation, acceleration = None, length =
     sample_pt = np.arange(0, num_cams, interval, dtype=int)
     num_sample = sample_pt.shape[0]
 
-    # local coordinate system is computed by
-    imu_to_tango = np.array([[1.0, 0.0, 0.0],
-                             [0.0, 0.0, 1.0],
-                             [0.0, -1.0, 0.0]])
+    # Define the optional transformation. Default is set w.r.t tango coordinate system
+    if imu_to_tango is None:
+        imu_to_tango = np.array([[1.0, 0.0, 0.0],
+                                 [0.0, 0.0, 1.0],
+                                 [0.0, -1.0, 0.0]])
+    if local_axis is None:
+        local_axis = np.array([[1.0, 0.0, 0.0, 0.0],
+                               [0.0, 1.0, 0.0, 0.0],
+                               [0.0, 0.0, 1.0, 0.0]])
 
     axis_color = [[255, 0, 0], [0, 255, 0], [0, 0, 255], [255, 0, 255]]
     vertex_type = [('x', 'f4'), ('y', 'f4'), ('z', 'f4'), ('red', 'u1'), ('green', 'u1'), ('blue', 'u1')]
     positions_data = np.empty((position.shape[0],), dtype=vertex_type)
     positions_data[:] = [tuple([*i, 0, 255, 255]) for i in position]
 
-    local_axis = np.array([[1.0, 0.0, 0.0, 0.0],
-                           [0.0, 1.0, 0.0, 0.0],
-                           [0.0, 0.0, 1.0, 0.0]])
     app_vertex = np.empty([num_axis * kpoints], dtype=vertex_type)
     for i in range(num_sample):
         q = quaternion.quaternion(*orientation[sample_pt[i]])
         if acceleration is not None:
             local_axis[:, -1] = acceleration[sample_pt[i]].flatten() / max_acceleration
-
         global_axes = np.matmul(quaternion.as_rotation_matrix(q), local_axis)
-        # if i == 0:
-        #     print('-------------\nwrite_ply_file')
-        #     print('rotation\n', quaternion.as_rotation_matrix(q))
-        #     print('acceleration:', acceleration[sample_pt[i]])
-        #     print('local axis: ', local_axis[:, -1])
-        #     print(global_axes[:, 3])
         for k in range(num_axis):
             for j in range(kpoints):
                 axes_pts = position[sample_pt[i]].flatten() + global_axes[:, k].flatten() * j * length / kpoints
