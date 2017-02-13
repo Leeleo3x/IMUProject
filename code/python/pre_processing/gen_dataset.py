@@ -75,8 +75,8 @@ def interpolate_rotation_vector_linear(rv_data, output_timestamp):
     for i in range(rv_data.shape[0]):
         mag = np.linalg.norm(rv_data[i, 1:])
         rv_quaternion[i, 1:] = rv_data[i, 1:] / mag
-        rv_quaternion[i, 0] = math.sqrt(1 - mag ** 2)
-    rv_quaternion = np.concatenate([rv_data[:, 0], rv_quaternion], axis=1)
+        rv_quaternion[i, 0] = math.sqrt(math.fabs(1 - mag ** 2))
+    rv_quaternion = np.concatenate([rv_data[:, 0][:, None], rv_quaternion], axis=1)
     return interpolate_quaternion_linear(rv_quaternion, output_timestamp)
 
 
@@ -164,6 +164,7 @@ if __name__ == '__main__':
     parser.add_argument('list')
     parser.add_argument('--skip', default=100)
     parser.add_argument('--recompute', action='store_true')
+    parser.add_argument('--no_trajectory', action='store_true')
 
     args = parser.parse_args()
 
@@ -217,14 +218,6 @@ if __name__ == '__main__':
             if not os.path.isdir(output_folder):
                 os.makedirs(output_folder)
 
-            # estimate bias of linear acceleration, assuming the device is static in the first second (excluding the
-            # skipped record
-            static_time = 100
-
-            print("Writing trajectory to ply file")
-            write_ply_to_file(path=output_folder + '/trajectory.ply', position=pose_data[:, 1:4],
-                              orientation=pose_data[:, -4:])
-
             # Generate dataset
             output_timestamp = pose_data[:, 0]
 
@@ -233,12 +226,6 @@ if __name__ == '__main__':
             output_accelerometer_linear = interpolate_3dvector_linear(acce_data, output_timestamp)
             output_linacce_linear = interpolate_3dvector_linear(linacce_data, output_timestamp)
             output_gravity_linear = interpolate_3dvector_linear(gravity_data, output_timestamp)
-
-            # write individual files for convenience
-            write_file(output_folder + '/output_gyro_linear.txt', output_gyro_linear)
-            write_file(output_folder + '/linacce_linear.txt', output_linacce_linear)
-            write_file(output_folder + '/gravity_linear.txt', output_gravity_linear)
-            write_file(output_folder + '/acce_linear.txt', output_accelerometer_linear)
 
             # construct a Pandas DataFrame
             column_list = 'time,gyro_x,gyro_y,gyro_z,acce_x'.split(',') + \
@@ -252,25 +239,35 @@ if __name__ == '__main__':
                                        pose_data[:, 1:4],
                                        pose_data[:, -4:]], axis=1)
 
+            # write individual files for convenience
+            write_file(output_folder + '/output_gyro_linear.txt', output_gyro_linear)
+            write_file(output_folder + '/linacce_linear.txt', output_linacce_linear)
+            write_file(output_folder + '/gravity_linear.txt', output_gravity_linear)
+            write_file(output_folder + '/acce_linear.txt', output_accelerometer_linear)
+
             # if the dataset comes with rotation vector, include it
+            output_orientation = None
             if os.path.exists(data_root + '/orientation.txt'):
                 orientation_data = np.genfromtxt(data_root + '/orientation.txt')[args.skip:]
                 print('Orientation found. Sample rate:{:2f}'
                       .format((orientation_data.shape[0] - 1.0) * nano_to_sec / (orientation_data[-1, 0] - orientation_data[0, 0])))
                 # Convert rotation vector to quaternion
                 output_orientation = interpolate_rotation_vector_linear(orientation_data, output_timestamp)
+                write_file(output_folder + '/output_orientation_linear.txt', output_orientation)
                 data_mat = np.concatenate([data_mat, output_orientation[:, 1:]], axis=1)
-                column_list += 'rv_x,rv_y,rv_z'.split(',')
+                column_list += 'rv_w,rv_x,rv_y,rv_z'.split(',')
 
-            data_pandas = pandas.DataFrame(np.concatenate([output_gyro_linear,
-                                                           output_accelerometer_linear[:, 1:],
-                                                           output_linacce_linear[:, 1:],
-                                                           output_gravity_linear[:, 1:],
-                                                           pose_data[:, 1:4],
-                                                           pose_data[:, -4:]], axis=1), columns=column_list)
+            data_pandas = pandas.DataFrame(data_mat, columns=column_list)
 
             data_pandas.to_csv(output_folder + '/data.csv')
             print('Dataset written to ' + output_folder + '/data.txt')
+
+            if not args.no_trajectory:
+                print("Writing trajectory to ply file")
+                # write_ply_to_file(path=output_folder + '/trajectory.ply', position=pose_data[:, 1:4],
+                #                   orientation=pose_data[:, -4:])
+                write_ply_to_file(path=output_folder + '/trajectory_rv.ply', position=pose_data[:, 1:4],
+                                  orientation=output_orientation[:, 1:])
 
         length = (data_pandas['time'].values[-1] - data_pandas['time'].values[0]) / nano_to_sec
         hertz = data_pandas.shape[0] / length
