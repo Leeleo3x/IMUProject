@@ -88,6 +88,9 @@ def get_training_data(data_all, imu_columns, option, sample_points=None):
     return np.concatenate([local_imu_list, speed_all[sample_points, None]], axis=1)
 
 
+def get_orientation_training_data(data_all, imu_columns, options):
+
+
 def split_data(data, ratio=0.3):
     """
     Randomly split data set
@@ -97,7 +100,6 @@ def split_data(data, ratio=0.3):
     """
     mask = np.random.random(data.shape[0]) < ratio
     return data[mask], data[~mask]
-
 
 # for tests
 if __name__ == '__main__':
