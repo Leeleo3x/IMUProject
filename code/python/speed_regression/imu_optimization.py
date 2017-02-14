@@ -139,16 +139,50 @@ class ZeroSpeedFunctor(SparseAccelerationBiasFunctor):
 
 
 class SpeedAndAngleFunctor(SparseAccelerationBiasFunctor):
-    def __init__(self, time_stamp, linacce, target_speed, cos_array, speed_ind, variable_ind, sigma_s):
+    def __init__(self, time_stamp, linacce, orientation, target_speed, cos_array, speed_ind, variable_ind, sigma_s):
         assert target_speed.shape[0] == cos_array.shape[0], 'target_speed.shape[0]: {}, cos_arrays.shape[0]:{}'\
             .format(target_speed.shape[0], cos_array.shape[0])
         super().__init__(time_stamp, linacce, speed_ind, variable_ind)
-        self.speed_forward_ = target_speed * cos_array
-        self.speed_tangent_ = target_speed * np.sqrt(1.0 - cos_array ** 2)
+        self.target_speed_ = target_speed
+        self.cos_array_ = cos_array
         self.sigma_s_ = sigma_s
+        self.camera_axis_ = np.empty(linacce.shape, dtype=float)
+        camera_axis_local = quaternion.quaternion(1., 0., 0., -1.)
+        for i in range(linacce.shape[0]):
+            q = quaternion.quaternion(*orientation[i])
+            self.camera_axis_[i] = (q * camera_axis_local * q.conj()).vec[:linacce.shape[1]]
 
     def __call__(self, x, *args, **kwargs):
-        pass
+        """
+        Evaluate residuals given x
+        :param x: 3N array
+        :param args:
+        :param kwargs:
+        :return: The loss vector
+        """
+        loss_regularization = np.copy(x)
+        x = x.reshape([-1, self.linacce_.shape[1]])
+        # first add regularization term
+        # add data term
+        # first compute corrected linear acceleration
+        # append the initial bias at the end for convenience
+        x = np.concatenate([x, self.initial_bias_], axis=0)
+        corrected_linacce = self.linacce_ + self.alpha_[:, None] * x[self.inverse_ind_ - 1] \
+                                          + (1.0 - self.alpha_[:, None]) * x[self.inverse_ind_]
+        delta_speed = (corrected_linacce[1:] + corrected_linacce[:-1]) * self.interval_[:, None] / 2.0
+        speed = np.cumsum(delta_speed, axis=0)
+
+        # speed magnitude
+        speed_mag = np.linalg.norm(np.cumsum(delta_speed, axis=0), axis=1)
+        loss_speed = (speed_mag[self.speed_ind_ - 1] - self.target_speed_) * self.sigma_s_
+
+        loss_direction = np.empty(self.speed_ind_.shape[0], dtype=0)
+        for i in self.speed_ind_.shape[0]:
+            pass
+
+        # speed direction
+        loss = np.concatenate([loss_regularization, loss_speed], axis=0)
+        return loss
 
 
 def optimize_linear_acceleration(time_stamp, orientation, linacce,  speed_ind, regressed_speed, param,

@@ -1,3 +1,6 @@
+import os
+import sys
+import math
 import argparse
 import time
 from numba import jit
@@ -114,11 +117,16 @@ def get_orientation_training_data(data_all, camera_orientation, imu_columns, opt
     # Compute the cosine of the angle between camera viewing angle and moving angle
     position_data = data_all[['pos_x', 'pos_y']].values
     moving_dir = (position_data[sample_points + 1] - position_data[sample_points - 1])
+    moving_mag = np.linalg.norm(moving_dir, axis=1)
     camera_axis_local = np.array([0., 0., -1.])
+    epsilon = 1e-09
     for i in range(sample_points.shape[0]):
-        q = quaternion.quaternion(*camera_orientation[sample_points[i]])
-        camera_axis = (q * quaternion.quaternion(1., *camera_axis_local) * q.conj()).vec[:2]
-        feature_mat[i, -1] = min(np.dot(moving_dir[i], camera_axis) / np.linalg.norm(moving_dir[i]), 1.0)
+        if moving_mag[i] < epsilon:
+            feature_mat[i, -1] = -2
+        else:
+            q = quaternion.quaternion(*camera_orientation[sample_points[i]])
+            camera_axis = (q * quaternion.quaternion(1., *camera_axis_local) * q.conj()).vec[:2]
+            feature_mat[i, -1] = min(np.dot(moving_dir[i], camera_axis) / np.linalg.norm(moving_dir[i]), 1.0)
     return feature_mat
 
 
@@ -131,6 +139,41 @@ def split_data(data, ratio=0.3):
     """
     mask = np.random.random(data.shape[0]) < ratio
     return data[mask], data[~mask]
+
+
+def test_decompose_speed(data_all):
+    """
+    Unit test: decompose the speed to 'forward' and 'tangent' direction, and integrate back
+    :param data_all:
+    :return: positions
+    """
+    nano_to_sec = 1e09
+    num_samples = data_all.shape[0]
+    time_stamp = data_all['time'].values / nano_to_sec
+    position_xy = data_all[['pos_x', 'pos_y']].values
+    orientation = data_all[['ori_w', 'ori_x', 'ori_y', 'ori_z']].values
+    moving_dir = (position_xy[1:] - position_xy[:-1]) / (time_stamp[1:] - time_stamp[:-1])[:, None]
+    moving_dir = np.concatenate([moving_dir, [moving_dir[-1]]], axis=0)
+    moving_mag = np.linalg.norm(moving_dir, axis=1)
+    speed_decomposed = np.zeros([num_samples, 2], dtype=float)
+    camera_axis_local = quaternion.quaternion(1.0, 0.0, 0.0, -1.0)
+    for i in range(orientation.shape[0]):
+        if moving_mag[i] < 1e-011:
+            continue
+        q = quaternion.quaternion(*orientation[i])
+        camera_dir = (q * camera_axis_local * q.conj()).vec[:2]
+        cos_theta = np.dot(camera_dir, moving_dir[i]) / moving_mag[i]
+        sin_theta = math.sqrt(1.0 - cos_theta**2)
+        rot_mat = np.array([[cos_theta, -sin_theta], [sin_theta, cos_theta]])
+        moving_dir2 = np.dot(rot_mat, camera_dir) * moving_mag[i]
+        if i % 500 == 0:
+            print('-----------------')
+            print(moving_dir[i])
+            print(moving_dir2)
+        speed_decomposed[i] = np.dot(rot_mat, camera_dir) * moving_mag[i]
+
+    # Get the position by integrating
+    return speed_decomposed
 
 # for tests
 if __name__ == '__main__':
@@ -153,27 +196,17 @@ if __name__ == '__main__':
     # Create a small sample for testing
     N = data_all.shape[0]
     imu_columns = ['gyro_x', 'gyro_y', 'gyro_z', 'acce_x', 'acce_y', 'acce_z']
+    orientation = data_all[['ori_w', 'ori_x', 'ori_y', 'ori_z']].values
 
     nano_to_sec = 1e09
+
     time_stamp = data_all['time'].values / nano_to_sec
-    orientation = data_all[['ori_w', 'ori_x', 'ori_y', 'ori_z']].values
-    positions_xy = data_all[['pos_x', 'pos_y']].values
+    speed_decomposed = test_decompose_speed(data_all=data_all)
 
-    training_set = get_orientation_training_data(data_all, orientation, imu_columns, option)
+    sys.path.append(os.path.dirname(os.path.abspath(__file__) + '/..'))
+    from utility.write_trajectory_to_ply import write_ply_to_file
+    import scipy.integrate as integrate
+    position_xy_inte = integrate.cumtrapz(speed_decomposed, time_stamp, axis=0, initial=0)
 
-    sample_points = np.arange(option.window_size_,
-                              N - 1,
-                              option.sample_step_,
-                              dtype=int)
-    speed_mag = np.linalg.norm((positions_xy[sample_points+1] - positions_xy[sample_points-1]) /
-                (time_stamp[sample_points+1] - time_stamp[sample_points-1])[:, None], axis=1)
-    cos_array = training_set[:, -1]
-    speed_forward = speed_mag * cos_array
-    speed_tangent = speed_mag * np.sqrt(1.0 - cos_array ** 2)
-
-    plt.figure('Orthogonal speed')
-    plt.plot(time_stamp[sample_points], speed_mag)
-    plt.plot(time_stamp[sample_points], speed_forward)
-    plt.plot(time_stamp[sample_points], speed_tangent)
-    plt.legend(['Mag', 'Forward', 'Tangent'])
-    plt.show()
+    position_output = np.concatenate([position_xy_inte, np.zeros([position_xy_inte.shape[0], 1])], axis=1)
+    write_ply_to_file('test_decompose.ply', position=position_output, orientation=orientation)
