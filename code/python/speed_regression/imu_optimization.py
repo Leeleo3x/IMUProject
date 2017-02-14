@@ -1,4 +1,5 @@
 import warnings
+import math
 import numpy as np
 import quaternion
 from scipy.ndimage.filters import gaussian_filter1d
@@ -135,6 +136,19 @@ class ZeroSpeedFunctor(SparseAccelerationBiasFunctor):
         loss = np.concatenate([loss, speed_loss], axis=0)
         return loss
 # end of ZeroSpeedFunctor
+
+
+class SpeedAndAngleFunctor(SparseAccelerationBiasFunctor):
+    def __init__(self, time_stamp, linacce, target_speed, cos_array, speed_ind, variable_ind, sigma_s):
+        assert target_speed.shape[0] == cos_array.shape[0], 'target_speed.shape[0]: {}, cos_arrays.shape[0]:{}'\
+            .format(target_speed.shape[0], cos_array.shape[0])
+        super().__init__(time_stamp, linacce, speed_ind, variable_ind)
+        self.speed_forward_ = target_speed * cos_array
+        self.speed_tangent_ = target_speed * np.sqrt(1.0 - cos_array ** 2)
+        self.sigma_s_ = sigma_s
+
+    def __call__(self, x, *args, **kwargs):
+        pass
 
 
 def optimize_linear_acceleration(time_stamp, orientation, linacce,  speed_ind, regressed_speed, param,

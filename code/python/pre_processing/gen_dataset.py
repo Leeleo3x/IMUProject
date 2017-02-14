@@ -252,24 +252,24 @@ if __name__ == '__main__':
 
             if not args.no_trajectory:
                 print("Writing trajectory to ply file")
+                viewing_dir = np.zeros([data_mat.shape[0], 3], dtype=float)
+                viewing_dir[:, 2] = -1.0
                 write_ply_to_file(path=output_folder + '/trajectory.ply', position=pose_data[:, 1:4],
-                                  orientation=pose_data[:, -4:], length=0.5, kpoints=100, interval=200)
-
-                # debug: render orientation frames
-                # q_device_tango = quaternion.quaternion(1.0 / math.sqrt(2.0), 1.0 / math.sqrt(2.0), 0., 0.)
-                q_device_tango = quaternion.quaternion(1., 0., 0., 0.)
-                q_rv_tango = q_device_tango #* quaternion.quaternion(*output_orientation[0, 1:]).inverse()
-                orientation_tango = np.empty([output_orientation.shape[0], 4], dtype=float)
-                for i in range(orientation_tango.shape[0]):
-                    orientation_tango[i] = quaternion.as_float_array(q_rv_tango *
-                                                                     quaternion.quaternion(*output_orientation[i, 1:]))
-                    if i < 10:
-                        print('-----------------------')
-                        print(output_orientation[i, 1:])
-                        print(orientation_tango[i])
-                write_ply_to_file(path=output_folder + '/trajectory_rv.ply', position=pose_data[:, 1:4],
-                                  orientation=orientation_tango,
+                                  orientation=pose_data[:, -4:], acceleration=viewing_dir,
                                   length=0.5, kpoints=100, interval=200)
+
+                if output_orientation is not None:
+                    # debug: render orientation frames
+                    # q_device_tango = quaternion.quaternion(1.0 / math.sqrt(2.0), 1.0 / math.sqrt(2.0), 0., 0.)
+                    q_device_tango = quaternion.quaternion(1., 0., 0., 0.)
+                    q_rv_tango = q_device_tango #* quaternion.quaternion(*output_orientation[0, 1:]).inverse()
+                    orientation_tango = np.empty([output_orientation.shape[0], 4], dtype=float)
+                    for i in range(orientation_tango.shape[0]):
+                        orientation_tango[i] = quaternion.as_float_array(q_rv_tango *
+                                                                         quaternion.quaternion(*output_orientation[i, 1:]))
+                    # write_ply_to_file(path=output_folder + '/trajectory_rv.ply', position=pose_data[:, 1:4],
+                    #                   orientation=orientation_tango,
+                    #                   length=0.5, kpoints=100, interval=200)
 
         length = (data_pandas['time'].values[-1] - data_pandas['time'].values[0]) / nano_to_sec
         hertz = data_pandas.shape[0] / length

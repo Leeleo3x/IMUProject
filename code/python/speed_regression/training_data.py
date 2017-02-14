@@ -1,7 +1,8 @@
 import argparse
+import time
 from numba import jit
 import numpy as np
-import time
+import quaternion
 import pandas
 from scipy.fftpack import fft
 from scipy.ndimage.filters import gaussian_filter1d
@@ -88,7 +89,37 @@ def get_training_data(data_all, imu_columns, option, sample_points=None):
     return np.concatenate([local_imu_list, speed_all[sample_points, None]], axis=1)
 
 
-def get_orientation_training_data(data_all, imu_columns, options):
+def get_orientation_training_data(data_all, camera_orientation, imu_columns, options, sample_points=None):
+    """
+    Get the 2D view angle feature.
+    :param data_all:
+    :param imu_columns:
+    :param options:
+    :param sample_points:
+    :return:
+    """
+    assert camera_orientation.shape[0] == data_all.shape[0]
+    if sample_points is None:
+        sample_points = np.arange(option.window_size_,
+                                  N - 1,
+                                  option.sample_step_,
+                                  dtype=int)
+    # Avoid out of bound error
+    if sample_points[-1] == data_all.shape[0] - 1:
+        sample_points[-1] -= 1
+    if sample_points[0] == 0:
+        sample_points[0] = 1
+    # Use the same algorithm to compute feature vectors
+    feature_mat = get_training_data(data_all, imu_columns, option=options, sample_points=sample_points)
+    # Compute the cosine of the angle between camera viewing angle and moving angle
+    position_data = data_all[['pos_x', 'pos_y']].values
+    moving_dir = (position_data[sample_points + 1] - position_data[sample_points - 1])
+    camera_axis_local = np.array([0., 0., -1.])
+    for i in range(sample_points.shape[0]):
+        q = quaternion.quaternion(*camera_orientation[sample_points[i]])
+        camera_axis = (q * quaternion.quaternion(1., *camera_axis_local) * q.conj()).vec[:2]
+        feature_mat[i, -1] = min(np.dot(moving_dir[i], camera_axis) / np.linalg.norm(moving_dir[i]), 1.0)
+    return feature_mat
 
 
 def split_data(data, ratio=0.3):
@@ -117,15 +148,32 @@ if __name__ == '__main__':
     data_dir = args.dir + '/processed'
     print('Loading dataset ' + data_dir + '/data.csv')
     data_all = pandas.read_csv(data_dir + '/data.csv')
-
     option = TrainingDataOption(window_size=args.window, sample_step=args.step, frq_threshold=args.frq_threshold,
                                 feature=args.feature, speed_smooth_sigma=args.speed_smooth_sigma)
     # Create a small sample for testing
     N = data_all.shape[0]
-    imu_columns = ['gyro_w', 'gyro_x', 'gyro_y', 'gyro_z', 'acce_x', 'acce_y', 'acce_z']
+    imu_columns = ['gyro_x', 'gyro_y', 'gyro_z', 'acce_x', 'acce_y', 'acce_z']
 
-    train_set = get_training_data(data_all, imu_columns=imu_columns, option=option)
+    nano_to_sec = 1e09
+    time_stamp = data_all['time'].values / nano_to_sec
+    orientation = data_all[['ori_w', 'ori_x', 'ori_y', 'ori_z']].values
+    positions_xy = data_all[['pos_x', 'pos_y']].values
 
-    # plt.figure()
-    # plt.plot(train_set[:, -1])
-    # plt.show()
+    training_set = get_orientation_training_data(data_all, orientation, imu_columns, option)
+
+    sample_points = np.arange(option.window_size_,
+                              N - 1,
+                              option.sample_step_,
+                              dtype=int)
+    speed_mag = np.linalg.norm((positions_xy[sample_points+1] - positions_xy[sample_points-1]) /
+                (time_stamp[sample_points+1] - time_stamp[sample_points-1])[:, None], axis=1)
+    cos_array = training_set[:, -1]
+    speed_forward = speed_mag * cos_array
+    speed_tangent = speed_mag * np.sqrt(1.0 - cos_array ** 2)
+
+    plt.figure('Orthogonal speed')
+    plt.plot(time_stamp[sample_points], speed_mag)
+    plt.plot(time_stamp[sample_points], speed_forward)
+    plt.plot(time_stamp[sample_points], speed_tangent)
+    plt.legend(['Mag', 'Forward', 'Tangent'])
+    plt.show()
