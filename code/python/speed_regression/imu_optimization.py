@@ -10,6 +10,29 @@ FLAGS = None
 nano_to_sec = 1e09
 
 
+class SparseAccelerationBiasCostFunction:
+    """
+    The cost function is a collection of cost functors, each associated with a weight
+    """
+    def __init__(self):
+        self.functors_ = []
+        self.weights_ = []
+
+    def add_functor(self, functor, weight):
+        self.functors_.append(functor)
+        self.weights_.append(weight)
+
+    def __call__(self, x, *args, **kwargs):
+        """
+        Evaluate the residual
+        :param x: current state
+        :param args:
+        :param kwargs:
+        :return: a loss vector
+        """
+        return np.concatenate([self.functors_[i] * self.weights_[i] for i in range(len(self.functors_))], axis=0)
+
+
 class SparseAccelerationBiasFunctor:
     """
     Base class for imu acceleration bias estimation on sparse grid
