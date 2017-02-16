@@ -51,6 +51,48 @@ def compute_direct_features(data, samples, window_size):
     #         for ind in samples]
 
 
+def compute_speed(time_stamp, position, sample_points=None):
+    """
+    Compute speed vector giving position and time_stamp
+    :param time_stamp:
+    :param position:
+    :param sample_points:
+    :return:
+    """
+    if sample_points is None:
+        sample_points = np.arange(1, time_stamp.shape[0] - 1, dtype=int)
+
+    sample_points[-1] = min(sample_points[-1], time_stamp.shape[0] - 2)
+
+    speed = (position[sample_points+1] - position[sample_points]) \
+            / (time_stamp[sample_points+1] - time_stamp[sample_points])[:, None]
+    return speed
+
+
+def compute_delta_angle(time_stamp, position, orientation,
+                        sample_points, local_axis=quaternion.quaternion(1.0, 0., 0., -1.)):
+    """
+    Compute the cosine between the moving direction and viewing direction
+    :param time_stamp: Time stamp
+    :param position: Position. When passing Nx2 array, compute ignore z direction
+    :param orientation: Orientation as quaternion
+    :param local_axis: the viewing direction in the device frame. Default is set w.r.t. to android coord frame
+    :return:
+    """
+    epsilon = 1e-10
+    speed_dir = compute_speed(time_stamp, position)
+    speed_mag = np.linalg.norm(speed_dir, axis=1)
+    cos_array = np.zeros(sample_points.shape[0], dtype=float)
+    for i in range(sample_points.shape[0]):
+        if speed_mag[i] < epsilon:
+            cos_array[i] = -2.0
+        else:
+            q = quaternion.quaternion(*orientation[sample_points[i]])
+            camera_axis = (q * local_axis * q.conj()).vec[:position.shape[1]]
+            cos_array[i] = min(np.dot(speed_dir[i], camera_axis) / speed_mag[i], 1.0)
+    return cos_array
+
+
 def get_training_data(data_all, imu_columns, option, sample_points=None):
     """
     Create training data.
@@ -70,7 +112,7 @@ def get_training_data(data_all, imu_columns, option, sample_points=None):
     data_used = data_all[imu_columns].values
     time_stamp = data_all['time'].values / 1e09
 
-    speed_all = np.zeros(N)
+    speed_all = np.zeros(N, dtype=float)
     speed_all[1:-1] = np.divide(np.linalg.norm(pose_data[2:] - pose_data[:-2], axis=1),
                                 time_stamp[2:] - time_stamp[:-2])
     # filter the speed with gaussian filter
@@ -78,7 +120,7 @@ def get_training_data(data_all, imu_columns, option, sample_points=None):
         speed_all = gaussian_filter1d(speed_all, option.speed_smooth_sigma_, axis=0)
 
     if option.feature_ == 'direct':
-        #local_imu_list = compute_direct_features(data_used, sample_points, option.window_size_)
+        # local_imu_list = compute_direct_features(data_used, sample_points, option.window_size_)
         local_imu_list = [data_used[ind - option.window_size_:ind].flatten() for ind in sample_points]
     elif option.feature_ == 'fourier':
         local_imu_list = compute_fourier_features(data_used, sample_points, option.window_size_, option.frq_threshold_,
@@ -92,7 +134,8 @@ def get_training_data(data_all, imu_columns, option, sample_points=None):
     return np.concatenate([local_imu_list, speed_all[sample_points, None]], axis=1)
 
 
-def get_orientation_training_data(data_all, camera_orientation, imu_columns, options, sample_points=None):
+def get_orientation_training_data(data_all, camera_orientation, imu_columns, options, sample_points=None,
+                                  no_feature=False):
     """
     Get the 2D view angle feature.
     :param data_all:
@@ -103,30 +146,23 @@ def get_orientation_training_data(data_all, camera_orientation, imu_columns, opt
     """
     assert camera_orientation.shape[0] == data_all.shape[0]
     if sample_points is None:
-        sample_points = np.arange(option.window_size_,
-                                  N - 1,
-                                  option.sample_step_,
+        sample_points = np.arange(options.window_size_,
+                                  data_all.shape[0] - 1,
+                                  options.sample_step_,
                                   dtype=int)
     # Avoid out of bound error
     if sample_points[-1] == data_all.shape[0] - 1:
         sample_points[-1] -= 1
     if sample_points[0] == 0:
         sample_points[0] = 1
-    # Use the same algorithm to compute feature vectors
-    feature_mat = get_training_data(data_all, imu_columns, option=options, sample_points=sample_points)
+    if not no_feature:
+        # Use the same algorithm to compute feature vectors
+        feature_mat = get_training_data(data_all, imu_columns, option=options, sample_points=sample_points)
+    else:
+        feature_mat = np.zeros([sample_points.shape[0], 1], dtype=float)
     # Compute the cosine of the angle between camera viewing angle and moving angle
     position_data = data_all[['pos_x', 'pos_y']].values
-    moving_dir = (position_data[sample_points + 1] - position_data[sample_points - 1])
-    moving_mag = np.linalg.norm(moving_dir, axis=1)
-    camera_axis_local = np.array([0., 0., -1.])
-    epsilon = 1e-09
-    for i in range(sample_points.shape[0]):
-        if moving_mag[i] < epsilon:
-            feature_mat[i, -1] = -2
-        else:
-            q = quaternion.quaternion(*camera_orientation[sample_points[i]])
-            camera_axis = (q * quaternion.quaternion(1., *camera_axis_local) * q.conj()).vec[:2]
-            feature_mat[i, -1] = min(np.dot(moving_dir[i], camera_axis) / np.linalg.norm(moving_dir[i]), 1.0)
+    feature_mat[:, -1] = compute_delta_angle(time_stamp, position_data, camera_orientation, sample_points)
     return feature_mat
 
 
@@ -152,28 +188,41 @@ def test_decompose_speed(data_all):
     time_stamp = data_all['time'].values / nano_to_sec
     position_xy = data_all[['pos_x', 'pos_y']].values
     orientation = data_all[['ori_w', 'ori_x', 'ori_y', 'ori_z']].values
-    moving_dir = (position_xy[1:] - position_xy[:-1]) / (time_stamp[1:] - time_stamp[:-1])[:, None]
+
+    step = 1
+    sample_points = np.arange(0, num_samples, step, dtype=int)
+    moving_dir = (position_xy[sample_points[1:]] - position_xy[sample_points[:-1]]) \
+                 / (time_stamp[sample_points[1:]] - time_stamp[sample_points[:-1]])[:, None]
     moving_dir = np.concatenate([moving_dir, [moving_dir[-1]]], axis=0)
     moving_mag = np.linalg.norm(moving_dir, axis=1)
-    speed_decomposed = np.zeros([num_samples, 2], dtype=float)
+    speed_decomposed = np.zeros([sample_points.shape[0], 2], dtype=float)
     camera_axis_local = quaternion.quaternion(1.0, 0.0, 0.0, -1.0)
-    for i in range(orientation.shape[0]):
+    for i in range(sample_points.shape[0]):
         if moving_mag[i] < 1e-011:
             continue
-        q = quaternion.quaternion(*orientation[i])
+        q = quaternion.quaternion(*orientation[sample_points[i]])
         camera_dir = (q * camera_axis_local * q.conj()).vec[:2]
-        cos_theta = np.dot(camera_dir, moving_dir[i]) / moving_mag[i]
+        cos_theta = np.dot(camera_dir, moving_dir[i]) / (moving_mag[i] * np.linalg.norm(camera_dir))
         sin_theta = math.sqrt(1.0 - cos_theta**2)
         rot_mat = np.array([[cos_theta, -sin_theta], [sin_theta, cos_theta]])
         moving_dir2 = np.dot(rot_mat, camera_dir) * moving_mag[i]
-        if i % 500 == 0:
+        if i % 100 == 0:
             print('-----------------')
             print(moving_dir[i])
             print(moving_dir2)
         speed_decomposed[i] = np.dot(rot_mat, camera_dir) * moving_mag[i]
 
     # Get the position by integrating
-    return speed_decomposed
+    import scipy.integrate as integrate
+    from utility import write_trajectory_to_ply
+    position_inte_xy = np.cumsum((speed_decomposed[1:]+speed_decomposed[:-1]) / 2.0
+                                 * (time_stamp[sample_points[1:]] - time_stamp[sample_points[:-1]])[:, None], axis=0)
+    position_inte_xy = np.insert(position_inte_xy, 0, 0., axis=0)
+    position_inte_xy += position_xy[sample_points[0]]
+    position_output = np.concatenate([position_inte_xy, np.zeros([sample_points.shape[0], 1])], axis=1)
+    write_trajectory_to_ply.write_ply_to_file('test_decompose_{}.ply'.format(step),
+                                              position_output, orientation[sample_points])
+    return position_output
 
 # for tests
 if __name__ == '__main__':
@@ -202,11 +251,3 @@ if __name__ == '__main__':
 
     time_stamp = data_all['time'].values / nano_to_sec
     speed_decomposed = test_decompose_speed(data_all=data_all)
-
-    sys.path.append(os.path.dirname(os.path.abspath(__file__) + '/..'))
-    from utility.write_trajectory_to_ply import write_ply_to_file
-    import scipy.integrate as integrate
-    position_xy_inte = integrate.cumtrapz(speed_decomposed, time_stamp, axis=0, initial=0)
-
-    position_output = np.concatenate([position_xy_inte, np.zeros([position_xy_inte.shape[0], 1])], axis=1)
-    write_ply_to_file('test_decompose.ply', position=position_output, orientation=orientation)
