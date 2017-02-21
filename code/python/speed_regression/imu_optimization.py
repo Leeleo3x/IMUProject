@@ -297,7 +297,7 @@ if __name__ == '__main__':
     parser.add_argument('dir', type=str)
     parser.add_argument('model', type=str)
     parser.add_argument('--calibration', type=str, default=None)
-    parser.add_argument('--method', type=str, default='speed_and_angle')
+    parser.add_argument('--method', type=str, default='speed_magnitude')
     parser.add_argument('--output', type=str)
     parser.add_argument('--step', type=int, default=50)
     parser.add_argument('--verbose', type=int, default=2)

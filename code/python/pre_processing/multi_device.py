@@ -32,7 +32,7 @@ def compute_time_offset(source, target, search_range=200):
     #     if diff < best_score:
     #         best_score = diff
     #         best_offset = offset
-    best_offset = -113
+    best_offset = -80
     time_offset = 0
     if best_offset > 0:
         time_offset = target[best_offset, 0] - source[0, 0]
@@ -47,7 +47,7 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument('dir', type=str, default=None)
-    parser.add_argument('--margin', type=int, default=500)
+    parser.add_argument('--margin', type=int, default=100)
     parser.add_argument('--no_trajectory', action='store_true')
     args = parser.parse_args()
 
@@ -110,6 +110,15 @@ if __name__ == '__main__':
     # reorder the quaternion representation from [x,y,z,w] to [w,x,y,z]
     rv_nexus[:, [1, 2, 3, 4]] = rv_nexus[:, [4, 1, 2, 3]]
 
+    # plt.figure('Accelerometer')
+    # for i in range(3):
+    #     plt.subplot(311 + i)
+    #     plt.plot((acce_nexus[:, 0]) / nano_to_sec, acce_nexus[:, i+1])
+    #     plt.plot((acce_tango[:, 0]) / nano_to_sec, acce_tango[:, i+1])
+    #     plt.legend(['Nexus', 'Tango'])
+    #
+    # plt.show()
+
     pose_truncate_ind = pose_data.shape[0] - 1
     min_timestamp = min([gyro_nexus[-1, 0], acce_nexus[-1, 0], linacce_nexus[-1, 0],
                          gravity_nexus[-1, 0], magnet_nexus[-1, 0], rv_nexus[-1, 0]])
@@ -146,7 +155,8 @@ if __name__ == '__main__':
         write_ply_to_file(output_dir + '/trajectory.ply', position=pose_data[:, -7:-4],
                           orientation=pose_data[:, -4:])
 
-        q_device_tango = quaternion.quaternion(1.0 / math.sqrt(2.0), 1.0 / math.sqrt(2.0), 0., 0.)
+        # q_device_tango = quaternion.quaternion(1.0 / math.sqrt(2.0), 1.0 / math.sqrt(2.0), 0., 0.)
+        q_device_tango = quaternion.quaternion(*pose_data[0, -4:])
         # q_device_tango = quaternion.quaternion(1., 0., 0., 0.)
         q_rv_tango = q_device_tango * quaternion.quaternion(*output_rv[0, 1:]).inverse()
         orientation_tango_frame = np.empty([output_rv.shape[0], 4], dtype=float)

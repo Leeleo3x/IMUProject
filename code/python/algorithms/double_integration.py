@@ -67,7 +67,7 @@ if __name__ == '__main__':
     # linacce[:, [0, 1]] = 0.0
     # linacce[:, 2] = 0.0
 
-    positions = IMU_double_integration(t=time_stamp, rotation=rotations, acceleration=linacce)
+    positions = IMU_double_integration(t=time_stamp, rotation=rotations, acceleration=linacce, only_xy=True)
 
     # plt.figure()
     # ax = plt.subplot(111, projection='3d')
@@ -77,5 +77,6 @@ if __name__ == '__main__':
     # ax.plot(positions_gt[:, 0], positions_gt[:, 1], positions_gt[:, 2], 'g')
     # plt.show()
     if args.output is not None:
-        write_ply_to_file(path=args.output, position=positions, orientation=rotations, acceleration=linacce)
+        write_ply_to_file(path=args.output, position=positions, orientation=rotations, acceleration=linacce,
+                          length=0.1, kpoints=100)
         print('Write ply to ' + args.output)
