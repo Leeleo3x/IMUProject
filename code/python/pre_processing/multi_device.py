@@ -1,3 +1,4 @@
+import math
 import os
 import numpy as np
 import pandas
@@ -139,8 +140,17 @@ if __name__ == '__main__':
     output_data.to_csv(output_dir + '/data.csv')
 
     if not args.no_trajectory:
+        import quaternion
         print('Writing ply...')
         write_ply_to_file(output_dir + '/trajectory.ply', position=pose_data[:, -7:-4],
                           orientation=pose_data[:, -4:])
+
+        q_device_tango = quaternion.quaternion(1.0 / math.sqrt(2.0), 1.0 / math.sqrt(2.0), 0., 0.)
+        # q_device_tango = quaternion.quaternion(1., 0., 0., 0.)
+        q_rv_tango = q_device_tango * quaternion.quaternion(*output_rv[0, 1:]).inverse()
+        orientation_tango_frame = np.empty([output_rv.shape[0], 4], dtype=float)
+        for i in range(orientation_tango_frame.shape[0]):
+            orientation_tango_frame[i] = quaternion.as_float_array(q_rv_tango *
+                                                                   quaternion.quaternion(*output_rv[i, 1:]))
         write_ply_to_file(output_dir + '/trajectory_rv.ply', position=pose_data[:, -7:-4],
-                          orientation=output_rv[:, 1:])
+                          orientation=orientation_tango_frame)
