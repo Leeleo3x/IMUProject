@@ -9,6 +9,7 @@ from scipy.ndimage.filters import gaussian_filter1d
 
 nano_to_sec = 1e09
 
+
 def compute_time_offset(source, target, search_range=200):
     """
     Synchronize the timestamp of source to the target
