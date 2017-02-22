@@ -81,7 +81,7 @@ if __name__ == '__main__':
         plt.plot(sync_source[:, 0], sync_source[:, i + 1])
         plt.legend(['Tango', 'Nexus'])
 
-    # plt.show()
+    plt.show()
 
     # Interpolation
     sample_rate = lambda x: x.shape[0] / (x[-1, 0] - x[0, 0]) * nano_to_sec
@@ -108,7 +108,8 @@ if __name__ == '__main__':
     magnet_nexus[:, 0] += time_offset
     rv_nexus[:, 0] += time_offset
     # reorder the quaternion representation from [x,y,z,w] to [w,x,y,z]
-    rv_nexus[:, [1, 2, 3, 4]] = rv_nexus[:, [4, 1, 2, 3]]
+    rv_nexus[:, [1, 2,
+                 3, 4]] = rv_nexus[:, [4, 1, 2, 3]]
 
     # plt.figure('Accelerometer')
     # for i in range(3):
