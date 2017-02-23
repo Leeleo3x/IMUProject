@@ -30,14 +30,14 @@ class SparseAccelerationBiasCostFunction:
         :param kwargs:
         :return: a loss vector
         """
-        return np.concatenate([self.functors_[i] * self.weights_[i] for i in range(len(self.functors_))], axis=0)
+        return np.concatenate([self.functors_[i](x) * self.weights_[i] for i in range(len(self.functors_))], axis=0)
 
 
 class SparseAccelerationBiasFunctor:
     """
     Base class for imu acceleration bias estimation on sparse grid
     """
-    def __init__(self, time_stamp, linacce, speed_ind, variable_ind):
+    def __init__(self, time_stamp, orientation, linacce, variable_ind):
         """
         :param time_stamp: time_stamp of the linear acceleration in seconds
         :param linacce: the raw linear acceleration signal
@@ -46,15 +46,13 @@ class SparseAccelerationBiasFunctor:
         """
         if time_stamp[-1] > 1e08:
             warnings.warn('The value of time_stamp is large, forgot to convert to seconds?')
-        assert variable_ind[-1] > speed_ind[-1], \
-            print('variable_ind[-1]:{}, speed_ind[-1]:{}'.format(variable_ind[-1], speed_ind[-1]))
         self.variable_ind_ = variable_ind
         self.time_stamp_ = time_stamp
         self.interval_ = (self.time_stamp_[1:variable_ind[-1]] - self.time_stamp_[:variable_ind[-1] - 1])
         # any records after the last speed sample is useless
         self.linacce_ = linacce[:variable_ind[-1]]
+        self.orientation_ = orientation[:variable_ind[-1]]
 
-        self.speed_ind_ = speed_ind
         self.initial_bias_ = np.zeros([1, self.linacce_.shape[1]], dtype=float)
         # Pre-compute the interpolation coefficients
         # y[i] = alpha[i-1] * x[i-1] + (1.0 - alpha[i-1]) * x[i]
@@ -70,7 +68,7 @@ class SparseAccelerationBiasFunctor:
                                            / (self.time_stamp_[end_id] - self.time_stamp_[start_id])
         self.alpha_ = 1.0 - self.alpha_
 
-    def correct_acceleration(self, input_acceleration, bias):
+    def correct_acceleration(self, input_acceleration, bias,):
         assert bias.shape[0] == self.variable_ind_.shape[0], \
             'bias.shape[0]: {}, variable_ind.shape[0]: {}'.format(bias.shape[0], self.variable_ind_.shape[0])
         bias = np.concatenate([bias, self.initial_bias_], axis=0)
@@ -81,17 +79,16 @@ class SparseAccelerationBiasFunctor:
 
 
 class SpeedMagnitudeFunctor(SparseAccelerationBiasFunctor):
-    def __init__(self, time_stamp, linacce, target_speed, speed_ind, variable_ind, sigma_r=0.1, sigma_s=0.01):
+    def __init__(self, time_stamp, orientation, linacce, target_speed, speed_ind, variable_ind):
         """
         Construct a functor
         :param sigma_a: weighting factor for data term
         :param sigma_s: weighting factor for speed coherence term
         """
-        super().__init__(time_stamp, linacce, speed_ind, variable_ind)
+        super().__init__(time_stamp, orientation, linacce, variable_ind)
         # predicted speed
         self.target_speed_ = target_speed
-        self.sigma_r_ = sigma_r
-        self.sigma_s_ = sigma_s
+        self.speed_ind_ = speed_ind
 
     #@jit
     def __call__(self, x, *args, **kwargs):
@@ -102,21 +99,24 @@ class SpeedMagnitudeFunctor(SparseAccelerationBiasFunctor):
         :param kwargs:
         :return: The loss vector
         """
-        loss = np.copy(x)
         x = x.reshape([-1, self.linacce_.shape[1]])
-        # first add regularization term
-        # add data term
         # first compute corrected linear acceleration
         # append the initial bias at the end for convenience
         x = np.concatenate([x, self.initial_bias_], axis=0)
         corrected_linacce = self.linacce_ + self.alpha_[:, None] * x[self.inverse_ind_ - 1]\
-                            + (1.0 - self.alpha_[:, None]) * x[self.inverse_ind_]
-        delta_speed = (corrected_linacce[1:] + corrected_linacce[:-1]) * self.interval_[:, None] / 2.0
+                                          + (1.0 - self.alpha_[:, None]) * x[self.inverse_ind_]
+        # compute corrected speed
+        directed_acce = np.empty(self.linacce_.shape)
+        for i in range(self.linacce_.shape[0]):
+            q = quaternion.quaternion(*self.orientation_[i])
+            directed_acce[i] = (q * quaternion.quaternion(1.0, *corrected_linacce[i]) * q.conj()).vec
+
+        delta_speed = (directed_acce[1:] + directed_acce[:-1]) * self.interval_[:, None] / 2.0
 
         speed = np.linalg.norm(np.cumsum(delta_speed, axis=0), axis=1)
         # Next, compute the difference between integrated speed and target speed.
         # Notice that there is one element's off between $speed and $target_speed.
-        loss = np.concatenate([loss, (speed[self.speed_ind_ - 1] - self.target_speed_) * self.sigma_s_], axis=0)
+        loss = (speed[self.speed_ind_ - 1] - self.target_speed_)
         return loss
 
     def jac(self, x, *args, **kwargs):
@@ -129,8 +129,21 @@ class SpeedMagnitudeFunctor(SparseAccelerationBiasFunctor):
 # end of SpeedMagnitudeFunctor
 
 
+class ZeroVerticalTranslationFunctor(SparseAccelerationBiasFunctor):
+    def __init__(self, time_stamp, orientation, linacce, variable_ind):
+        super().__init__(time_stamp, orientation, linacce, variable_ind)
+
+    def __call__(self, x, *args, **kwargs):
+        pass
+
+
+class BiasWeightDecay:
+    def __call__(self, x, *args, **kwargs):
+        return x
+
+
 class ZeroSpeedFunctor(SparseAccelerationBiasFunctor):
-    def __init__(self, time_stamp, linacce, speed_ind, variable_ind, sigma_z):
+    def __init__(self, time_stamp, orientation, linacce, speed_ind, variable_ind):
         """
         Constructor for ZeroSpeedFunctor
         :param time_stamp:
@@ -139,12 +152,10 @@ class ZeroSpeedFunctor(SparseAccelerationBiasFunctor):
         :param variable_ind:
         :param sigma_z:
         """
-        super().__init__(time_stamp, linacce, speed_ind, variable_ind)
-        self.sigma_z_ = sigma_z
-        print(self.inverse_ind_)
-    #@jit
+        super().__init__(time_stamp, orientation, linacce, variable_ind)
+        self.speed_ind_ = speed_ind
+
     def __call__(self, x, *args, **kwargs):
-        loss = np.copy(x)
         x = x.reshape([-1, self.linacce_.shape[1]])
         # first add regularization term
         # add data term
@@ -153,26 +164,28 @@ class ZeroSpeedFunctor(SparseAccelerationBiasFunctor):
         x = np.concatenate([x, self.initial_bias_], axis=0)
         corrected_linacce = self.linacce_ + self.alpha_[:, None] * x[self.inverse_ind_ - 1] \
                                           + (1.0 - self.alpha_[:, None]) * x[self.inverse_ind_]
-        delta_speed = (corrected_linacce[1:] + corrected_linacce[:-1]) * self.interval_[:, None] / 2.0
+
+        directed_acce = np.empty(self.linacce_.shape)
+        for i in range(self.linacce_.shape[0]):
+            q = quaternion.quaternion(*self.orientation_[i])
+            directed_acce[i] = (q * quaternion.quaternion(1.0, *corrected_linacce[i]) * q.conj()).vec
+
+        delta_speed = (directed_acce[1:] + directed_acce[:-1]) * self.interval_[:, None] / 2.0
         speed = np.cumsum(delta_speed, axis=0)
-        speed_loss = np.abs(speed[self.speed_ind_ - 1, :]).ravel() * self.sigma_z_
-        loss = np.concatenate([loss, speed_loss], axis=0)
+        loss = np.abs(speed[self.speed_ind_ - 1, :]).ravel()
         return loss
 # end of ZeroSpeedFunctor
 
 
-class SpeedAndAngleFunctor(SparseAccelerationBiasFunctor):
-    def __init__(self, time_stamp, linacce, orientation,
+class SpeedAngleFunctor(SparseAccelerationBiasFunctor):
+    def __init__(self, time_stamp, orientation, linacce,
                  target_speed, cos_array, speed_ind, variable_ind,
                  sigma_s, sigma_a, sigma_r=1.0):
         assert target_speed.shape[0] == cos_array.shape[0], 'target_speed.shape[0]: {}, cos_arrays.shape[0]:{}'\
             .format(target_speed.shape[0], cos_array.shape[0])
-        super().__init__(time_stamp, linacce, speed_ind, variable_ind)
-        self.target_speed_ = target_speed
+        super().__init__(time_stamp, orientation, linacce, variable_ind)
+        self.speed_ind_ = speed_ind
         self.cos_array_ = cos_array
-        self.sigma_s_ = sigma_s
-        self.sigma_a_ = sigma_a
-        self.sigma_r_ = sigma_r
         self.camera_axis_ = np.empty(linacce.shape, dtype=float)
         camera_axis_local = quaternion.quaternion(1., 0., 0., -1.)
         for i in range(linacce.shape[0]):
@@ -188,7 +201,6 @@ class SpeedAndAngleFunctor(SparseAccelerationBiasFunctor):
         :param kwargs:
         :return: The loss vector
         """
-        loss_regularization = np.copy(x)
         x = x.reshape([-1, self.linacce_.shape[1]])
         x = np.concatenate([x, self.initial_bias_], axis=0)
         corrected_linacce = self.linacce_ + self.alpha_[:, None] * x[self.inverse_ind_ - 1] \
@@ -197,16 +209,11 @@ class SpeedAndAngleFunctor(SparseAccelerationBiasFunctor):
         speed = np.cumsum(delta_speed, axis=0)
         # speed magnitude
         speed_mag = np.linalg.norm(np.cumsum(delta_speed, axis=0), axis=1)
-        loss_speed = (speed_mag[self.speed_ind_ - 1] - self.target_speed_)
-        loss_direction = np.zeros(self.speed_ind_.shape[0], dtype=float)
+        loss = np.zeros(self.speed_ind_.shape[0], dtype=float)
         for i in range(self.speed_ind_.shape[0]):
             if speed_mag[i] > 1e-11:
-                loss_direction[i] = np.dot(speed[self.speed_ind_[i]], self.camera_axis_[self.speed_ind_[i]]) \
-                                    / speed_mag[i] - self.cos_array_[i]
-
-        # speed direction
-        loss = np.concatenate([loss_regularization * self.sigma_r_, loss_speed * self.sigma_s_,
-                               loss_direction * self.sigma_a_], axis=0)
+                loss[i] = np.dot(speed[self.speed_ind_[i]], self.camera_axis_[self.speed_ind_[i]]) \
+                          / speed_mag[i] - self.cos_array_[i]
         return loss
 
 

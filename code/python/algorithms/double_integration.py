@@ -67,7 +67,7 @@ if __name__ == '__main__':
     # linacce[:, [0, 1]] = 0.0
     # linacce[:, 2] = 0.0
 
-    positions = IMU_double_integration(t=time_stamp, rotation=rotations, acceleration=linacce, only_xy=True)
+    positions = IMU_double_integration(t=time_stamp, rotation=rotations, acceleration=-linacce, only_xy=True)
 
     # plt.figure()
     # ax = plt.subplot(111, projection='3d')

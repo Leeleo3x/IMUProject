@@ -35,6 +35,14 @@ def complementary_filter(ts, gyro_data, acce_data, alpha=0.98):
     return angle
 
 
+def low_pass_filter(t, data, alpha):
+    assert t.shape[0] == data.shape[0]
+    filtered = np.copy(data)
+    time_interval = t[1:] - t[:-1]
+    for i in range(1, filtered.shape[0]):
+        filtered[i] = filtered[i-1] + (time_interval[i-1] / (alpha + time_interval[i-1])) * (data[i] - filtered[i-1])
+    return filtered
+
 if __name__ == '__main__':
     import pandas
     import argparse
