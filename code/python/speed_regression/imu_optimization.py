@@ -120,10 +120,8 @@ class SpeedMagnitudeFunctor(SparseAccelerationBiasFunctor):
         return self.evaluate_on_speed(directed_speed)
 
     def evaluate_on_speed(self, speed):
-        # Next, compute the difference between integrated speed and target speed.
-        # Notice that there is one element's off between $speed and $target_speed.
         speed = np.linalg.norm(speed, axis=1)
-        loss = (speed[self.speed_ind_ - 1] - self.target_speed_)
+        loss = (speed[self.speed_ind_] - self.target_speed_)
         return loss
 
     def jac(self, x, *args, **kwargs):
@@ -186,12 +184,8 @@ class ZeroSpeedFunctor(SparseAccelerationBiasFunctor):
 # end of ZeroSpeedFunctor
 
 
-class SpeedAngleFunctor(SparseAccelerationBiasFunctor):
-    def __init__(self, time_stamp, orientation, linacce,
-                 target_speed, cos_array, speed_ind, variable_ind,
-                 sigma_s, sigma_a, sigma_r=1.0):
-        assert target_speed.shape[0] == cos_array.shape[0], 'target_speed.shape[0]: {}, cos_arrays.shape[0]:{}'\
-            .format(target_speed.shape[0], cos_array.shape[0])
+class AngleFunctor(SparseAccelerationBiasFunctor):
+    def __init__(self, time_stamp, orientation, linacce, cos_array, speed_ind, variable_ind):
         super().__init__(time_stamp, orientation, linacce, variable_ind)
         self.speed_ind_ = speed_ind
         self.cos_array_ = cos_array
@@ -216,8 +210,8 @@ class SpeedAngleFunctor(SparseAccelerationBiasFunctor):
                                           + (1.0 - self.alpha_[:, None]) * x[self.inverse_ind_]
         speed = np.cumsum((corrected_linacce[1:] + corrected_linacce[:-1]) * self.interval_[:, None] / 2.0, axis=0)
         return self.evaluate_on_speed(speed)
-        # speed magnitude
 
+    @jit
     def evaluate_on_speed(self, speed):
         speed_mag = np.linalg.norm(speed, axis=1)
         loss = np.zeros(self.speed_ind_.shape[0], dtype=float)
@@ -251,50 +245,10 @@ class SharedSpeedFunctorSet(SparseAccelerationBiasFunctor):
 
         directed_acce = rotate_vector(corrected_linacce, self.orientation_)
         speed = np.cumsum((directed_acce[1:] + directed_acce[:-1]) * self.interval_[:, None] / 2.0, axis=0)
+        speed = np.concatenate([np.zeros([1, self.linacce_.shape[1]]), speed], axis=0)
         loss = np.concatenate([self.functors_[i].evaluate_on_speed(speed)
                                * self.weights_[i] for i in range(len(self.functors_))], axis=0)
         return loss
-
-
-def optimize_linear_acceleration(time_stamp, directed_acce, speed_ind, param,
-                                 constraint_dict=None,
-                                 method='speed_magunitude', initial=None, sparse_location=None, verbose=0):
-    """
-    Optimize linear acceleration with regressed speed
-    :param time_stamp: the time stamp of linear acceleration
-    :param orientation: orientation at each time stamp in the form of quaternion
-    :param directed_acce: oriented linear acceleration
-    :param speed_ind: indics of predicted speed
-    :param constraint_dict: dictionary of constraints
-    :param param: dictionary of parameters.
-    :param initial: initial value. Default is all zero
-    :param sparse_location: position of sampled location. Default is the same with speed timestamp
-    :param method: Method to use.
-    :param verbose: verbose level
-    :return: refined linear acceleration
-    """
-    if sparse_location is None:
-        sparse_location = speed_ind.copy()
-        sparse_location[-1] += 1
-    if initial is None:
-        initial = np.zeros(sparse_location.shape[0] * directed_acce.shape[1], dtype=float)
-    assert initial.ndim == 1
-    assert initial.shape[0] == directed_acce.shape[1] * sparse_location.shape[0]
-    assert orientation.shape[0] == linacce.shape[0]
-
-    if verbose > 0:
-        print('Using ' + method)
-
-    # print('Initial speed at constraint:')
-    # cum_speed = np.cumsum((linacce[1:] + linacce[:-1]) * (time_stamp[1:] - time_stamp[:-1])[:, None] / 2.0, axis=0)
-    # print(cum_speed[speed_ind] - 1)
-    # print('final loss vector:')
-    # print(cost_functor(optimizer.x)[variable_ind.shape[0]:])
-    # corrected_speed = np.cumsum((corrected[1:] + corrected[:-1]) * (time_stamp[1:]-time_stamp[:-1])[:, None] / 2.0, axis=0)
-    # print('corrected speed at constraint:')
-    # print(corrected_speed[speed_ind - 1])
-
-    # return optimizer, corrected
 
 
 if __name__ == '__main__':
@@ -315,11 +269,11 @@ if __name__ == '__main__':
     parser.add_argument('dir', type=str)
     parser.add_argument('model', type=str)
     parser.add_argument('--calibration', type=str, default=None)
-    parser.add_argument('--method', type=str, default='speed_magnitude')
+    parser.add_argument('--method', type=str, default='speed_and_angle')
     parser.add_argument('--output', type=str)
-    parser.add_argument('--step', type=int, default=50)
+    parser.add_argument('--step', type=int, default=5)
     parser.add_argument('--verbose', type=int, default=2)
-    parser.add_argument('--sigma_s', type=float, default=0.5)
+    parser.add_argument('--sigma_s', type=float, default=1.0)
     parser.add_argument('--sigma_a', type=float, default=1.0)
     parser.add_argument('--sigma_z', type=float, default=1.0)
     parser.add_argument('--sigma_r', type=float, default=1.0)
@@ -348,38 +302,35 @@ if __name__ == '__main__':
 
     param = {'sigma_s': FLAGS.sigma_s, 'sigma_z': FLAGS.sigma_z,
              'sigma_r': FLAGS.sigma_r, 'sigma_a': FLAGS.sigma_a}
-    variable_ind = np.arange(1, test_N, 10, dtype=int)
+    variable_ind = np.arange(1, test_N, 20, dtype=int)
     variable_ind[-1] = test_N - 1
 
     """
     Construct constraints
     """
-    constraint_dict = {}
     print('Predicting speed...')
     options = td.TrainingDataOption(feature='fourier', sample_step=FLAGS.step, frq_threshold=100)
     constraint_ind = np.arange(options.window_size_, test_N - 1,
                                options.sample_step_,
                                dtype=int)
-    # variable_ind = speed_ind.copy()
-    # variable_ind[-1] += 1.0
-    # test_data = td.get_training_data(data_all[:test_N], imu_columns, options, sample_points=constraint_ind)
-    # predicted_speed = regressor.predict(test_data[:, :-1])
-    # predicted_speed = np.maximum(predicted_speed, 0.0)
 
     warnings.warn('Currently using ground truth as constraint')
     predicted_speed = np.linalg.norm(td.compute_speed(time_stamp, data_all[['pos_x', 'pos_y']].values,
                                                       constraint_ind), axis=1)
-    constraint_dict['speed_magnitude'] = predicted_speed
 
-    predicted_cos_array = None
-    if FLAGS.method == 'speed_and_angle':
-        predicted_cos_array = td.compute_delta_angle(time_stamp,
-                                                     position=data_all[['pos_x', 'pos_y']].values,
-                                                     orientation=orientation,
-                                                     sample_points=constraint_ind)
+    # predicted_cos_array = None
+    # if FLAGS.method == 'speed_and_angle':
+    predicted_cos_array, valid_array = td.compute_delta_angle(time_stamp,
+                                                              position=data_all[['pos_x', 'pos_y', 'pos_z']].values,
+                                                              orientation=orientation,
+                                                              sample_points=constraint_ind)
+
+    # NOTICE: the values inside the cos_array are not all valid (the speed direction is undefined for static camera).
+    #         Therefore it is necessary to construct a separate constraint index array
+    constraint_ind_angle = constraint_ind[valid_array]
+    predicted_cos_array = predicted_cos_array[valid_array]
 
     print('Solving...')
-
     ##########################################################
     # Constructing problem
     cost_function = SparseAccelerationBiasCostFunction()
@@ -389,33 +340,32 @@ if __name__ == '__main__':
     magnitude_functor = SpeedMagnitudeFunctor(time_stamp, orientation, linacce,
                                       predicted_speed, constraint_ind, variable_ind)
     zero_vertical = ZeroVerticalTranslationFunctor(time_stamp, orientation, linacce, constraint_ind, variable_ind)
-
+    angle_cosine = AngleFunctor(time_stamp, orientation, linacce, predicted_cos_array, constraint_ind_angle, variable_ind)
     speed_constraints = SharedSpeedFunctorSet(time_stamp, orientation, linacce, variable_ind)
     sigma_zp = 10.0
     speed_constraints.add_functor(magnitude_functor, FLAGS.sigma_s)
-    # speed_constraints.add_functor(zero_vertical, sigma_zp)
+    speed_constraints.add_functor(zero_vertical, sigma_zp)
+    speed_constraints.add_functor(angle_cosine, FLAGS.sigma_a)
     cost_function.add_functor(speed_constraints)
 
     # Optimize
     init_bias = np.zeros(variable_ind.shape[0] * 3, dtype=float)
-    optimizer = least_squares(cost_function, init_bias, jac='3-point', max_nfev=20, verbose=FLAGS.verbose)
+    optimizer = least_squares(cost_function, init_bias, jac='2-point', max_nfev=15, verbose=FLAGS.verbose)
+
+    corrected_linacce = np.empty(linacce.shape, dtype=float)
+    np.copyto(corrected_linacce, linacce)
 
     bias = optimizer.x.reshape([-1, 3])
-    corrected_linacce = np.copy(linacce)
     corrected_linacce[:variable_ind[-1]] = magnitude_functor.correct_acceleration(linacce[:variable_ind[-1]], bias)
     directed_corrected = np.empty(corrected_linacce.shape, dtype=float)
-    for i in range(corrected_linacce.shape[0]):
-        q = quaternion.quaternion(*orientation[i])
-        directed_corrected[i] = (q * quaternion.quaternion(1.0, *corrected_linacce[i]) * q.conj()).vec
+    directed_corrected = rotate_vector(corrected_linacce, orientation)
 
     """
     Visualize and save result
     """
     # computed speed
     time_interval = (time_stamp[1:] - time_stamp[:-1])[:, None]
-    for i in range(linacce.shape[0]):
-        rot = quaternion.as_rotation_matrix(quaternion.quaternion(*orientation[i]))
-        linacce[i] = np.dot(rot, linacce[i].transpose()).flatten()
+    linacce = rotate_vector(linacce, orientation)
 
     filter_sigma = 5
     corrected = gaussian_filter1d(directed_corrected, sigma=filter_sigma, axis=0)
@@ -424,8 +374,8 @@ if __name__ == '__main__':
     corrected_speed = np.cumsum((corrected[1:] + corrected[:-1]) * time_interval / 2.0, axis=0)
     # show the double integration result
     orientation = data_all[['ori_w', 'ori_x', 'ori_y', 'ori_z']].values
-    position_corrected = IMU_double_integration(time_stamp, orientation, corrected, no_transform=True, only_xy=False)
-    position_raw = IMU_double_integration(time_stamp, orientation, linacce, no_transform=True, only_xy=True)
+    position_corrected = IMU_double_integration(time_stamp, orientation, corrected, no_transform=True)
+    position_raw = IMU_double_integration(time_stamp, orientation, linacce, no_transform=True)
     if FLAGS.output is not None:
         write_ply_to_file(FLAGS.output + '_' + FLAGS.method + '.ply',
                           position=position_corrected, orientation=orientation, length=0.5, kpoints=50)
@@ -448,16 +398,16 @@ if __name__ == '__main__':
     plt.legend(['Predicted', 'Raw', 'Corrected'])
 
     if FLAGS.method == 'speed_and_angle':
-        raw_cos_array = td.compute_delta_angle(time_stamp=time_stamp, position=position_raw,
-                                               orientation=orientation,
-                                               sample_points=constraint_ind)
-        corrected_cos_array = td.compute_delta_angle(time_stamp=time_stamp, position=position_corrected,
-                                                     orientation=orientation,
-                                                     sample_points=constraint_ind)
+        raw_cos_array, _ = td.compute_delta_angle(time_stamp=time_stamp, position=position_raw,
+                                                  orientation=orientation,
+                                                  sample_points=constraint_ind_angle)
+        corrected_cos_array, _ = td.compute_delta_angle(time_stamp=time_stamp, position=position_corrected,
+                                                        orientation=orientation,
+                                                        sample_points=constraint_ind_angle)
         plt.figure('Cosine')
-        plt.plot(time_stamp[constraint_ind], predicted_cos_array)
-        plt.plot(time_stamp[constraint_ind], raw_cos_array)
-        plt.plot(time_stamp[constraint_ind], corrected_cos_array)
+        plt.plot(time_stamp[constraint_ind_angle], predicted_cos_array)
+        plt.plot(time_stamp[constraint_ind_angle], raw_cos_array)
+        plt.plot(time_stamp[constraint_ind_angle], corrected_cos_array)
         plt.legend(['Ground truth', 'Raw', 'Corrected'])
 
     plt.show()

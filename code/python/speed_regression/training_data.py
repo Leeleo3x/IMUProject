@@ -61,9 +61,7 @@ def compute_speed(time_stamp, position, sample_points=None):
     """
     if sample_points is None:
         sample_points = np.arange(1, time_stamp.shape[0] - 1, dtype=int)
-
     sample_points[-1] = min(sample_points[-1], time_stamp.shape[0] - 2)
-
     speed = (position[sample_points+1] - position[sample_points]) \
             / (time_stamp[sample_points+1] - time_stamp[sample_points])[:, None]
     return speed
@@ -81,16 +79,19 @@ def compute_delta_angle(time_stamp, position, orientation,
     """
     epsilon = 1e-10
     speed_dir = compute_speed(time_stamp, position)
+    speed_dir = np.concatenate([np.zeros([1, position.shape[1]]), speed_dir], axis=0)
     speed_mag = np.linalg.norm(speed_dir, axis=1)
     cos_array = np.zeros(sample_points.shape[0], dtype=float)
+    valid_array = np.empty(sample_points.shape[0], dtype=bool)
     for i in range(sample_points.shape[0]):
-        if speed_mag[i] < epsilon:
-            cos_array[i] = -2.0
+        if speed_mag[sample_points[i]] <= epsilon:
+            valid_array[i] = False
         else:
             q = quaternion.quaternion(*orientation[sample_points[i]])
             camera_axis = (q * local_axis * q.conj()).vec[:position.shape[1]]
-            cos_array[i] = min(np.dot(speed_dir[i], camera_axis) / speed_mag[i], 1.0)
-    return cos_array
+            cos_array[i] = min(np.dot(speed_dir[sample_points[i]], camera_axis) / speed_mag[sample_points[i]], 1.0)
+            valid_array[i] = True
+    return cos_array, valid_array
 
 
 def get_training_data(data_all, imu_columns, option, sample_points=None):
