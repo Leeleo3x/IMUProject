@@ -26,10 +26,12 @@ class SparseAccelerationBiasCostFunction:
     def __init__(self):
         self.functors_ = []
         self.weights_ = []
+        self.identifiers_ = []
 
-    def add_functor(self, functor, weight=1.0):
+    def add_functor(self, functor, identifier, weight=1.0):
         self.functors_.append(functor)
         self.weights_.append(weight)
+        self.identifiers_ += identifier
 
     def __call__(self, x, *args, **kwargs):
         """
@@ -46,6 +48,8 @@ class SparseAccelerationBiasFunctor:
     """
     Base class for imu acceleration bias estimation on sparse grid
     """
+    identifier_ = 'unknown'
+
     def __init__(self, time_stamp, orientation, linacce, variable_ind):
         """
         :param time_stamp: time_stamp of the linear acceleration in seconds
@@ -88,6 +92,9 @@ class SparseAccelerationBiasFunctor:
 
 
 class SpeedMagnitudeFunctor(SparseAccelerationBiasFunctor):
+
+    identifier_ = 'speed_magnitude'
+
     def __init__(self, time_stamp, orientation, linacce, target_speed, speed_ind, variable_ind):
         """
         Construct a functor
@@ -135,6 +142,9 @@ class SpeedMagnitudeFunctor(SparseAccelerationBiasFunctor):
 
 
 class ZeroVerticalTranslationFunctor(SparseAccelerationBiasFunctor):
+
+    identifier_ = 'zero_vertical_translation'
+
     def __init__(self, time_stamp, orientation, linacce, speed_ind, variable_ind):
         super().__init__(time_stamp, orientation, linacce, variable_ind)
         self.speed_ind_ = speed_ind
@@ -144,6 +154,24 @@ class ZeroVerticalTranslationFunctor(SparseAccelerationBiasFunctor):
 
     def evaluate_on_speed(self, speed):
         return np.cumsum(speed[self.speed_ind_, 2], axis=0)
+# end of ZeroVerticalTranslationFunctor
+
+
+class VerticalSpeedFunctor(SparseAccelerationBiasFunctor):
+
+    identifier_ = 'vertical_speed'
+
+    def __init__(self, time_stamp, orientation, linacce, vertical_speed, speed_ind, variable_ind):
+        super().__init__(time_stamp, orientation, linacce, variable_ind)
+        self.vertical_speed_ = vertical_speed
+        self.speed_ind_ = speed_ind
+
+    def __call__(self, x, *args, **kwargs):
+        pass
+
+    def evaluate_on_speed(self, speed):
+        return speed[self.speed_ind_, 2] - self.vertical_speed_.flatten()
+# end of VerticalSpeedFunctor
 
 
 class BiasWeightDecay:
@@ -152,6 +180,8 @@ class BiasWeightDecay:
 
 
 class ZeroSpeedFunctor(SparseAccelerationBiasFunctor):
+    identifier_ = 'zero_speed'
+
     def __init__(self, time_stamp, orientation, linacce, speed_ind, variable_ind):
         """
         Constructor for ZeroSpeedFunctor
@@ -179,12 +209,15 @@ class ZeroSpeedFunctor(SparseAccelerationBiasFunctor):
         return self.evaluate_on_speed(speed)
 
     def evaluate_on_speed(self, speed):
-        loss = np.abs(speed[self.speed_ind_ - 1, :]).ravel()
+        loss = speed[self.speed_ind_ - 1, :].ravel()
         return loss
 # end of ZeroSpeedFunctor
 
 
 class AngleFunctor(SparseAccelerationBiasFunctor):
+
+    identifier_ = 'angle'
+
     def __init__(self, time_stamp, orientation, linacce, cos_array, speed_ind, variable_ind):
         super().__init__(time_stamp, orientation, linacce, variable_ind)
         self.speed_ind_ = speed_ind
@@ -230,12 +263,14 @@ class SharedSpeedFunctorSet(SparseAccelerationBiasFunctor):
         super().__init__(time_stamp, orientation, linacce, variable_ind)
         self.functors_ = []
         self.weights_ = []
+        self.identifiers_ = []
 
-    def add_functor(self, functor, weight=1.0):
+    def add_functor(self, functor, identifier, weight=1.0):
         if len(self.functors_) > 0:
             assert functor.linacce_.shape[0] == self.orientation_.shape[0]
         self.functors_.append(functor)
         self.weights_.append(weight)
+        self.identifiers_ += identifier
 
     def __call__(self, x, *args, **kwargs):
         x = x.reshape([-1, self.initial_bias_.shape[1]])
@@ -268,15 +303,10 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('dir', type=str)
     parser.add_argument('model', type=str)
-    parser.add_argument('--calibration', type=str, default=None)
-    parser.add_argument('--method', type=str, default='speed_and_angle')
     parser.add_argument('--output', type=str)
+    parser.add_argument('--method', type=str, default='speed_and_angle')
     parser.add_argument('--step', type=int, default=5)
     parser.add_argument('--verbose', type=int, default=2)
-    parser.add_argument('--sigma_s', type=float, default=1.0)
-    parser.add_argument('--sigma_a', type=float, default=1.0)
-    parser.add_argument('--sigma_z', type=float, default=1.0)
-    parser.add_argument('--sigma_r', type=float, default=1.0)
     FLAGS = parser.parse_args()
 
     """
@@ -300,8 +330,6 @@ if __name__ == '__main__':
 
     test_N = linacce.shape[0]
 
-    param = {'sigma_s': FLAGS.sigma_s, 'sigma_z': FLAGS.sigma_z,
-             'sigma_r': FLAGS.sigma_r, 'sigma_a': FLAGS.sigma_a}
     variable_ind = np.arange(1, test_N, 20, dtype=int)
     variable_ind[-1] = test_N - 1
 
@@ -315,13 +343,14 @@ if __name__ == '__main__':
                                dtype=int)
 
     warnings.warn('Currently using ground truth as constraint')
-    predicted_speed = np.linalg.norm(td.compute_speed(time_stamp, data_all[['pos_x', 'pos_y']].values,
-                                                      constraint_ind), axis=1)
+    position_tango = data_all[['pos_x', 'pos_y', 'pos_z']].values
+    predicted_speed = td.compute_speed(time_stamp, position_tango, constraint_ind)
+    predicted_speed_margnitude = np.linalg.norm(predicted_speed, axis=1)
 
     # predicted_cos_array = None
     # if FLAGS.method == 'speed_and_angle':
     predicted_cos_array, valid_array = td.compute_delta_angle(time_stamp,
-                                                              position=data_all[['pos_x', 'pos_y', 'pos_z']].values,
+                                                              position=position_tango,
                                                               orientation=orientation,
                                                               sample_points=constraint_ind)
 
@@ -330,27 +359,40 @@ if __name__ == '__main__':
     constraint_ind_angle = constraint_ind[valid_array]
     predicted_cos_array = predicted_cos_array[valid_array]
 
-    print('Solving...')
+    print('Constructing problem...')
     ##########################################################
     # Constructing problem
     cost_function = SparseAccelerationBiasCostFunction()
-    cost_function.add_functor(BiasWeightDecay(), 1.0)
+    cost_function.add_functor(BiasWeightDecay(), ['weight_decay'], 1.0)
 
     # Speed related functors
     magnitude_functor = SpeedMagnitudeFunctor(time_stamp, orientation, linacce,
-                                      predicted_speed, constraint_ind, variable_ind)
-    zero_vertical = ZeroVerticalTranslationFunctor(time_stamp, orientation, linacce, constraint_ind, variable_ind)
+                                              predicted_speed_margnitude, constraint_ind, variable_ind)
+    zero_z_translation = ZeroVerticalTranslationFunctor(time_stamp, orientation, linacce, constraint_ind, variable_ind)
+    vertical_speed = VerticalSpeedFunctor(time_stamp, orientation, linacce, predicted_speed[:, 2][:, None],
+                                          constraint_ind, variable_ind)
     angle_cosine = AngleFunctor(time_stamp, orientation, linacce, predicted_cos_array, constraint_ind_angle, variable_ind)
     speed_constraints = SharedSpeedFunctorSet(time_stamp, orientation, linacce, variable_ind)
-    sigma_zp = 10.0
-    speed_constraints.add_functor(magnitude_functor, FLAGS.sigma_s)
-    speed_constraints.add_functor(zero_vertical, sigma_zp)
-    speed_constraints.add_functor(angle_cosine, FLAGS.sigma_a)
-    cost_function.add_functor(speed_constraints)
+
+    sigma_zp = 100.0
+    sigma_a = 10.0
+    sigma_s = 1.0
+    sigma_vs = 1.0
+
+    speed_constraints.add_functor(magnitude_functor, [magnitude_functor.identifier_], sigma_s)
+    # speed_constraints.add_functor(zero_z_translation, sigma_zp)
+    # speed_constraints.add_functor(angle_cosine, sigma_a)
+    speed_constraints.add_functor(vertical_speed, [vertical_speed.identifier_], sigma_vs)
+    cost_function.add_functor(speed_constraints, speed_constraints.identifiers_)
+
+    print('Solving...')
+    print('Functors: ', cost_function.identifiers_)
+    output_name = 'magnitude_vertical_speed'
+    max_nfev = 50
 
     # Optimize
     init_bias = np.zeros(variable_ind.shape[0] * 3, dtype=float)
-    optimizer = least_squares(cost_function, init_bias, jac='2-point', max_nfev=15, verbose=FLAGS.verbose)
+    optimizer = least_squares(cost_function, init_bias, jac='2-point', max_nfev=max_nfev, verbose=FLAGS.verbose)
 
     corrected_linacce = np.empty(linacce.shape, dtype=float)
     np.copyto(corrected_linacce, linacce)
@@ -377,12 +419,12 @@ if __name__ == '__main__':
     position_corrected = IMU_double_integration(time_stamp, orientation, corrected, no_transform=True)
     position_raw = IMU_double_integration(time_stamp, orientation, linacce, no_transform=True)
     if FLAGS.output is not None:
-        write_ply_to_file(FLAGS.output + '_' + FLAGS.method + '.ply',
+        output_path = FLAGS.output + '_' + output_name + '.ply'
+        write_ply_to_file(output_path,
                           position=position_corrected, orientation=orientation, length=0.5, kpoints=50)
-        write_ply_to_file(FLAGS.output + '_' + FLAGS.method + '_raw.ply',
-                          position=position_raw, orientation=orientation, length=0.5, kpoints=50)
-        print('Result written to ' + FLAGS.output)
+        print('Result written to ' + output_path)
 
+    # Plot results
     plt.figure('bias')
     legends = 'xyz'
     for i in range(bias.shape[1]):
@@ -390,14 +432,14 @@ if __name__ == '__main__':
         plt.plot(time_stamp[variable_ind], bias[:, i])
         plt.legend(legends[i])
 
-    plt.figure('Speed Magnitude')
-    # plt.plot(time_stamp[predict_speed_ind], predicted_speed)
-    plt.plot(time_stamp[constraint_ind], predicted_speed)
-    plt.plot(time_stamp[1:], np.linalg.norm(raw_speed, axis=1))
-    plt.plot(time_stamp[1:], np.linalg.norm(corrected_speed, axis=1))
-    plt.legend(['Predicted', 'Raw', 'Corrected'])
+    if SpeedMagnitudeFunctor.identifier_ in cost_function.identifiers_:
+        plt.figure('Speed Magnitude')
+        plt.plot(time_stamp[constraint_ind], predicted_speed_margnitude)
+        plt.plot(time_stamp[1:], np.linalg.norm(raw_speed, axis=1))
+        plt.plot(time_stamp[1:], np.linalg.norm(corrected_speed, axis=1))
+        plt.legend(['Predicted', 'Raw', 'Corrected'])
 
-    if FLAGS.method == 'speed_and_angle':
+    if AngleFunctor.identifier_ in cost_function.identifiers_:
         raw_cos_array, _ = td.compute_delta_angle(time_stamp=time_stamp, position=position_raw,
                                                   orientation=orientation,
                                                   sample_points=constraint_ind_angle)
@@ -410,4 +452,10 @@ if __name__ == '__main__':
         plt.plot(time_stamp[constraint_ind_angle], corrected_cos_array)
         plt.legend(['Ground truth', 'Raw', 'Corrected'])
 
+    if VerticalSpeedFunctor.identifier_ in cost_function.identifiers_:
+        plt.figure('Vertical speed')
+        plt.plot(time_stamp[constraint_ind], predicted_speed[:, 2])
+        plt.plot(time_stamp[1:], raw_speed[:, 2])
+        plt.plot(time_stamp[1:], corrected_speed[:, 2])
+        plt.legend(['Ground truth', 'Raw', 'Corrected'])
     plt.show()
