@@ -9,6 +9,8 @@ find_package(Gflags REQUIRED)
 
 include_directories(${EIGEN_INCLUDE_DIRS})
 
-add_library(IMUUtility imu_dataset.cpp imu_dataset.h)
-
+add_library(IMUUtility data_io.cpp data_io.h)
 target_link_libraries(IMUUtility ${OpenCV_LIBS} ${GLOG_LIBRARIES} ${GFLAGS_LIBRARIES})
+
+add_executable(IMUUtility_cli main.cpp)
+target_link_libraries(IMUUtility_cli IMUUtility)

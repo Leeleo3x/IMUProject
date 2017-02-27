@@ -32,7 +32,7 @@ def compute_time_offset(source, target, search_range=200):
     #     if diff < best_score:
     #         best_score = diff
     #         best_offset = offset
-    best_offset = -70
+    best_offset = -55
     time_offset = 0
     if best_offset > 0:
         time_offset = target[best_offset, 0] - source[0, 0]
@@ -104,7 +104,7 @@ if __name__ == '__main__':
         if args.device == 'iphone':
             print('Using iphone, invert the acceleration value')
             acce_device[:, 1:] *= -1
-            linacce_device[:, 1:] *= -1
+            linacce_device[:, 1:] *= -9.81
             gravity_device[:, 1:] *= -1
 
         pose_data = np.genfromtxt(args.dir + '/tango/pose.txt')[args.margin:-args.margin]

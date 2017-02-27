@@ -303,7 +303,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('dir', type=str)
     parser.add_argument('model', type=str)
-    parser.add_argument('--output', type=str)
     parser.add_argument('--method', type=str, default='speed_and_angle')
     parser.add_argument('--step', type=int, default=5)
     parser.add_argument('--verbose', type=int, default=2)
@@ -381,14 +380,14 @@ if __name__ == '__main__':
 
     speed_constraints.add_functor(magnitude_functor, [magnitude_functor.identifier_], sigma_s)
     # speed_constraints.add_functor(zero_z_translation, sigma_zp)
-    # speed_constraints.add_functor(angle_cosine, sigma_a)
+    speed_constraints.add_functor(angle_cosine, [angle_cosine.identifier_], sigma_a)
     speed_constraints.add_functor(vertical_speed, [vertical_speed.identifier_], sigma_vs)
     cost_function.add_functor(speed_constraints, speed_constraints.identifiers_)
 
     print('Solving...')
     print('Functors: ', cost_function.identifiers_)
-    output_name = 'magnitude_vertical_speed'
-    max_nfev = 50
+    output_name = 'speed_magnitude_vertical_speed_angle'
+    max_nfev = 30
 
     # Optimize
     init_bias = np.zeros(variable_ind.shape[0] * 3, dtype=float)
@@ -418,11 +417,15 @@ if __name__ == '__main__':
     orientation = data_all[['ori_w', 'ori_x', 'ori_y', 'ori_z']].values
     position_corrected = IMU_double_integration(time_stamp, orientation, corrected, no_transform=True)
     position_raw = IMU_double_integration(time_stamp, orientation, linacce, no_transform=True)
-    if FLAGS.output is not None:
-        output_path = FLAGS.output + '_' + output_name + '.ply'
-        write_ply_to_file(output_path,
-                          position=position_corrected, orientation=orientation, length=0.5, kpoints=50)
-        print('Result written to ' + output_path)
+
+    raw_path = FLAGS.dir + '/raw.ply'
+    write_ply_to_file(raw_path,
+                      position=position_raw, orientation=orientation, length=0.5, kpoints=50)
+
+    output_path = FLAGS.dir + '/optimized_' + output_name + '.ply'
+    write_ply_to_file(output_path,
+                      position=position_corrected, orientation=orientation, length=0.5, kpoints=50)
+    print('Result written to ' + output_path)
 
     # Plot results
     plt.figure('bias')
