@@ -55,11 +55,52 @@ namespace IMUProject{
     }
 
     void WriteToPly(const std::string& path, const cv::Mat position, const cv::Mat orientation,
-                    const double axis_length, const int kpoints){
-        using TriMesh = OpenMesh::TriMesh_ArrayKernelT<>;
-        CHECK_EQ(position.rows, orientation.rows);
+                    const double axis_length, const int kpoints, const int interval) {
+	    using TriMesh = OpenMesh::TriMesh_ArrayKernelT<>;
+	    CHECK_EQ(position.rows, orientation.rows);
+	    CHECK_EQ(position.type(), CV_64FC1);
+	    CHECK_EQ(orientation.type(), CV_64FC1);
 
-        std::vector<TriMesh::VertexHandle> vhandle((size_t) position.rows);
+	    TriMesh mesh;
 
+	    constexpr int traj_color[3] = {0, 255, 255};
+	    constexpr int axis_color[3][3] = {{255, 0, 0}, {0, 255, 0}, {0, 0, 255}};
+
+	    // First add trajectory points
+	    for (int i = 0; i < position.rows; ++i) {
+		    const double *pt = (double *) position.ptr(i);
+		    TriMesh::VertexHandle vertex = mesh.add_vertex(TriMesh::Point(pt[0], pt[1], pt[2]));
+		    mesh.set_color(vertex, TriMesh::Color(traj_color[0], traj_color[1], traj_color[2]));
+	    }
+
+	    // Then add axis points
+	    if (kpoints > 0 && interval > 0 && axis_length > 0) {
+		    Eigen::Matrix3d local_axis = Eigen::Matrix3d::Identity();
+		    for (int i = 0; i < position.rows; i += interval) {
+			    const double *ori_ptr = (double *) orientation.ptr(i);
+			    const double *pos_ptr = (double *) position.ptr(i);
+			    Eigen::Quaterniond q(ori_ptr[0], ori_ptr[1], ori_ptr[2], ori_ptr[3]);
+			    Eigen::Matrix3d axis_dir = q.toRotationMatrix() * local_axis;
+			    Eigen::Vector3d pos(pos_ptr[0], pos_ptr[1], pos_ptr[2]);
+			    for (int j = 0; j < kpoints; ++j) {
+				    for(int k=0; k<3; ++k){
+					    Eigen::Vector3d pt = pos + axis_length / kpoints * j * axis_dir.block<3,1>(0, k);
+					    TriMesh::VertexHandle vertex = mesh.add_vertex(TriMesh::Point(pt[0], pt[1], pt[2]));
+					    mesh.set_color(vertex, TriMesh::Color(axis_color[k][0], axis_color[k][1], axis_color[k][2]));
+				    }
+			    }
+		    }
+	    }
+
+	    // Write file
+	    OpenMesh::IO::Options wopt;
+	    wopt += OpenMesh::IO::Options::VertexColor;
+
+	    try{
+		    OpenMesh::IO::write_mesh(mesh, path, wopt);
+	    }catch(const std::runtime_error& e){
+		    std::cout << e.what();
+	    }
     }
+
 }//namespace IMUProject

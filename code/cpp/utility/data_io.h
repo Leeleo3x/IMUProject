@@ -33,6 +33,7 @@ namespace IMUProject{
 
     // Structure to specify the column layout
     struct DataLayout{
+	    DataLayout(){}
         const int time_stamp = 0;
         const int gyro = 1;
         const int accelerometer = 4;
@@ -147,8 +148,15 @@ namespace IMUProject{
         cv::Mat position_;
     };
 
+	/// Write a trajecotry to PLY file
+	/// \param path output path
+	/// \param position Nx3 cv::Mat contains the position
+	/// \param orientation Nx4 cv::Mat contains the orientation as quaternion
+	/// \param axis_length the length of the axis, set to negative value to omit axis
+	/// \param kpoints
+	/// \param interval the interval of axis visualization, set to negative value to omit axis
     void WriteToPly(const std::string& path, const cv::Mat position, const cv::Mat orientation,
-                    const double axis_length = 0.5, const int kpoints = 100);
+                    const double axis_length = 0.5, const int kpoints = 100, const int interval=100);
 
 } //namespace IMUProject
 #endif //PROJECT_IMU_DATASET_H
