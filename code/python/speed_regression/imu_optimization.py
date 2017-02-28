@@ -1,5 +1,6 @@
 import warnings
 import math
+import time
 import numpy as np
 import quaternion
 from scipy.ndimage.filters import gaussian_filter1d
@@ -10,13 +11,23 @@ FLAGS = None
 nano_to_sec = 1e09
 
 
-# @jit
 def rotate_vector(input, orientation):
     output = np.empty(input.shape, dtype=float)
     for i in range(input.shape[0]):
         q = quaternion.quaternion(*orientation[i])
         output[i] = (q * quaternion.quaternion(1.0, *input[i]) * q.conj()).vec
     return output
+
+# @jit
+# def rotate_vector(input, orientation):
+#     output = np.empty(input.shape, dtype=float)
+#     for i in range(input.shape[0]):
+#         a, b, c, d = orientation[i]
+#         rm = np.array([[a*a+b*b-c*c-d*d, 2*b*c-2*a*d, 2*b*d+2*a*c],
+#                        [2*b*c+2*a*d, a*a-b*b+c*c-d*d, 2*c*d-a*a*b],
+#                        [2*b*d-2*a*c, 2*c*d+2*a*b, a*a-b*b-c*c+d*d]])
+#         output[i] = (np.matmul(rm, input[i].transpose())).flatten()
+#     return output
 
 
 class SparseAccelerationBiasCostFunction:
@@ -68,10 +79,10 @@ class SparseAccelerationBiasFunctor:
 
         self.initial_bias_ = np.zeros([1, self.linacce_.shape[1]], dtype=float)
         # Pre-compute the interpolation coefficients
-        # y[i] = alpha[i-1] * x[i-1] + (1.0 - alpha[i-1]) * x[i]
+        # y[i] = alpha[i] * x[i-1] + (1.0 - alpha[i]) * x[i]
         self.alpha_ = np.empty((self.variable_ind_[-1]), dtype=float)
-        self.alpha_[:variable_ind[0]] = (self.time_stamp_[:variable_ind[0]] - self.time_stamp_[0]) / self.time_stamp_[
-            variable_ind[0]]
+        self.alpha_[:variable_ind[0]] = (self.time_stamp_[:variable_ind[0]] - self.time_stamp_[0]) / (self.time_stamp_[
+            variable_ind[0]] - self.time_stamp_[0])
 
         self.inverse_ind_ = np.zeros([variable_ind[-1]], dtype=int)
         for i in range(1, self.variable_ind_.shape[0]):
@@ -304,7 +315,7 @@ if __name__ == '__main__':
     parser.add_argument('dir', type=str)
     parser.add_argument('model', type=str)
     parser.add_argument('--method', type=str, default='speed_and_angle')
-    parser.add_argument('--step', type=int, default=5)
+    parser.add_argument('--step', type=int, default=10)
     parser.add_argument('--verbose', type=int, default=2)
     FLAGS = parser.parse_args()
 
@@ -322,12 +333,11 @@ if __name__ == '__main__':
     orientation = data_all[['ori_w', 'ori_x', 'ori_y', 'ori_z']].values
     linacce = data_all[['linacce_x', 'linacce_y', 'linacce_z']].values
 
-    directed_acce = np.empty(linacce.shape, dtype=float)
-    for i in range(linacce.shape[0]):
-        q = quaternion.quaternion(*orientation[i])
-        directed_acce[i] = (q * quaternion.quaternion(1.0, *linacce[i]) * q.conj()).vec
-
-    test_N = linacce.shape[0]
+    # test_N = linacce.shape[0]
+    test_N = 1000
+    time_stamp = time_stamp[:test_N]
+    linacce = linacce[:test_N]
+    orientation = orientation[:test_N]
 
     variable_ind = np.arange(1, test_N, 20, dtype=int)
     variable_ind[-1] = test_N - 1
@@ -337,13 +347,21 @@ if __name__ == '__main__':
     """
     print('Predicting speed...')
     options = td.TrainingDataOption(feature='fourier', sample_step=FLAGS.step, frq_threshold=100)
-    constraint_ind = np.arange(options.window_size_, test_N - 1,
+    # constraint_ind = np.arange(options.window_size_, test_N - 1,
+    #                            options.sample_step_,
+    #                            dtype=int)
+
+    constraint_ind = np.arange(0, test_N - 1,
                                options.sample_step_,
                                dtype=int)
 
     warnings.warn('Currently using ground truth as constraint')
     position_tango = data_all[['pos_x', 'pos_y', 'pos_z']].values
     predicted_speed = td.compute_speed(time_stamp, position_tango, constraint_ind)
+
+    # try smooth the predicted speed
+    # predicted_speed = gaussian_filter1d(predicted_speed, sigma=10.0, axis=0)
+
     predicted_speed_margnitude = np.linalg.norm(predicted_speed, axis=1)
 
     # predicted_cos_array = None
@@ -357,6 +375,22 @@ if __name__ == '__main__':
     #         Therefore it is necessary to construct a separate constraint index array
     constraint_ind_angle = constraint_ind[valid_array]
     predicted_cos_array = predicted_cos_array[valid_array]
+
+    # write predicted speed to file for c++ optimizer
+    with open(FLAGS.dir + '/processed/speed_magnitude.txt', 'w') as f:
+        f.write('{:d}\n'.format(constraint_ind.shape[0]))
+        for i in range(constraint_ind.shape[0]):
+            f.write('{:d} {:f}\n'.format(constraint_ind[i], predicted_speed_margnitude[i]))
+
+    with open(FLAGS.dir + '/processed/vertical_speed.txt', 'w') as f:
+        f.write('{:d}\n'.format(constraint_ind.shape[0]))
+        for i in range(constraint_ind.shape[0]):
+            f.write('{:d} {:f}\n'.format(constraint_ind[i], predicted_speed[i, 2]))
+
+    with open(FLAGS.dir + '/processed/cos_array.txt', 'w') as f:
+        f.write('{:d}\n'.format(constraint_ind_angle.shape[0]))
+        for i in range(constraint_ind_angle.shape[0]):
+            f.write('{:d} {:f}\n'.format(constraint_ind_angle[i], predicted_cos_array[i]))
 
     print('Constructing problem...')
     ##########################################################
@@ -380,18 +414,21 @@ if __name__ == '__main__':
 
     speed_constraints.add_functor(magnitude_functor, [magnitude_functor.identifier_], sigma_s)
     # speed_constraints.add_functor(zero_z_translation, sigma_zp)
-    speed_constraints.add_functor(angle_cosine, [angle_cosine.identifier_], sigma_a)
+    # speed_constraints.add_functor(angle_cosine, [angle_cosine.identifier_], sigma_a)
     speed_constraints.add_functor(vertical_speed, [vertical_speed.identifier_], sigma_vs)
     cost_function.add_functor(speed_constraints, speed_constraints.identifiers_)
 
     print('Solving...')
     print('Functors: ', cost_function.identifiers_)
-    output_name = 'speed_magnitude_vertical_speed_angle'
-    max_nfev = 30
+    output_name = 'speed_magnitude_vertical_speed_smoothed{}'.format(test_N)
+    max_nfev = 50
 
     # Optimize
     init_bias = np.zeros(variable_ind.shape[0] * 3, dtype=float)
-    optimizer = least_squares(cost_function, init_bias, jac='2-point', max_nfev=max_nfev, verbose=FLAGS.verbose)
+    start_t = time.clock()
+    optimizer = least_squares(cost_function, init_bias, jac='2-point',
+                              max_nfev=max_nfev, verbose=FLAGS.verbose)
+    print('Time usage: {:.2f}s'.format(time.clock() - start_t))
 
     corrected_linacce = np.empty(linacce.shape, dtype=float)
     np.copyto(corrected_linacce, linacce)
@@ -414,7 +451,6 @@ if __name__ == '__main__':
     raw_speed = np.cumsum((linacce[1:] + linacce[:-1]) * time_interval / 2.0, axis=0)
     corrected_speed = np.cumsum((corrected[1:] + corrected[:-1]) * time_interval / 2.0, axis=0)
     # show the double integration result
-    orientation = data_all[['ori_w', 'ori_x', 'ori_y', 'ori_z']].values
     position_corrected = IMU_double_integration(time_stamp, orientation, corrected, no_transform=True)
     position_raw = IMU_double_integration(time_stamp, orientation, linacce, no_transform=True)
 

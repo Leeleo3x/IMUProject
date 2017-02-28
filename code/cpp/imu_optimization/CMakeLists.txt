@@ -9,6 +9,8 @@ find_package(Eigen REQUIRED)
 find_package(Glog REQUIRED)
 find_package(Gflags REQUIRED)
 
+include_directories(${EIGEN_INCLUDE_DIRS})
+
 add_executable(IMUOptimization main.cpp imu_optimization.cpp imu_optimization.h)
 
 target_link_libraries(IMUOptimization ${OpenCV_LIBS} ${Ceres_LIBRARIES}

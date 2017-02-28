@@ -21,7 +21,7 @@ def IMU_double_integration(t, rotation, acceleration, no_transform=False, only_x
     :return: position: Nx3 array
     """
     # Sanity check
-    assert t.shape[0] == rotation.shape[0]
+    assert t.shape[0] == rotation.shape[0], "{}, {}".format(t.shape[0], rotation.shape[0])
     assert t.shape[0] == acceleration.shape[0]
     if not no_transform:
         assert rotation.shape[1] == 4

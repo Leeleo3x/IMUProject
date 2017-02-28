@@ -55,69 +55,69 @@ namespace IMUProject{
         IMUDataset(const std::string& directory, unsigned char load_control = 255);
 
         // getters
-        inline const cv::Mat GetGyro() const{
+        inline const cv::Mat& GetGyro() const{
             return gyrocope_;
         }
-        inline cv::Mat GetGyro(){
+        inline cv::Mat& GetGyro(){
             return gyrocope_;
         }
 
-        inline const cv::Mat GetLinearAcceleration() const{
+        inline const cv::Mat& GetLinearAcceleration() const{
             return linear_acceleration_;
         }
-        inline cv::Mat GetLinearAcceleration(){
+        inline cv::Mat& GetLinearAcceleration(){
             return linear_acceleration_;
         }
 
-        inline const cv::Mat GetAccelerometer() const{
+        inline const cv::Mat& GetAccelerometer() const{
             return accelerometer_;
         }
 
-        inline cv::Mat GetAccelerometer(){
+        inline cv::Mat& GetAccelerometer(){
             return accelerometer_;
         }
 
-        inline const cv::Mat GetGravity() const{
+        inline const cv::Mat& GetGravity() const{
             return gravity_;
         }
 
-        inline cv::Mat GetGravity(){
+        inline cv::Mat& GetGravity(){
             return gravity_;
         }
 
-        inline cv::Mat GetRotationVector(){
+        inline cv::Mat& GetRotationVector(){
             return rotation_vector_;
         }
 
-        inline const cv::Mat GetRotationVector() const{
+        inline const cv::Mat& GetRotationVector() const{
             return rotation_vector_;
         }
 
-        inline cv::Mat GetMagnetometer(){
+        inline cv::Mat& GetMagnetometer(){
             return magnetometer_;
         }
 
-        inline const cv::Mat GetMagnetometer() const{
+        inline const cv::Mat& GetMagnetometer() const{
             return magnetometer_;
         }
 
-        inline const cv::Mat GetOrientation() const{
+        inline const cv::Mat& GetOrientation() const{
             return orientation_;
         }
 
-        inline cv::Mat GetOrientation(){
+        inline cv::Mat& GetOrientation(){
             return orientation_;
         }
 
-        inline const cv::Mat GetPosition() const{
+        inline const cv::Mat& GetPosition() const{
             return position_;
         }
 
-        inline cv::Mat GetPosition(){
+        inline cv::Mat& GetPosition(){
             return position_;
         }
 
-        inline const cv::Mat GetTimeStamp() const{
+        inline const cv::Mat& GetTimeStamp() const{
             return timestamp_;
         }
 
@@ -155,7 +155,7 @@ namespace IMUProject{
 	/// \param axis_length the length of the axis, set to negative value to omit axis
 	/// \param kpoints
 	/// \param interval the interval of axis visualization, set to negative value to omit axis
-    void WriteToPly(const std::string& path, const cv::Mat position, const cv::Mat orientation,
+    void WriteToPly(const std::string& path, const cv::Mat& position, const cv::Mat& orientation,
                     const double axis_length = 0.5, const int kpoints = 100, const int interval=100);
 
 } //namespace IMUProject

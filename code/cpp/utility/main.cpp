@@ -21,9 +21,13 @@ int main(int argc, char** argv){
     FLAGS_logtostderr = true;
     google::InitGoogleLogging(argv[0]);
 
+    char buffer[128] = {};
     IMUProject::IMUDataset dataset(argv[1]);
     cout << "Number of samples:" << dataset.GetPosition().rows << endl;
 
-    cout << dataset.GetPosition().rowRange(0, 10);
+    printf("Writing the trajectory\n");
+    sprintf(buffer, "%s/test.ply", argv[1]);
+
+    WriteToPly(std::string(buffer), dataset.GetPosition(), dataset.GetOrientation());
     return 0;
 }
