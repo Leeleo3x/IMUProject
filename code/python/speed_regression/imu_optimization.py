@@ -290,7 +290,8 @@ class SharedSpeedFunctorSet(SparseAccelerationBiasFunctor):
                             + (1.0 - self.alpha_[:, None]) * x[self.inverse_ind_]
 
         directed_acce = rotate_vector(corrected_linacce, self.orientation_)
-        speed = np.cumsum((directed_acce[1:] + directed_acce[:-1]) * self.interval_[:, None] / 2.0, axis=0)
+        # speed = np.cumsum((directed_acce[1:] + directed_acce[:-1]) * self.interval_[:, None] / 2.0, axis=0)
+        speed = np.cumsum(directed_acce[:-1] * self.interval_[:, None], axis=0)
         speed = np.concatenate([np.zeros([1, self.linacce_.shape[1]]), speed], axis=0)
         loss = np.concatenate([self.functors_[i].evaluate_on_speed(speed)
                                * self.weights_[i] for i in range(len(self.functors_))], axis=0)
@@ -334,7 +335,7 @@ if __name__ == '__main__':
     linacce = data_all[['linacce_x', 'linacce_y', 'linacce_z']].values
 
     # test_N = linacce.shape[0]
-    test_N = 1000
+    test_N = 5000
     time_stamp = time_stamp[:test_N]
     linacce = linacce[:test_N]
     orientation = orientation[:test_N]

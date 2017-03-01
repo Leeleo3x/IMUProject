@@ -130,6 +130,8 @@ namespace IMUProject{
         static constexpr unsigned char IMU_POSITION = 64;
         static constexpr unsigned char IMU_ORIENTATION = 128;
 
+        static constexpr double kNanoToSec = 1e09;
+
     private:
         const FileIO file_io_;
         const DataLayout layout_;

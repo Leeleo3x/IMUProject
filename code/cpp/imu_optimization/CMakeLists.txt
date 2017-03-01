@@ -13,7 +13,7 @@ include_directories(${EIGEN_INCLUDE_DIRS})
 
 add_executable(IMUOptimization main.cpp imu_optimization.cpp imu_optimization.h)
 
-target_link_libraries(IMUOptimization ${OpenCV_LIBS} ${Ceres_LIBRARIES}
+target_link_libraries(IMUOptimization IMUUtility ${OpenCV_LIBS} ${CERES_LIBRARIES}
         ${GLOG_LIBRARIES} ${GFLAGS_LIBRARIES} ${OPENMESH_LIBRARIES})
 
 target_link_libraries(IMUOptimization IMUVisualization)
