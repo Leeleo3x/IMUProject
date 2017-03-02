@@ -5,6 +5,7 @@
 #include <string>
 #include <memory>
 #include <fstream>
+#include <random>
 
 #include <glog/logging.h>
 #include <gflags/gflags.h>
@@ -18,7 +19,7 @@
 
 using namespace std;
 
-DEFINE_int32(max_iter, 100, "maximum iteration");
+DEFINE_int32(max_iter, 500, "maximum iteration");
 
 int main(int argc, char** argv) {
     if (argc < 2) {
@@ -83,8 +84,15 @@ int main(int argc, char** argv) {
     ceres::Problem problem;
     constexpr int kResiduals = IMUProject::Config::kConstriantPoints * 2;
     constexpr int kSparsePoint = IMUProject::Config::kSparsePoints;
-    // Initial value
+    // Initialize bias with gaussian distribution
     std::vector<double> bx((size_t)kSparsePoint, 0.0), by((size_t)kSparsePoint, 0.0), bz((size_t)kSparsePoint,0.0);
+    std::default_random_engine generator;
+    std::normal_distribution<double> distribution(0.0, 0.01);
+    for(int i=0; i<kSparsePoint; ++i){
+        bx[i] = distribution(generator);
+        by[i] = distribution(generator);
+        bz[i] = distribution(generator);
+    }
 
     IMUProject::SizedSharedSpeedFunctor* functor = new IMUProject::SizedSharedSpeedFunctor(ts, linacce, orientation,
                                                                                            constraint_ind, target_speed_mag, target_vspeed,
