@@ -263,7 +263,7 @@ if __name__ == '__main__':
                 viewing_dir = np.zeros([data_mat.shape[0], 3], dtype=float)
                 viewing_dir[:, 2] = -1.0
                 write_ply_to_file(path=output_folder + '/trajectory.ply', position=pose_data[:, 1:4],
-                                  orientation=pose_data[:, -4:],
+                                  orientation=pose_data[:, -4:], acceleration=output_gravity_linear[:, 1:],
                                   length=0.5, kpoints=100, interval=200)
 
                 q_device_tango = quaternion.quaternion(*pose_data[0, -4:])
