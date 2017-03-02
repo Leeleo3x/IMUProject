@@ -57,12 +57,6 @@ namespace IMUProject{
             LOG(INFO) << "Gravity loaded";
         }
 
-        if (load_control & IMU_MAGNETOMETER){
-            magnetometer_ = data_mat.colRange(layout_.magetometer, layout_.magetometer + 3).clone();
-            magnetometer_.convertTo(magnetometer_, CV_64FC1);
-            LOG(INFO) << "Magnetometer loaded";
-        }
-
         if(load_control & IMU_ROTATION_VECTOR){
             rotation_vector_ = data_mat.colRange(layout_.rotation_vector, layout_.rotation_vector + 4).clone();
             rotation_vector_.convertTo(rotation_vector_, CV_64FC1);

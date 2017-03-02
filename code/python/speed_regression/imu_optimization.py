@@ -302,7 +302,9 @@ if __name__ == '__main__':
     import argparse
     import sys
     import os
-    sys.path.append(os.path.dirname(os.path.abspath(__file__) + '/..'))
+    # sys.path.append(os.path.dirname(os.path.abspath(__file__) + '/..'))
+    sys.path.append('/home/yanhang/Documents/research/IMUProject/code/python')
+
     from algorithms.double_integration import IMU_double_integration
     from utility.write_trajectory_to_ply import write_ply_to_file
     import matplotlib.pyplot as plt
@@ -335,7 +337,8 @@ if __name__ == '__main__':
     linacce = data_all[['linacce_x', 'linacce_y', 'linacce_z']].values
 
     # test_N = linacce.shape[0]
-    test_N = 5000
+    test_N = 15200
+
     time_stamp = time_stamp[:test_N]
     linacce = linacce[:test_N]
     orientation = orientation[:test_N]
@@ -421,13 +424,13 @@ if __name__ == '__main__':
 
     print('Solving...')
     print('Functors: ', cost_function.identifiers_)
-    output_name = 'speed_magnitude_vertical_speed_smoothed{}'.format(test_N)
+    output_name = 'speed_magnitude_vertical_speed_{}'.format(test_N)
     max_nfev = 50
 
     # Optimize
     init_bias = np.zeros(variable_ind.shape[0] * 3, dtype=float)
     start_t = time.clock()
-    optimizer = least_squares(cost_function, init_bias, jac='2-point',
+    optimizer = least_squares(cost_function, init_bias, jac='2-point', method='lm',
                               max_nfev=max_nfev, verbose=FLAGS.verbose)
     print('Time usage: {:.2f}s'.format(time.clock() - start_t))
 

@@ -73,8 +73,6 @@ int main(int argc, char** argv) {
     ceres::Problem problem;
     constexpr int kResiduals = IMUProject::Config::kConstriantPoints * 2;
     constexpr int kSparsePoint = IMUProject::Config::kSparsePoints;
-
-
     // Initial value
     std::vector<double> bx((size_t)kSparsePoint, 0.0), by((size_t)kSparsePoint, 0.0), bz((size_t)kSparsePoint,0.0);
 //    ceres::CostFunction *cost_function =
@@ -122,12 +120,14 @@ int main(int argc, char** argv) {
     options.linear_solver_type = ceres::DENSE_QR;
     options.minimizer_progress_to_stdout = true;
     options.max_num_iterations = 30;
+    //options.initial_trust_region_radius = 1e02;
+    //options.trust_region_strategy_type = ceres::DOGLEG;
     ceres::Solver::Summary summary;
 
     printf("Solving...\n");
     ceres::Solve(options, &problem, &summary);
 
-    std::cout << summary.BriefReport() << endl;
+    std::cout << summary.FullReport() << endl;
     printf("Time usage: %.3fs\n", ((float)cv::getTickCount() - start_t) / cv::getTickFrequency());
 
     return 0;

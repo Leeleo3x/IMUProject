@@ -28,6 +28,8 @@ int main(int argc, char** argv){
     printf("Writing the trajectory\n");
     sprintf(buffer, "%s/test.ply", argv[1]);
 
+    cout << dataset.GetLinearAcceleration().rowRange(0, 20);
+
     WriteToPly(std::string(buffer), dataset.GetPosition(), dataset.GetOrientation());
     return 0;
 }

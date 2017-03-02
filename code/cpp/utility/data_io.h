@@ -39,10 +39,9 @@ namespace IMUProject{
         const int accelerometer = 4;
         const int linear_acceleration = 7;
         const int gravity = 10;
-        const int magetometer = 13;
-        const int position = 16;
-        const int orientation = 19;
-        const int rotation_vector = 23;
+        const int position = 13;
+        const int orientation = 16;
+        const int rotation_vector = 20;
     };
 
 
@@ -123,12 +122,11 @@ namespace IMUProject{
 
         static constexpr unsigned char IMU_GYRO = 1;
         static constexpr unsigned char IMU_ACCELEROMETER = 2;
-        static constexpr unsigned char IMU_MAGNETOMETER = 4;
-        static constexpr unsigned char IMU_LINEAR_ACCELERATION = 8;
-        static constexpr unsigned char IMU_GRAVITY = 16;
-        static constexpr unsigned char IMU_ROTATION_VECTOR = 32;
-        static constexpr unsigned char IMU_POSITION = 64;
-        static constexpr unsigned char IMU_ORIENTATION = 128;
+        static constexpr unsigned char IMU_LINEAR_ACCELERATION = 4;
+        static constexpr unsigned char IMU_GRAVITY = 8;
+        static constexpr unsigned char IMU_ROTATION_VECTOR = 16;
+        static constexpr unsigned char IMU_POSITION = 32;
+        static constexpr unsigned char IMU_ORIENTATION = 64;
 
         static constexpr double kNanoToSec = 1e09;
 
