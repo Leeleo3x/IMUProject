@@ -60,10 +60,27 @@ def compute_speed(time_stamp, position, sample_points=None):
     :return:
     """
     if sample_points is None:
-        sample_points = np.arange(1, time_stamp.shape[0] - 1, dtype=int)
+        sample_points = np.arange(0, time_stamp.shape[0] - 1, dtype=int)
     sample_points[-1] = min(sample_points[-1], time_stamp.shape[0] - 2)
     speed = (position[sample_points+1] - position[sample_points]) \
             / (time_stamp[sample_points+1] - time_stamp[sample_points])[:, None]
+    return speed
+
+
+def compute_local_speed(time_stamp, position, orientation, sample_points=None):
+    """
+    Compute the speed in local (IMU) frame
+    :param time_stamp:
+    :param position: Nx3 array of positions
+    :param orientation: Nx4 array of orientations as quaternion
+    :param sample_points:
+    :return: Nx3 array
+    """
+    sample_points[-1] = min(sample_points[-1], time_stamp.shape[0] - 2)
+    speed = compute_speed(time_stamp, position, sample_points)
+    for i in range(speed.shape[0]):
+        q = quaternion.quaternion(*orientation[sample_points[i]])
+        speed[i] = (q.conj() * quaternion.quaternion(1.0, *speed[i]) * q).vec
     return speed
 
 
@@ -251,4 +268,11 @@ if __name__ == '__main__':
     nano_to_sec = 1e09
 
     time_stamp = data_all['time'].values / nano_to_sec
-    speed_decomposed = test_decompose_speed(data_all=data_all)
+    time_stamp -= time_stamp[0]
+    # speed_decomposed = test_decompose_speed(data_all=data_all)
+
+    position = data_all[['pos_x', 'pos_y', 'pos_z']].values
+
+    speed_local = compute_local_speed(time_stamp, position, orientation)
+
+
