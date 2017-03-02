@@ -319,6 +319,7 @@ if __name__ == '__main__':
     parser.add_argument('model', type=str)
     parser.add_argument('--method', type=str, default='speed_and_angle')
     parser.add_argument('--step', type=int, default=10)
+    parser.add_argument('--interval', type=int, default=20)
     parser.add_argument('--verbose', type=int, default=2)
     FLAGS = parser.parse_args()
 
@@ -337,7 +338,7 @@ if __name__ == '__main__':
     linacce = data_all[['linacce_x', 'linacce_y', 'linacce_z']].values
 
     # test_N = linacce.shape[0]
-    test_N = 15200
+    test_N = 8000
 
     time_stamp = time_stamp[:test_N]
     linacce = linacce[:test_N]
@@ -381,20 +382,20 @@ if __name__ == '__main__':
     predicted_cos_array = predicted_cos_array[valid_array]
 
     # write predicted speed to file for c++ optimizer
-    with open(FLAGS.dir + '/processed/speed_magnitude.txt', 'w') as f:
-        f.write('{:d}\n'.format(constraint_ind.shape[0]))
-        for i in range(constraint_ind.shape[0]):
-            f.write('{:d} {:f}\n'.format(constraint_ind[i], predicted_speed_margnitude[i]))
-
-    with open(FLAGS.dir + '/processed/vertical_speed.txt', 'w') as f:
-        f.write('{:d}\n'.format(constraint_ind.shape[0]))
-        for i in range(constraint_ind.shape[0]):
-            f.write('{:d} {:f}\n'.format(constraint_ind[i], predicted_speed[i, 2]))
-
-    with open(FLAGS.dir + '/processed/cos_array.txt', 'w') as f:
-        f.write('{:d}\n'.format(constraint_ind_angle.shape[0]))
-        for i in range(constraint_ind_angle.shape[0]):
-            f.write('{:d} {:f}\n'.format(constraint_ind_angle[i], predicted_cos_array[i]))
+    # with open(FLAGS.dir + '/processed/speed_magnitude.txt', 'w') as f:
+    #     f.write('{:d}\n'.format(constraint_ind.shape[0]))
+    #     for i in range(constraint_ind.shape[0]):
+    #         f.write('{:d} {:f}\n'.format(constraint_ind[i], predicted_speed_margnitude[i]))
+    #
+    # with open(FLAGS.dir + '/processed/vertical_speed.txt', 'w') as f:
+    #     f.write('{:d}\n'.format(constraint_ind.shape[0]))
+    #     for i in range(constraint_ind.shape[0]):
+    #         f.write('{:d} {:f}\n'.format(constraint_ind[i], predicted_speed[i, 2]))
+    #
+    # with open(FLAGS.dir + '/processed/cos_array.txt', 'w') as f:
+    #     f.write('{:d}\n'.format(constraint_ind_angle.shape[0]))
+    #     for i in range(constraint_ind_angle.shape[0]):
+    #         f.write('{:d} {:f}\n'.format(constraint_ind_angle[i], predicted_cos_array[i]))
 
     print('Constructing problem...')
     ##########################################################
@@ -430,7 +431,7 @@ if __name__ == '__main__':
     # Optimize
     init_bias = np.zeros(variable_ind.shape[0] * 3, dtype=float)
     start_t = time.clock()
-    optimizer = least_squares(cost_function, init_bias, jac='2-point', method='lm',
+    optimizer = least_squares(cost_function, init_bias, jac='2-point',
                               max_nfev=max_nfev, verbose=FLAGS.verbose)
     print('Time usage: {:.2f}s'.format(time.clock() - start_t))
 

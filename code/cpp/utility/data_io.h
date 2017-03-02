@@ -54,69 +54,61 @@ namespace IMUProject{
         IMUDataset(const std::string& directory, unsigned char load_control = 255);
 
         // getters
-        inline const cv::Mat& GetGyro() const{
+        inline const std::vector<Eigen::Vector3d>& GetGyro() const{
             return gyrocope_;
         }
-        inline cv::Mat& GetGyro(){
+        inline std::vector<Eigen::Vector3d>& GetGyro(){
             return gyrocope_;
         }
 
-        inline const cv::Mat& GetLinearAcceleration() const{
+        inline const std::vector<Eigen::Vector3d>& GetLinearAcceleration() const{
             return linear_acceleration_;
         }
-        inline cv::Mat& GetLinearAcceleration(){
+        inline std::vector<Eigen::Vector3d>& GetLinearAcceleration(){
             return linear_acceleration_;
         }
 
-        inline const cv::Mat& GetAccelerometer() const{
+        inline const std::vector<Eigen::Vector3d>& GetAccelerometer() const{
             return accelerometer_;
         }
 
-        inline cv::Mat& GetAccelerometer(){
+        inline std::vector<Eigen::Vector3d>& GetAccelerometer(){
             return accelerometer_;
         }
 
-        inline const cv::Mat& GetGravity() const{
+        inline const std::vector<Eigen::Vector3d>& GetGravity() const{
             return gravity_;
         }
 
-        inline cv::Mat& GetGravity(){
+        inline std::vector<Eigen::Vector3d>& GetGravity(){
             return gravity_;
         }
 
-        inline cv::Mat& GetRotationVector(){
+        inline std::vector<Eigen::Quaterniond>& GetRotationVector(){
             return rotation_vector_;
         }
 
-        inline const cv::Mat& GetRotationVector() const{
+        inline const std::vector<Eigen::Quaterniond>& GetRotationVector() const{
             return rotation_vector_;
         }
 
-        inline cv::Mat& GetMagnetometer(){
-            return magnetometer_;
-        }
-
-        inline const cv::Mat& GetMagnetometer() const{
-            return magnetometer_;
-        }
-
-        inline const cv::Mat& GetOrientation() const{
+        inline const std::vector<Eigen::Quaterniond>& GetOrientation() const{
             return orientation_;
         }
 
-        inline cv::Mat& GetOrientation(){
+        inline std::vector<Eigen::Quaterniond>& GetOrientation(){
             return orientation_;
         }
 
-        inline const cv::Mat& GetPosition() const{
+        inline const std::vector<Eigen::Vector3d>& GetPosition() const{
             return position_;
         }
 
-        inline cv::Mat& GetPosition(){
+        inline std::vector<Eigen::Vector3d>& GetPosition(){
             return position_;
         }
 
-        inline const cv::Mat& GetTimeStamp() const{
+        inline const std::vector<double>& GetTimeStamp() const{
             return timestamp_;
         }
 
@@ -135,17 +127,16 @@ namespace IMUProject{
         const DataLayout layout_;
 
         //data from IMU
-        cv::Mat timestamp_;
-        cv::Mat gyrocope_;
-        cv::Mat accelerometer_;
-        cv::Mat linear_acceleration_;
-        cv::Mat gravity_;
-        cv::Mat magnetometer_;
-        cv::Mat rotation_vector_;
+        std::vector<double> timestamp_;
+        std::vector<Eigen::Vector3d> gyrocope_;
+        std::vector<Eigen::Vector3d> accelerometer_;
+        std::vector<Eigen::Vector3d> linear_acceleration_;
+        std::vector<Eigen::Vector3d> gravity_;
+        std::vector<Eigen::Quaterniond> rotation_vector_;
 
         // data from tango
-        cv::Mat orientation_;
-        cv::Mat position_;
+        std::vector<Eigen::Quaterniond> orientation_;
+        std::vector<Eigen::Vector3d> position_;
     };
 
 	/// Write a trajecotry to PLY file
@@ -155,8 +146,9 @@ namespace IMUProject{
 	/// \param axis_length the length of the axis, set to negative value to omit axis
 	/// \param kpoints
 	/// \param interval the interval of axis visualization, set to negative value to omit axis
-    void WriteToPly(const std::string& path, const cv::Mat& position, const cv::Mat& orientation,
-                    const double axis_length = 0.5, const int kpoints = 100, const int interval=100);
+	void WriteToPly(const std::string& path, const std::vector<Eigen::Vector3d>& position,
+	                const std::vector<Eigen::Quaterniond>& orientation,
+	                const double axis_length = 0.5, const int kpoints = 100, const int interval=100);
 
 } //namespace IMUProject
 #endif //PROJECT_IMU_DATASET_H

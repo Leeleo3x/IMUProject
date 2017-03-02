@@ -23,12 +23,10 @@ int main(int argc, char** argv){
 
     char buffer[128] = {};
     IMUProject::IMUDataset dataset(argv[1]);
-    cout << "Number of samples:" << dataset.GetPosition().rows << endl;
+    cout << "Number of samples:" << dataset.GetPosition().size() << endl;
 
     printf("Writing the trajectory\n");
     sprintf(buffer, "%s/test.ply", argv[1]);
-
-    cout << dataset.GetLinearAcceleration().rowRange(0, 20);
 
     WriteToPly(std::string(buffer), dataset.GetPosition(), dataset.GetOrientation());
     return 0;
