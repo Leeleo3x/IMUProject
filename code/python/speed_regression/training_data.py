@@ -13,16 +13,12 @@ import matplotlib.pyplot as plt
 
 
 class TrainingDataOption:
-    def __init__(self, sample_step=10, window_size=200, feature='fourier', frq_threshold=10, discard_direct=False,
-                 feature_smooth_sigma=None, speed_smooth_sigma=50.0):
+    def __init__(self, sample_step=10, window_size=200, feature='fourier', target='speed_magnitude'):
         self.sample_step_ = sample_step
         self.window_size_ = window_size
-        self.frq_threshold_ = frq_threshold
         self.feature_ = feature
+        self.target_ = target
         self.nanoToSec = 1000000000.0
-        self.discard_direct_ = discard_direct
-        self.feature_smooth_sigma_ = feature_smooth_sigma
-        self.speed_smooth_sigma_ = speed_smooth_sigma
 
 
 #@jit
@@ -60,7 +56,7 @@ def compute_speed(time_stamp, position, sample_points=None):
     :return:
     """
     if sample_points is None:
-        sample_points = np.arange(0, time_stamp.shape[0] - 1, dtype=int)
+        sample_points = np.arange(0, time_stamp.shape[0], dtype=int)
     sample_points[-1] = min(sample_points[-1], time_stamp.shape[0] - 2)
     speed = (position[sample_points+1] - position[sample_points]) \
             / (time_stamp[sample_points+1] - time_stamp[sample_points])[:, None]
@@ -76,6 +72,8 @@ def compute_local_speed(time_stamp, position, orientation, sample_points=None):
     :param sample_points:
     :return: Nx3 array
     """
+    if sample_points is None:
+        sample_points = np.arange(0, time_stamp.shape[0], dtype=int)
     sample_points[-1] = min(sample_points[-1], time_stamp.shape[0] - 2)
     speed = compute_speed(time_stamp, position, sample_points)
     for i in range(speed.shape[0]):
@@ -85,7 +83,7 @@ def compute_local_speed(time_stamp, position, orientation, sample_points=None):
 
 
 def compute_delta_angle(time_stamp, position, orientation,
-                        sample_points, local_axis=quaternion.quaternion(1.0, 0., 0., -1.)):
+                        sample_points=None, local_axis=quaternion.quaternion(1.0, 0., 0., -1.)):
     """
     Compute the cosine between the moving direction and viewing direction
     :param time_stamp: Time stamp
@@ -94,6 +92,8 @@ def compute_delta_angle(time_stamp, position, orientation,
     :param local_axis: the viewing direction in the device frame. Default is set w.r.t. to android coord frame
     :return:
     """
+    if not sample_points:
+        sample_points = np.arange(0, time_stamp.shape[0], dtype=int)
     epsilon = 1e-10
     speed_dir = compute_speed(time_stamp, position)
     speed_dir = np.concatenate([np.zeros([1, position.shape[1]]), speed_dir], axis=0)
@@ -111,7 +111,7 @@ def compute_delta_angle(time_stamp, position, orientation,
     return cos_array, valid_array
 
 
-def get_training_data(data_all, imu_columns, option, sample_points=None):
+def get_training_data(data_all, imu_columns, option, sample_points=None, **kwargs):
     """
     Create training data.
     :param data_all: The whole dataset. Must include 'time' column and all columns inside imu_columns
@@ -127,29 +127,34 @@ def get_training_data(data_all, imu_columns, option, sample_points=None):
     assert sample_points[-1] < N
 
     pose_data = data_all[['pos_x', 'pos_y', 'pos_z']].values
+    orientation = data_all[['ori_w', 'ori_x', 'ori_y', 'ori_z']].values
     data_used = data_all[imu_columns].values
     time_stamp = data_all['time'].values / 1e09
 
-    speed_all = np.zeros(N, dtype=float)
-    speed_all[1:-1] = np.divide(np.linalg.norm(pose_data[2:] - pose_data[:-2], axis=1),
-                                time_stamp[2:] - time_stamp[:-2])
-    # filter the speed with gaussian filter
-    if option.speed_smooth_sigma_ > 0:
-        speed_all = gaussian_filter1d(speed_all, option.speed_smooth_sigma_, axis=0)
+    targets = None
+
+    if option.target_ == 'speed_magnitude':
+        targets = np.linalg.norm(compute_speed(time_stamp, pose_data) ,axis=1)
+    elif option.target_ == 'angle':
+        targets, valid_array = compute_delta_angle(time_stamp, pose_data, orientation, sample_points=sample_points)
+    elif option.target_ == 'local_speed':
+        targets = compute_local_speed(time_stamp, pose_data, orientation)
+
+    if 'target_smooth_sigma' in kwargs:
+        targets = gaussian_filter1d(targets, sigma=kwargs['target_smooth_sigma'], axis=0)
+
+    targets = targets[sample_points]
 
     if option.feature_ == 'direct':
-        # local_imu_list = compute_direct_features(data_used, sample_points, option.window_size_)
-        local_imu_list = [data_used[ind - option.window_size_:ind].flatten() for ind in sample_points]
+        features = [data_used[ind - option.window_size_:ind].flatten() for ind in sample_points]
     elif option.feature_ == 'fourier':
-        local_imu_list = compute_fourier_features(data_used, sample_points, option.window_size_, option.frq_threshold_,
-                                                  option.discard_direct_)
-        # local_imu_list = [compute_fourier_feature(data_used[ind-option.window_size_:ind].values, option.frq_threshold_)
-        #                   .flatten('F') for ind in sample_points]
+        features = compute_fourier_features(data_used, sample_points, option.window_size_, kwargs['frq_threshold'],
+                                                  kwargs['discard_direct'])
     else:
         print('Feature type not supported: ' + option.feature_)
         raise ValueError
 
-    return np.concatenate([local_imu_list, speed_all[sample_points, None]], axis=1)
+    return features, targets
 
 
 def get_orientation_training_data(data_all, camera_orientation, imu_columns, options, sample_points=None,
@@ -269,10 +274,25 @@ if __name__ == '__main__':
 
     time_stamp = data_all['time'].values / nano_to_sec
     time_stamp -= time_stamp[0]
+    time_interval = (time_stamp[1:] - time_stamp[:-1])[:, None]
     # speed_decomposed = test_decompose_speed(data_all=data_all)
 
     position = data_all[['pos_x', 'pos_y', 'pos_z']].values
 
     speed_local = compute_local_speed(time_stamp, position, orientation)
 
+    speed_global = np.empty(speed_local.shape, dtype=float)
+    for i in range(speed_local.shape[0]):
+        q = quaternion.quaternion(*orientation[i])
+        speed_global[i] = (q * quaternion.quaternion(1.0, *speed_local[i]) * q.conj()).vec
 
+    print(speed_global.shape)
+    position_global = np.cumsum(speed_global[:-1] * time_interval, axis=0)
+    position_global += position[0]
+    plt.figure('Test_local_speed')
+    for i in range(3):
+        plt.subplot(311 + i)
+        plt.plot(time_stamp, position[:, i])
+        plt.plot(time_stamp[1:], position_global[:, i])
+        plt.legend(['Origin', 'Reconstructed'])
+    plt.show()

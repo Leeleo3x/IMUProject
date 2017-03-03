@@ -1,3 +1,4 @@
+import time
 import argparse
 import warnings
 import os
@@ -11,19 +12,22 @@ import pandas
 # from speed_regression import training_data as td
 # from speed_regression import grid_search
 import training_data as td
+from sklearn.linear_model import SGDRegressor
+from sklearn.datasets import dump_svmlight_file
 
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument('list')
     parser.add_argument('--window', default=200, type=int)
-    parser.add_argument('--step', default=10, type=int)
+    parser.add_argument('--step', default=5, type=int)
     parser.add_argument('--feature', default='direct', type=str)
+    parser.add_argument('--target', default='local_speed', type=str)
     parser.add_argument('--frq_threshold', default=100, type=int)
-    parser.add_argument('--only_on', default='', type=str)
+    parser.add_argument('--discard_direct', default=True, type=bool)
     parser.add_argument('--split_ratio', default=0.3, type=float)
-    parser.add_argument('--discard_direct', default=False, type=bool)
     parser.add_argument('--output', default='', type=str)
+    parser.add_argument('--svmlight_path', default=None, type=str)
     parser.add_argument('--C', default=None, type=float)
     parser.add_argument('--e', default=None, type=float)
     parser.add_argument('--g', default=None, type=float)
@@ -34,11 +38,12 @@ if __name__ == '__main__':
         dataset_list = [s.strip('\n') for s in f.readlines()]
 
     root_dir = os.path.dirname(args.list)
-    training_set_all = []
+    training_feature_all = []
+    training_target_all = []
     training_dict = {}
 
     options = td.TrainingDataOption(sample_step=args.step, window_size=args.window,
-                                    feature=args.feature, frq_threshold=args.frq_threshold)
+                                    feature=args.feature, target=args.target)
 
     for dataset in dataset_list:
         if len(dataset) > 0 and dataset[0] == '#':
@@ -49,72 +54,76 @@ if __name__ == '__main__':
         if not os.path.exists(data_path):
             warnings.warn('File ' + data_path + ' does not exist, omit the folder')
             continue
-        motion_type = 'unknown'
-        if len(info) == 2:
-            motion_type = info[1]
-
-        if len(args.only_on) > 0 and args.only_on != motion_type:
-            print('Only use ' + args.only_on, ', skip current dataset')
-            continue
 
         print('Loading dataset ' + data_path)
         data_all = pandas.read_csv(data_path)
 
         print('Creating training set')
         imu_columns = ['gyro_x', 'gyro_y', 'gyro_z', 'linacce_x', 'linacce_y', 'linacce_z']
-        training_set = td.get_training_data(data_all=data_all, imu_columns=imu_columns, option=options)
-        training_set_all.append(training_set)
 
-        # append the dataset to different motion for more detailed performance report
-        if motion_type not in training_dict:
-            training_dict[motion_type] = [training_set]
+        kwargs = {'frq_threshold', args.frq_threshold,
+                  'discard_direct', args.discard_direct}
+        training_feature, training_target = td.get_training_data(data_all=data_all, imu_columns=imu_columns,
+                                                                 option=options, kwargs=kwargs)
+        training_feature_all.append(training_feature)
+        training_target_all.append(training_target)
+
+    assert len(training_feature_all) > 0, 'No data was loaded'
+    training_feature_all = np.concatenate(training_feature_all, axis=0)
+    training_target_all = np.concatenate(training_target_all, axis=0)
+
+    print("{} samples in total".format(training_target_all.shape[0]))
+
+    # optionally write dataset in svmlight format
+    # if args.svmlight_path is not None:
+    #     for chn in range(training_target_all.shape[1]):
+    #         path = args.svmlight_path + '_{}'.format(chn)
+    #         with open(path, 'wb') as f:
+    #             dump_svmlight_file(training_feature_all, training_target_all[:, chn], f)
+    #             print('Dataset written to ' + path)
+
+    # Training separate regressor for each target channel
+
+    if training_target_all.ndim == 1:
+        training_target_all = training_target_all[:, None]
+
+    for chn in range(training_target_all.shape[1]):
+        print('Training SVM for target ', chn)
+        bestC = 0
+        bestE = 0
+
+        regressor = None
+        if args.C is None or args.e is None or args.g is None:
+            print('Running grid search')
+
+            # search_dict = {'epsilon': [0.001, 0.01, 0.1, 1.0, 10.0],
+            #                'loss': ['squared_loss', 'huber', 'epsilon_insensitive']}
+            # grid_searcher = GridSearchCV(SGDRegressor(loss='epsilon_insensitive'), search_dict, n_jobs=6, verbose=3)
+
+            search_dict = {'C': [0.01, 0.1, 1.0, 10.0],
+                           'epsilon': [0.001, 0.01, 0.1, 1.0],
+                           'gamma': [0.0001, 0.001, 0.01, 0.1],
+                           'kernel': ['rbf']}
+            grid_searcher = GridSearchCV(svm.SVR(), search_dict, n_jobs=6, verbose=3)
+
+            start_t = time.clock()
+            grid_searcher.fit(training_feature_all, training_target_all[:, chn])
+
+            time_passage = time.clock() - start_t
+            print('All done, time usage: {:.3f}s ({:.3f}h)'.format(time_passage, time_passage / 3600.0))
+            print('Optimal parameter: ', grid_searcher.best_params_)
+            print('Best score: ', grid_searcher.best_score_)
+            regressor = grid_searcher.best_estimator_
         else:
-            training_dict[motion_type].append(training_set)
+            print('Train with parameter C={}, e={}, gamma={}'.format(args.C, args.e, args.g))
+            regressor = svm.SVR(C=args.C, epsilon=args.e, gamma=args.g)
+            regressor.fit(training_feature_all, training_target_all[:, chn])
+            # score = mean_squared_error(regressor.predict(training_set_all[:, :-1]), training_set_all[:, -1])
+            score = regressor.score(training_feature_all, training_target_all[:, chn])
+            print('Training score:', score)
 
-    assert len(training_set_all) > 0, 'No data was loaded'
-    training_set_all = np.concatenate(training_set_all, axis=0)
-    print('------------------\nProperties')
-    print('Number of training samples in each category:')
-    for k in training_dict.keys():
-        training_dict[k] = np.concatenate(training_dict[k], axis=0)
-    for k, v in training_dict.items():
-        print(k + ': {}'.format(v.shape[0]))
-
-    print('Training SVM')
-    bestC = 0
-    bestE = 0
-
-    regressor = None
-    if args.C is None or args.e is None or args.g is None:
-        # run grid search
-        # search_dict = {'c': [0.1, 0.5, 1.0, 5.0, 1.0, 20.0, 30.0, 50.0],
-        #                'e': [0.01, 0.05, 0.1, 0.5, 1.0]}
-        # grid_searcher = grid_search.SVRGridSearch(search_dict)
-        # best_param, best_score = grid_searcher.run(training_set_all)
-        print('Running grid search')
-        search_dict = {'C': [0.01, 0.1, 1.0, 10.0, 100.0],
-                       'epsilon': [0.001, 0.01, 0.1, 1.0],
-                       'gamma': [0.0001, 0.001, 0.01, 0.1],
-                       'kernel': ['rbf']}
-        grid_searcher = GridSearchCV(svm.SVR(), search_dict, n_jobs=6, verbose=3)
-        grid_searcher.fit(training_set_all[:, :-1], training_set_all[:, -1])
-        # bestC = best_param['c']
-        # bestE = best_param['e']
-        bestC = grid_searcher.best_params_['C']
-        bestE = grid_searcher.best_params_['epsilon']
-        bestG = grid_searcher.best_params_['gamma']
-        print('All done. Optimal parameter: C={}, e={}, g={}, score={}'
-              .format(bestC, bestE, bestG, grid_searcher.best_score_))
-        regressor = grid_searcher.best_estimator_
-    else:
-        print('Train with parameter C={}, e={}, gamma={}'.format(args.C, args.e, args.g))
-        regressor = svm.SVR(C=args.C, epsilon=args.e, gamma=args.g)
-        regressor.fit(training_set_all[:, :-1], training_set_all[:, -1])
-        # score = mean_squared_error(regressor.predict(training_set_all[:, :-1]), training_set_all[:, -1])
-        score = regressor.score(training_set_all[:, :-1], training_set_all[:, -1]);
-        print('Training score:', score)
-
-    # write model to file
-    if len(args.output) > 0:
-        joblib.dump(regressor, args.output)
-        print('Model written to ' + args.output)
+        # write model to file
+        if len(args.output) > 0:
+            out_path = '{}_{}'.format(args.output, chn)
+            joblib.dump(regressor, out_path)
+            print('Model written to ' + out_path)
