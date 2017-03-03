@@ -122,6 +122,7 @@ int main(int argc, char** argv) {
     float start_t = cv::getTickCount();
     ceres::Solver::Options options;
     options.linear_solver_type = ceres::DENSE_QR;
+	options.num_threads = 6;
     options.minimizer_progress_to_stdout = true;
     options.max_num_iterations = FLAGS_max_iter;
     ceres::Solver::Summary summary;
