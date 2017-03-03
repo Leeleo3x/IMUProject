@@ -27,7 +27,8 @@ namespace IMUProject{
 	        cv::Mat mat = data_mat.colRange(layout_.orientation, layout_.orientation + 4);
 	        orientation_.resize(kSamples);
 	        for(int i=0; i<kSamples; ++i){
-		        const double* v = (double *) mat.ptr(i);
+		        const float* v = (float *) mat.ptr(i);
+		        //printf("%f, %f, %f, %f\n", v[0], v[1], v[2], v[3]);
 		        orientation_[i].w() = v[0];
 		        orientation_[i].x() = v[1];
 		        orientation_[i].y() = v[2];

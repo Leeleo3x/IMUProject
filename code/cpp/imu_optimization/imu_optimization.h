@@ -13,9 +13,9 @@
 namespace IMUProject {
 
 	struct Config {
-		static constexpr int kTotalCount = 8000;
-		static constexpr int kConstriantPoints = 800;
-		static constexpr int kSparsePoints = 400;
+		static constexpr int kTotalCount = 15200;
+		static constexpr int kConstriantPoints = 1520;
+		static constexpr int kSparsePoints = 760;
 		static constexpr int kSparseInterval = 20;
 	};
 
@@ -31,6 +31,54 @@ namespace IMUProject {
 								const double weight_sm = 1.0,
 								const double weight_vs = 1.0);
 
+#if false
+		bool operator()(const double *const bx, const double *const by, const double *const bz, double *residual) const {
+			for (int i = 0; i < Config::kConstriantPoints * 2; ++i) {
+				residual[i] = 0.0;
+			}
+
+			std::vector<Eigen::Matrix <double, 3, 1> > directed_acce((size_t) Config::kTotalCount);
+			std::vector<Eigen::Matrix <double, 3, 1> > speed((size_t) Config::kTotalCount);
+			speed[0] = init_speed_ + Eigen::Matrix <double, 3, 1>(std::numeric_limits<double>::epsilon(),
+			                                                      std::numeric_limits<double>::epsilon(),
+			                                                      std::numeric_limits<double>::epsilon());
+
+			directed_acce[0] = (rotations_[0] * linacce_[0]);
+			//std::cout << rotations_[0] << std::endl;
+
+// #pragma omp parallel for
+			for (int i = 0; i < Config::kTotalCount; ++i) {
+				const int inv_ind = inverse_ind_[i];
+				Eigen::Matrix<double, 3, 1> corrected_acce =
+						linacce_[i] + Eigen::Matrix<double, 3, 1>(alpha_[i] * bx[inv_ind],
+						                                          alpha_[i] * by[inv_ind],
+						                                          alpha_[i] * bz[inv_ind]);
+				if (inv_ind > 0) {
+					corrected_acce = corrected_acce +
+					                 Eigen::Matrix<double, 3, 1>((1.0 - alpha_[i]) * bx[inv_ind - 1],
+					                                             (1.0 - alpha_[i]) * by[inv_ind - 1],
+					                                             (1.0 - alpha_[i]) * bz[inv_ind - 1]);
+				}
+				if (i > 0) {
+					directed_acce[i] = rotations_[i] * corrected_acce;
+					speed[i] = speed[i - 1] + (directed_acce[i - 1]) * dt_[i - 1];
+//					printf("(%f,%f,%f) + (%f,%f,%f) * %f = (%f,%f,%f)\n",
+//					       speed[i - 1][0], speed[i - 1][1], speed[i - 1][2],
+//					       directed_acce[i - 1][0], directed_acce[i - 1][1], directed_acce[i - 1][2],
+//					       dt_[i - 1], speed[i][0], speed[i][1], speed[i][2]);
+				}
+			}
+
+			for (int cid = 0; cid < constraint_ind_.size(); ++cid) {
+				const int ind = constraint_ind_[cid];
+				residual[cid] = weight_sm_ * (speed[ind].norm() - target_speed_mag_[cid]);
+				// printf("%d\t (%f, %f, %f), target_vspeed: %.9f\n", ind, speed[ind][0], speed[ind][1], speed[ind][2], target_vspeed_[cid]);
+				residual[cid + Config::kConstriantPoints] = weight_vs_ * (speed[ind][2] - target_vspeed_[cid]);
+			}
+			return true;
+		}
+#else
+
 		template<typename T>
 		bool operator()(const T *const bx, const T *const by, const T *const bz, T *residual) const {
 			for (int i = 0; i < Config::kConstriantPoints * 2; ++i) {
@@ -39,25 +87,27 @@ namespace IMUProject {
 
 			std::vector<Eigen::Matrix<T, 3, 1> > directed_acce((size_t) Config::kTotalCount);
 			std::vector<Eigen::Matrix<T, 3, 1> > speed((size_t) Config::kTotalCount);
-			speed[0] = init_speed_ + Eigen::Matrix<T, 3, 1>((T) 1e-10, (T) 1e-10, (T) 1e-10);
+			speed[0] = init_speed_ + Eigen::Matrix<T, 3, 1>((T) std::numeric_limits<double>::epsilon(),
+			                                                (T) std::numeric_limits<double>::epsilon(),
+			                                                (T) std::numeric_limits<double>::epsilon());
 
-			directed_acce[0] = rotations_[0].cast<T>() * linacce_[0].cast<T>();
+			directed_acce[0] = (rotations_[0] * linacce_[0]).cast<T>();
 // #pragma omp parallel for
 			for (int i = 0; i < Config::kTotalCount; ++i) {
 				const int inv_ind = inverse_ind_[i];
 				Eigen::Matrix<T, 3, 1> corrected_acce =
 						linacce_[i] + Eigen::Matrix<T, 3, 1>(alpha_[i] * bx[inv_ind],
-															 alpha_[i] * by[inv_ind],
-															 alpha_[i] * bz[inv_ind]);
+						                                     alpha_[i] * by[inv_ind],
+						                                     alpha_[i] * bz[inv_ind]);
 				if (inv_ind > 0) {
 					corrected_acce = corrected_acce +
-									 Eigen::Matrix<T, 3, 1>((1.0 - alpha_[i]) * bx[inv_ind - 1],
-															(1.0 - alpha_[i]) * by[inv_ind - 1],
-															(1.0 - alpha_[i]) * bz[inv_ind - 1]);
+					                 Eigen::Matrix<T, 3, 1>((1.0 - alpha_[i]) * bx[inv_ind - 1],
+					                                        (1.0 - alpha_[i]) * by[inv_ind - 1],
+					                                        (1.0 - alpha_[i]) * bz[inv_ind - 1]);
 				}
 				if (i > 0) {
 					directed_acce[i] = rotations_[i] * corrected_acce;
-					speed[i] = speed[i - 1] + (directed_acce[i - 1] + directed_acce[i]) * (dt_[i - 1] / 2.0);
+					speed[i] = speed[i - 1] + (directed_acce[i - 1]) * dt_[i - 1];
 				}
 			}
 
@@ -68,6 +118,7 @@ namespace IMUProject {
 			}
 			return true;
 		}
+#endif
 		std::vector<Eigen::Vector3d> correcte_acceleration(const std::vector<Eigen::Vector3d> &input,
 														   const std::vector<double> &bx,
 														   const std::vector<double> &by,

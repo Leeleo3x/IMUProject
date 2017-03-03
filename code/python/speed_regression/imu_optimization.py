@@ -72,32 +72,31 @@ class SparseAccelerationBiasFunctor:
             warnings.warn('The value of time_stamp is large, forgot to convert to seconds?')
         self.variable_ind_ = variable_ind
         self.time_stamp_ = time_stamp
-        self.interval_ = (self.time_stamp_[1:variable_ind[-1]] - self.time_stamp_[:variable_ind[-1] - 1])
+        self.interval_ = (self.time_stamp_[1:] - self.time_stamp_[:-1])
         # any records after the last speed sample is useless
-        self.linacce_ = linacce[:variable_ind[-1]]
-        self.orientation_ = orientation[:variable_ind[-1]]
+        self.linacce_ = linacce
+        self.orientation_ = orientation
 
         self.initial_bias_ = np.zeros([1, self.linacce_.shape[1]], dtype=float)
         # Pre-compute the interpolation coefficients
         # y[i] = alpha[i] * x[i-1] + (1.0 - alpha[i]) * x[i]
-        self.alpha_ = np.empty((self.variable_ind_[-1]), dtype=float)
-        self.alpha_[:variable_ind[0]] = (self.time_stamp_[:variable_ind[0]] - self.time_stamp_[0]) / (self.time_stamp_[
-            variable_ind[0]] - self.time_stamp_[0])
+        self.alpha_ = np.empty((self.variable_ind_[-1] + 1), dtype=float)
+        self.alpha_[:variable_ind[0] + 1] = (self.time_stamp_[:variable_ind[0] + 1] - self.time_stamp_[0]) / \
+                                            (self.time_stamp_[variable_ind[0]] - self.time_stamp_[0])
 
-        self.inverse_ind_ = np.zeros([variable_ind[-1]], dtype=int)
+        self.inverse_ind_ = np.zeros([variable_ind[-1] + 1], dtype=int)
         for i in range(1, self.variable_ind_.shape[0]):
-            self.inverse_ind_[variable_ind[i - 1]:variable_ind[i]] = i
-            start_id, end_id = variable_ind[i - 1], variable_ind[i]
+            start_id, end_id = variable_ind[i - 1] + 1, variable_ind[i] + 1
+            self.inverse_ind_[start_id:end_id] = i
             self.alpha_[start_id:end_id] = (self.time_stamp_[start_id:end_id] - self.time_stamp_[start_id]) \
-                                           / (self.time_stamp_[end_id] - self.time_stamp_[start_id])
-        self.alpha_ = 1.0 - self.alpha_
+                                           / (self.time_stamp_[variable_ind[i]] - self.time_stamp_[start_id])
 
     def correct_acceleration(self, input_acceleration, bias):
         assert bias.shape[0] == self.variable_ind_.shape[0], \
             'bias.shape[0]: {}, variable_ind.shape[0]: {}'.format(bias.shape[0], self.variable_ind_.shape[0])
         bias = np.concatenate([bias, self.initial_bias_], axis=0)
-        corrected_linacce = input_acceleration + self.alpha_[:, None] * bias[self.inverse_ind_ - 1] \
-                                               + (1.0 - self.alpha_[:, None]) * bias[self.inverse_ind_]
+        corrected_linacce = input_acceleration + (1.0 - self.alpha_[:, None]) * bias[self.inverse_ind_ - 1] \
+                                               + self.alpha_[:, None] * bias[self.inverse_ind_]
 
         return corrected_linacce
 
@@ -129,11 +128,9 @@ class SpeedMagnitudeFunctor(SparseAccelerationBiasFunctor):
         x = x.reshape([-1, self.linacce_.shape[1]])
         # first compute corrected linear acceleration
         # append the initial bias at the end for convenience
-        x = np.concatenate([x, self.initial_bias_], axis=0)
-        corrected_linacce = self.linacce_ + self.alpha_[:, None] * x[self.inverse_ind_ - 1]\
-                                          + (1.0 - self.alpha_[:, None]) * x[self.inverse_ind_]
+        corrected_linacce = self.correct_acceleration(self.linacce_, x)
         # compute corrected speed
-        directed_acce = rotate_vector(self.linacce_, self.orientation_)
+        directed_acce = rotate_vector(corrected_linacce, self.orientation_)
         directed_speed = np.cumsum((directed_acce[1:] + directed_acce[:-1]) * self.interval_[:, None] / 2.0, axis=0)
         return self.evaluate_on_speed(directed_speed)
 
@@ -206,18 +203,7 @@ class ZeroSpeedFunctor(SparseAccelerationBiasFunctor):
         self.speed_ind_ = speed_ind
 
     def __call__(self, x, *args, **kwargs):
-        x = x.reshape([-1, self.linacce_.shape[1]])
-        # first add regularization term
-        # add data term
-        # first compute corrected linear acceleration
-        # append the initial bias at the end for convenience
-        x = np.concatenate([x, self.initial_bias_], axis=0)
-        corrected_linacce = self.linacce_ + self.alpha_[:, None] * x[self.inverse_ind_ - 1] \
-                                          + (1.0 - self.alpha_[:, None]) * x[self.inverse_ind_]
-
-        directed_acce = rotate_vector(self.linacce_, self.orientation_)
-        speed = np.cumsum((directed_acce[1:] + directed_acce[:-1]) * self.interval_[:, None] / 2.0, axis=0)
-        return self.evaluate_on_speed(speed)
+        pass
 
     def evaluate_on_speed(self, speed):
         loss = speed[self.speed_ind_ - 1, :].ravel()
@@ -249,9 +235,7 @@ class AngleFunctor(SparseAccelerationBiasFunctor):
         :return: The loss vector
         """
         x = x.reshape([-1, self.linacce_.shape[1]])
-        x = np.concatenate([x, self.initial_bias_], axis=0)
-        corrected_linacce = self.linacce_ + self.alpha_[:, None] * x[self.inverse_ind_ - 1] \
-                                          + (1.0 - self.alpha_[:, None]) * x[self.inverse_ind_]
+        corrected_linacce = self.correct_acceleration(self.linacce_, x)
         speed = np.cumsum((corrected_linacce[1:] + corrected_linacce[:-1]) * self.interval_[:, None] / 2.0, axis=0)
         return self.evaluate_on_speed(speed)
 
@@ -285,12 +269,11 @@ class SharedSpeedFunctorSet(SparseAccelerationBiasFunctor):
 
     def __call__(self, x, *args, **kwargs):
         x = x.reshape([-1, self.initial_bias_.shape[1]])
-        x = np.concatenate([x, self.initial_bias_], axis=0)
-        corrected_linacce = self.linacce_ + self.alpha_[:, None] * x[self.inverse_ind_ - 1] \
-                            + (1.0 - self.alpha_[:, None]) * x[self.inverse_ind_]
-
+        corrected_linacce = self.correct_acceleration(self.linacce_, x)
         directed_acce = rotate_vector(corrected_linacce, self.orientation_)
         # speed = np.cumsum((directed_acce[1:] + directed_acce[:-1]) * self.interval_[:, None] / 2.0, axis=0)
+        # print(directed_acce[:-1])
+        # print(self.interval_)
         speed = np.cumsum(directed_acce[:-1] * self.interval_[:, None], axis=0)
         speed = np.concatenate([np.zeros([1, self.linacce_.shape[1]]), speed], axis=0)
         loss = np.concatenate([self.functors_[i].evaluate_on_speed(speed)
@@ -338,14 +321,14 @@ if __name__ == '__main__':
     linacce = data_all[['linacce_x', 'linacce_y', 'linacce_z']].values
 
     # test_N = linacce.shape[0]
-    test_N = 8000
+    test_N = 100
 
     time_stamp = time_stamp[:test_N]
     linacce = linacce[:test_N]
     orientation = orientation[:test_N]
 
-    variable_ind = np.arange(1, test_N, 20, dtype=int)
-    variable_ind[-1] = test_N - 1
+    variable_ind = np.arange(FLAGS.interval - 1, test_N, FLAGS.interval, dtype=int)
+#    variable_ind[-1] = test_N - 1
 
     """
     Construct constraints
@@ -359,7 +342,7 @@ if __name__ == '__main__':
     constraint_ind = np.arange(0, test_N - 1,
                                options.sample_step_,
                                dtype=int)
-
+    print('Constraint id:', constraint_ind)
     warnings.warn('Currently using ground truth as constraint')
     position_tango = data_all[['pos_x', 'pos_y', 'pos_z']].values
     predicted_speed = td.compute_speed(time_stamp, position_tango, constraint_ind)
@@ -385,17 +368,17 @@ if __name__ == '__main__':
     # with open(FLAGS.dir + '/processed/speed_magnitude.txt', 'w') as f:
     #     f.write('{:d}\n'.format(constraint_ind.shape[0]))
     #     for i in range(constraint_ind.shape[0]):
-    #         f.write('{:d} {:f}\n'.format(constraint_ind[i], predicted_speed_margnitude[i]))
+    #         f.write('{:d} {:.8f}\n'.format(constraint_ind[i], predicted_speed_margnitude[i]))
     #
     # with open(FLAGS.dir + '/processed/vertical_speed.txt', 'w') as f:
     #     f.write('{:d}\n'.format(constraint_ind.shape[0]))
     #     for i in range(constraint_ind.shape[0]):
-    #         f.write('{:d} {:f}\n'.format(constraint_ind[i], predicted_speed[i, 2]))
+    #         f.write('{:d} {:.8f}\n'.format(constraint_ind[i], predicted_speed[i, 2]))
     #
     # with open(FLAGS.dir + '/processed/cos_array.txt', 'w') as f:
     #     f.write('{:d}\n'.format(constraint_ind_angle.shape[0]))
     #     for i in range(constraint_ind_angle.shape[0]):
-    #         f.write('{:d} {:f}\n'.format(constraint_ind_angle[i], predicted_cos_array[i]))
+    #         f.write('{:d} {:.8f}\n'.format(constraint_ind_angle[i], predicted_cos_array[i]))
 
     print('Constructing problem...')
     ##########################################################
@@ -412,8 +395,8 @@ if __name__ == '__main__':
     angle_cosine = AngleFunctor(time_stamp, orientation, linacce, predicted_cos_array, constraint_ind_angle, variable_ind)
     speed_constraints = SharedSpeedFunctorSet(time_stamp, orientation, linacce, variable_ind)
 
-    sigma_zp = 100.0
-    sigma_a = 10.0
+    sigma_zp = 1.0
+    sigma_a = 1.0
     sigma_s = 1.0
     sigma_vs = 1.0
 
@@ -430,6 +413,12 @@ if __name__ == '__main__':
 
     # Optimize
     init_bias = np.zeros(variable_ind.shape[0] * 3, dtype=float)
+
+    # Inspect the initial residual
+    init_residual = cost_function(init_bias)
+    print('Init residual: ', init_residual)
+    print(np.dot(init_residual, init_residual))
+
     start_t = time.clock()
     optimizer = least_squares(cost_function, init_bias, jac='2-point',
                               max_nfev=max_nfev, verbose=FLAGS.verbose)
@@ -439,7 +428,7 @@ if __name__ == '__main__':
     np.copyto(corrected_linacce, linacce)
 
     bias = optimizer.x.reshape([-1, 3])
-    corrected_linacce[:variable_ind[-1]] = magnitude_functor.correct_acceleration(linacce[:variable_ind[-1]], bias)
+    corrected_linacce[:variable_ind[-1] + 1] = magnitude_functor.correct_acceleration(linacce[:variable_ind[-1] + 1], bias)
     directed_corrected = np.empty(corrected_linacce.shape, dtype=float)
     directed_corrected = rotate_vector(corrected_linacce, orientation)
 

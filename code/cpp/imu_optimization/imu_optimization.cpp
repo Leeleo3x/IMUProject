@@ -36,9 +36,9 @@ namespace IMUProject {
 			variable_ind_[i] = (i + 1) * Config::kSparseInterval - 1;
 		}
 
-		if (variable_ind_.back() >= Config::kTotalCount - 1) {
-			variable_ind_.back() = Config::kTotalCount - 2;
-		}
+//		if (variable_ind_.back() >= Config::kTotalCount - 1) {
+//			variable_ind_.back() = Config::kTotalCount - 2;
+//		}
 
 		alpha_.resize(Config::kTotalCount, 0.0);
 		inverse_ind_.resize(Config::kTotalCount, 0);
@@ -61,6 +61,7 @@ namespace IMUProject {
 				            (time_stamp[variable_ind_[i]] - time_stamp[variable_ind_[i - 1]]);
 			}
 		}
+
 	}
 
 	std::vector<Eigen::Vector3d> SizedSharedSpeedFunctor::correcte_acceleration(const std::vector<Eigen::Vector3d> &input,

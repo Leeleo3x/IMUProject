@@ -42,8 +42,8 @@ int main(int argc, char** argv) {
 	const std::vector<Eigen::Quaterniond> orientation(dataset.GetOrientation().begin(),
 	                                                  dataset.GetOrientation().begin() + IMUProject::Config::kTotalCount);
 
-    // Load constraints
-    std::vector<double> target_speed_mag;
+	// Load constraints
+	std::vector<double> target_speed_mag;
     std::vector<double> target_vspeed;
     std::vector<int> constraint_ind;
 
@@ -94,9 +94,10 @@ int main(int argc, char** argv) {
         bz[i] = distribution(generator);
     }
 
-    IMUProject::SizedSharedSpeedFunctor* functor = new IMUProject::SizedSharedSpeedFunctor(ts, linacce, orientation,
-                                                                                           constraint_ind, target_speed_mag, target_vspeed,
-                                                                                           Eigen::Vector3d(0, 0, 0), 1.0);
+	IMUProject::SizedSharedSpeedFunctor* functor = new IMUProject::SizedSharedSpeedFunctor(ts, linacce, orientation,
+	                                                                                       constraint_ind, target_speed_mag, target_vspeed,
+	                                                                                       Eigen::Vector3d(0, 0, 0), 1.0);
+
 //    ceres::CostFunction *cost_function =
 //            new ceres::NumericDiffCostFunction<IMUProject::SizedSharedSpeedFunctor, ceres::CENTRAL, kResiduals, kSparsePoint, kSparsePoint, kSparsePoint>(
 //                    functor);
