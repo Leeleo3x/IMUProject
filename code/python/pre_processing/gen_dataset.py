@@ -250,13 +250,18 @@ if __name__ == '__main__':
             # write_file(output_folder + '/acce_linear.txt', output_accelerometer_linear)
 
             # if the dataset comes with rotation vector, include it
-
-
-
             data_pandas = pandas.DataFrame(data_mat, columns=column_list)
 
             data_pandas.to_csv(output_folder + '/data.csv')
             print('Dataset written to ' + output_folder + '/data.txt')
+
+            # write data in plain text file for C++
+            with open(output_folder + '/data_plain.txt', 'w') as f:
+                f.write('{} {}\n'.format(data_mat.shape[0], data_mat.shape[1]))
+                for i in range(data_mat.shape[0]):
+                    for j in range(data_mat.shape[1]):
+                        f.write('{}\t'.format(data_mat[i][j]))
+                    f.write('\n')
 
             if not args.no_trajectory:
                 print("Writing trajectory to ply file")

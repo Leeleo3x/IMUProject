@@ -27,6 +27,12 @@ namespace IMUProject{
             sprintf(buffer, "%s/processed/data.csv", directory_.c_str());
             return std::string(buffer);
         }
+
+        inline const std::string GetPlainTextData() const{
+            char buffer[128] = {};
+            sprintf(buffer, "%s/processed/data_plain.txt", directory_.c_str());
+            return std::string(buffer);
+        }
     private:
         const std::string directory_;
     };
@@ -120,7 +126,7 @@ namespace IMUProject{
         static constexpr unsigned char IMU_POSITION = 32;
         static constexpr unsigned char IMU_ORIENTATION = 64;
 
-        static constexpr double kNanoToSec = 1e09;
+        static constexpr double kNanoToSec = 1000000000.0;
 
     private:
         const FileIO file_io_;

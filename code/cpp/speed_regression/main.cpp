@@ -14,8 +14,8 @@
 
 using namespace std;
 
-DEFINE_int32(step, 5, "interval between two samples");
-DEFINE_int32(window, 400, "Window size");
+DEFINE_int32(step, 10, "interval between two samples");
+DEFINE_int32(window, 200, "Window size");
 DEFINE_int32(smooth_size, 10, "smooth size");
 DEFINE_string(output, "../../../../models", "output folder for models");
 
@@ -86,16 +86,18 @@ int main(int argc, char ** argv) {
 			feature_mat_all = feature_mat.clone();
 			target_mat_all = target_mat.clone();
 		}else{
-			cv::Mat temp_feature, temp_target;
-			cv::vconcat(feature_mat_all, feature_mat, temp_feature);
-			cv::vconcat(target_mat_all, target_mat, temp_target);
-			feature_mat_all = temp_feature.clone();
-			target_mat_all = temp_target.clone();
+			cv::vconcat(feature_mat_all, feature_mat, feature_mat_all);
+			cv::vconcat(target_mat_all, target_mat, target_mat_all);
 		}
 	}
 
 	printf("Number of samples: %d, feature dimension: %d, target dimension: %d\n",
 	       feature_mat_all.rows, feature_mat_all.cols, target_mat_all.cols);
+
+	std::vector<double> c_param{10.0, 1.0, 10.0};
+	std::vector<double> p_param{0.01, 0.001, 0.01};
+	cv::TermCriteria term_criteria(cv::TermCriteria::EPS | cv::TermCriteria::MAX_ITER, 5000, 1e-09);
+#pragma omp parallel for
 	for (int i = 0; i < target_mat_all.cols; ++i) {
 		cv::Ptr<cv::ml::TrainData> train_data = cv::ml::TrainData::create(feature_mat_all, cv::ml::ROW_SAMPLE,
 		                                                                  target_mat_all.col(i).clone());
@@ -120,7 +122,10 @@ int main(int argc, char ** argv) {
 
 		cv::Ptr<cv::ml::SVM> regressor = cv::ml::SVM::create();
 		regressor->setType(cv::ml::SVM::RBF);
-		regressor->setP(0.001);
+		regressor->setP(p_param[i]);
+		regressor->setC(c_param[i]);
+		regressor->setGamma(1.0 / (double)feature_mat_all.cols);
+		regressor->setTermCriteria(term_criteria);
 
 		regressor->setType(cv::ml::SVM::EPS_SVR);
 		float start_t = (float) cv::getTickCount();
@@ -130,9 +135,9 @@ int main(int argc, char ** argv) {
 		printf("Done. Number of support vectors: %d. Time usage %.2fs\n",
 		       regressor->getSupportVectors().rows,
 		       ((float) cv::getTickCount() - start_t) / (float) cv::getTickFrequency());
-		printf("Best param: C: %.6f, p: %.6f\n", regressor->getC(), regressor->getP());
+		printf("Parameter: C: %.6f, p: %.6f\n", regressor->getC(), regressor->getP());
 
-		sprintf(buffer, "%s/model_svm_direct_local_speed_w400_s10_%d.yml", FLAGS_output.c_str(), i);
+		sprintf(buffer, "%s/model_direct_local_speed_w200_s10_%d.yml", FLAGS_output.c_str(), i);
 		regressor->save(std::string(buffer));
 		cout << "Model saved to " << buffer << endl;
 	}

@@ -20,6 +20,48 @@ namespace IMUProject {
 	};
 
 
+    class SparseGridInterpolator{
+    public:
+        SparseGridInterpolator(const std::vector<double>& time_stamp, const int variable_count,
+                               const std::vector<int>* variable_ind = nullptr);
+
+        inline const std::vector<double>& GetAlpha() const {return alpha_;}
+        inline double GetAlphaAt(const int ind) const{
+            CHECK_LT(ind, alpha_.size());
+            return alpha_[ind];
+        }
+
+        inline const std::vector<int>& GetVariableInd() const {return variable_ind_; }
+        inline const int GetVariableIndAt(const int ind) const{
+            CHECK_LT(ind, variable_ind_.size());
+            return variable_ind_[ind];
+        }
+
+        inline const std::vector<int>& GetInverseInd() const {return inverse_ind_; }
+        inline const int GetInverseIndAt(const int ind) const{
+            CHECK_LT(ind, inverse_ind_.size());
+            return inverse_ind_[ind];
+        }
+
+        template <typename T>
+        void correct_bias(Eigen::Matrix<T, 3, 1>* data, const T* bx, const T* by, const T* bz) const {
+            for (int i = 0; i < kTotalCount; ++i) {
+                const int vid = inverse_ind_[i];
+                data[i] += alpha_[i] * Eigen::Matrix<T, 3, 1>(bx[vid], by[vid], bz[vid]);
+                if (vid > 0) {
+                    data[i] += (1.0 - alpha_[i]) * Eigen::Matrix<T, 3, 1>(bx[vid - 1], by[vid - 1], bz[vid - 1]);
+                }
+            }
+        }
+    private:
+        const int kTotalCount;
+        const int kVariableCount;
+
+        std::vector<double> alpha_;
+        std::vector<int> inverse_ind_;
+        std::vector<int> variable_ind_;
+    };
+
 	struct SizedSharedSpeedFunctor {
 	public:
 		SizedSharedSpeedFunctor(const std::vector<double> &time_stamp, const std::vector<Eigen::Vector3d> &linacce,

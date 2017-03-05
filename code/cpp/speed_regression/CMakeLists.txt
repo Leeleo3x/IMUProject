@@ -4,8 +4,8 @@ project (SpeedRegression)
 
 find_package(OpenCV REQUIRED)
 find_package(Eigen REQUIRED)
-find_package(GLOG REQUIRED)
-find_package(GFLAGS REQUIRED)
+find_package(Glog REQUIRED)
+find_package(Gflags REQUIRED)
 
 include_directories(${EIGEN_INCLUDE_DIRS})
 

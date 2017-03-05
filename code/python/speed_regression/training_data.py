@@ -132,7 +132,7 @@ def get_training_data(data_all, imu_columns, option, sample_points=None, extra_a
     targets = None
 
     if option.target_ == 'speed_magnitude':
-        targets = np.linalg.norm(compute_speed(time_stamp, pose_data) ,axis=1)
+        targets = np.linalg.norm(compute_speed(time_stamp, pose_data), axis=1)
     elif option.target_ == 'angle':
         targets, valid_array = compute_delta_angle(time_stamp, pose_data, orientation, sample_points=sample_points)
     elif option.target_ == 'local_speed':

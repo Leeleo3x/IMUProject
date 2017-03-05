@@ -3,6 +3,7 @@ import math
 import time
 import numpy as np
 import quaternion
+import cv2
 from scipy.ndimage.filters import gaussian_filter1d
 from scipy.optimize import least_squares
 from numba import jit
@@ -344,8 +345,8 @@ if __name__ == '__main__':
     orientation = data_all[['ori_w', 'ori_x', 'ori_y', 'ori_z']].values
     linacce = data_all[['linacce_x', 'linacce_y', 'linacce_z']].values
 
-    # test_N = linacce.shape[0]
-    test_N = 5000
+    # test_N = linacce.shape[0] - 10
+    test_N = 24000
 
     time_stamp = time_stamp[:test_N]
     linacce = linacce[:test_N]
@@ -358,12 +359,12 @@ if __name__ == '__main__':
     Construct constraints
     """
     print('Predicting speed...')
-    options = td.TrainingDataOption(feature='direct', sample_step=FLAGS.step, window_size=400)
+    options = td.TrainingDataOption(feature='direct', sample_step=FLAGS.step, window_size=200)
 
     constraint_ind = np.arange(options.window_size_, test_N - 1,
                                options.sample_step_,
                                dtype=int)
-    warnings.warn('Currently using ground truth as constraint')
+    # warnings.warn('Currently using ground truth as constraint')
     position_tango = data_all[['pos_x', 'pos_y', 'pos_z']].values
     predicted_speed = td.compute_speed(time_stamp, position_tango, constraint_ind)
 
@@ -387,14 +388,14 @@ if __name__ == '__main__':
     # regress the local speed
     predicted_local_speed = np.empty([constraint_ind.shape[0], 3], dtype=float)
     for i in range(3):
-        model_path = '../../../models/model_direct_local_speed_w400_s10_small.svm_{}'.format(i)
-        regressor = joblib.load(model_path)
-        print(model_path + ' loaded')
-        print('Predicting channel ', i)
-        test_feature, _ = td.get_training_data(data_all, imu_columns, options, constraint_ind)
-        print(test_feature.shape)
-        predicted_local_speed[:, i] = regressor.predict(test_feature)
-
+        model_path = '../../../models/model_direct_local_speed_w200_s10_{}_cv.yml'.format(i)
+        # regressor = joblib.load(model_path)
+        with open(model_path) as f:
+            regressor = cv2.ml.SVM_load(model_path)
+            print(model_path + ' loaded')
+            print('Predicting channel ', i)
+            test_feature, _ = td.get_training_data(data_all, imu_columns, options, constraint_ind)
+            predicted_local_speed[:, i] = regressor.predict(test_feature.astype(np.float32))[1][:, 0]
 
     # NOTICE: the values inside the cos_array are not all valid (the speed direction is undefined for static camera).
     #         Therefore it is necessary to construct a separate constraint index array

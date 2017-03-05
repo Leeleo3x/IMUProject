@@ -18,22 +18,27 @@ namespace IMUProject{
 		CHECK_EQ(position.size(), N);
 		CHECK_EQ(orientation.size(), N);
 
-		std::vector<Eigen::Vector3d> global_speed(position.size());
-		for(auto i=1; i<N; ++i){
-			global_speed[i] = (position[i] - position[i-1]) / (time_stamp[i] - time_stamp[i-1]);
+		std::vector<Eigen::Vector3d> global_speed(position.size(), Eigen::Vector3d(0, 0, 0));
+		for(auto i=0; i<N - 1; ++i){
+			global_speed[i] = (position[i + 1] - position[i]) / (time_stamp[i + 1] - time_stamp[i]);
 		}
+		global_speed[global_speed.size() - 2] = global_speed[global_speed.size() - 1];
 
 		Mat local_speed_all(N, 3, CV_32FC1, cv::Scalar::all(0));
 		float* ls_ptr = (float *) local_speed_all.data;
-		for(auto i=1; i<N; ++i){
-			Eigen::Vector3d local_speed = orientation[i].inverse() * global_speed[i];
+		for(auto i=0; i<N; ++i){
+			Eigen::Vector3d local_speed = orientation[i].conjugate() * global_speed[i];
 			ls_ptr[i * 3] = (float)local_speed[0];
 			ls_ptr[i * 3 + 1] = (float)local_speed[1];
 			ls_ptr[i * 3 + 2] = (float)local_speed[2];
 		}
 
-		Mat local_speed_filtered(N, 3, CV_32FC1, cv::Scalar::all(0));
-		cv::blur(local_speed_all, local_speed_filtered, cv::Size(smooth_size, 1));
+//		Mat local_speed_filtered(N, 3, CV_32FC1, cv::Scalar::all(0));
+//		for(int i=0; i<3; ++i) {
+//			//cv::blur(local_speed_all.col(i), local_speed_filtered.col(i), cv::Size(smooth_size, 1));
+//			cv::GaussianBlur(local_speed_all.col(i), local_speed_filtered.col(i), cv::Size(0, 0), (double)smooth_size);
+//		}
+		Mat local_speed_filtered = local_speed_all;
 
 		Mat local_speed((int)sample_points.size(), 3, CV_32FC1, cv::Scalar::all(0));
 		for(auto i=0; i<sample_points.size(); ++i){

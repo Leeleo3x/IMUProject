@@ -3,6 +3,7 @@ import os
 import numpy as np
 import pandas
 import quaternion
+import cv2
 import pre_processing.gen_dataset as gen_dataset
 from utility.write_trajectory_to_ply import write_ply_to_file
 from scipy.ndimage.filters import gaussian_filter1d

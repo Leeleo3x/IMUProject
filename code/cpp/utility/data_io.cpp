@@ -8,102 +8,61 @@
 
 #include <fstream>
 
+using namespace std;
+
 namespace IMUProject{
 
     IMUDataset::IMUDataset(const std::string &directory, unsigned char load_control): file_io_(directory) {
-        cv::Ptr<cv::ml::TrainData> data_all = cv::ml::TrainData::loadFromCSV(file_io_.GetProcessedData(), 1, 0);
-        CHECK(data_all.get()) << "Can not open " << file_io_.GetProcessedData();
-        cv::Mat data_mat = data_all->getSamples();
-	    const int kSamples = data_mat.rows;
-	    timestamp_.resize(kSamples);
-	    for(int i=0; i<kSamples; ++i){
-		    timestamp_[i] = (double)data_mat.at<float>(i, 0);
-	    }
 
+		fstream fin(file_io_.GetPlainTextData().c_str());
+		CHECK(fin.is_open()) << "Can not open file " << file_io_.GetPlainTextData();
+
+		int kSamples, kColumns;
+		fin >> kSamples >> kColumns;
+		CHECK_EQ(kColumns, layout_.rotation_vector + 4);
+		timestamp_.resize((size_t)kSamples, 0);
+
+		for(int i=0; i<kSamples; ++i){
+			Eigen::Vector3d gyro, acce, linacce, gravity, pos;
+			Eigen::Quaterniond ori, rv;
+			fin >> timestamp_[i] >> gyro[0] >> gyro[1] >> gyro[2];
+			fin >> acce[0] >> acce[1] >> acce[2];
+			fin >> linacce[0] >> linacce[1] >> linacce[2];
+			fin >> gravity[0] >> gravity[1] >> gravity[2];
+			fin >> pos[0] >> pos[1] >> pos[2];
+			fin >> ori.w() >> ori.x() >> ori.y() >> ori.z();
+			fin >> rv.w() >> rv.x() >> rv.y() >> rv.z();
+			if(load_control & IMU_ORIENTATION){
+				orientation_.push_back(ori);
+			}
+			if(load_control & IMU_POSITION){
+				position_.push_back(pos);
+			}
+			if(load_control & IMU_GYRO){
+				gyrocope_.push_back(gyro);
+			}
+			if(load_control & IMU_ACCELEROMETER){
+				accelerometer_.push_back(acce);
+			}
+			if(load_control & IMU_LINEAR_ACCELERATION){
+				linear_acceleration_.push_back(linacce);
+			}
+			if(load_control & IMU_GRAVITY){
+				gravity_.push_back(gravity);
+			}
+			if(load_control & IMU_ROTATION_VECTOR){
+				rotation_vector_.push_back(rv);
+			}
+		}
+
+		// Normalize the time stamp
         for(int i=0; i<kSamples; ++i){
-            timestamp_[i] /= kNanoToSec;
+            timestamp_[i] = timestamp_[i] / kNanoToSec;
         }
-        if (load_control & IMU_ORIENTATION) {
-	        cv::Mat mat = data_mat.colRange(layout_.orientation, layout_.orientation + 4);
-	        orientation_.resize(kSamples);
-	        for(int i=0; i<kSamples; ++i){
-		        const float* v = (float *) mat.ptr(i);
-		        //printf("%f, %f, %f, %f\n", v[0], v[1], v[2], v[3]);
-		        orientation_[i].w() = v[0];
-		        orientation_[i].x() = v[1];
-		        orientation_[i].y() = v[2];
-		        orientation_[i].z() = v[3];
-	        }
-            LOG(INFO) << "Orientation loaded";
-        }
-
-        if (load_control & IMU_POSITION) {
-	        cv::Mat mat = data_mat.colRange(layout_.position, layout_.position + 3);
-	        position_.resize(kSamples);
-	        for(int i=0; i<kSamples; ++i){
-		        for(int j=0; j<3; ++j) {
-			        position_[i][j] = static_cast<double>(mat.at<float>(i, j));
-		        }
-	        }
-            LOG(INFO) << "Position loaded";
-        }
-
-        if(load_control & IMU_GYRO){
-	        cv::Mat mat = data_mat.colRange(layout_.gyro, layout_.gyro + 3);
-	        gyrocope_.resize(kSamples);
-	        for(int i=0; i<kSamples; ++i){
-		        for(int j=0; j<3; ++j) {
-			        gyrocope_[i][j] = static_cast<double>(mat.at<float>(i, j));
-		        }
-	        }
-            LOG(INFO) << "Gyroscope loaded";
-        }
-
-        if(load_control & IMU_ACCELEROMETER){
-	        cv::Mat mat = data_mat.colRange(layout_.accelerometer, layout_.accelerometer + 3);
-	        accelerometer_.resize(kSamples);
-	        for(int i=0; i<kSamples; ++i){
-		        for(int j=0; j<3; ++j) {
-			        accelerometer_[i][j] = static_cast<double>(mat.at<float>(i, j));
-		        }
-	        }
-            LOG(INFO) << "Accelerometer loaded";
-        }
-
-        if(load_control & IMU_LINEAR_ACCELERATION){
-	        cv::Mat mat = data_mat.colRange(layout_.linear_acceleration, layout_.linear_acceleration + 3);
-	        linear_acceleration_.resize(kSamples);
-	        for(int i=0; i<kSamples; ++i){
-		        for(int j=0; j<3; ++j) {
-			        linear_acceleration_[i][j] = static_cast<double>(mat.at<float>(i, j));
-		        }
-	        }
-            LOG(INFO) << "Linear acceleration loaded";
-        }
-
-        if(load_control & IMU_GRAVITY){
-	        cv::Mat mat = data_mat.colRange(layout_.gravity, layout_.gravity + 3);
-	        gravity_.resize(kSamples);
-	        for(int i=0; i<kSamples; ++i){
-		        for(int j=0; j<3; ++j) {
-			        gravity_[i][j] = static_cast<double>(mat.at<float>(i, j));
-		        }
-	        }
-            LOG(INFO) << "Gravity loaded";
-        }
-
-        if(load_control & IMU_ROTATION_VECTOR){
-	        cv::Mat mat = data_mat.colRange(layout_.rotation_vector, layout_.rotation_vector + 4);
-	        rotation_vector_.resize(kSamples);
-	        for(int i=0; i<kSamples; ++i){
-		        const double* v = (double *) mat.ptr(i);
-		        rotation_vector_[i].w() = v[0];
-		        rotation_vector_[i].x() = v[1];
-		        rotation_vector_[i].y() = v[2];
-		        rotation_vector_[i].z() = v[3];
-	        }
-            LOG(INFO) << "Rotation vector loaded";
-        }
+//		const double init_time = timestamp_[0];
+//		for(int i=0; i<kSamples; ++i){
+//			timestamp_[i] = timestamp_[i] - init_time;
+//		}
     }
 
 	void WriteToPly(const std::string& path, const std::vector<Eigen::Vector3d>& position,
