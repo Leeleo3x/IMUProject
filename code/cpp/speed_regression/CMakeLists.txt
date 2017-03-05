@@ -13,4 +13,4 @@ add_library(SpeedRegression speed_regression.h speed_regression.cpp)
 target_link_libraries(SpeedRegression ${OpenCV_LIBS} ${GLOG_LIBRARY})
 
 add_executable(SpeedRegression_cli main.cpp)
-target_link_libraries(SpeedRegression_cli SpeedRegression ${GFLAGS_LIBRARY})
+target_link_libraries(SpeedRegression_cli SpeedRegression ${GFLAGS_LIBRARY} IMUUtility)

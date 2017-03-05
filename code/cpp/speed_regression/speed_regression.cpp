@@ -9,11 +9,11 @@ using namespace cv;
 
 namespace IMUProject{
 
-	cv::Mat ComputeLocalSpeed(const std::vector<double>& time_stamp,
-	                          const std::vector<Eigen::Vector3d>& position,
-	                          const std::vector<Eigen::Quaterniond>& orientation,
-	                          const std::vector<int>& sample_points,
-	                          const int smooth_size){
+	cv::Mat ComputeLocalSpeedTarget(const std::vector<double>& time_stamp,
+	                                const std::vector<Eigen::Vector3d>& position,
+	                                const std::vector<Eigen::Quaterniond>& orientation,
+	                                const std::vector<int>& sample_points,
+	                                const int smooth_size){
 		const int N = (int)time_stamp.size();
 		CHECK_EQ(position.size(), N);
 		CHECK_EQ(orientation.size(), N);
@@ -46,19 +46,16 @@ namespace IMUProject{
 		return local_speed;
 	}
 
-	cv::Mat ComputeDirectFeature(const std::vector<Eigen::Vector3d>& gyro,
-	                             const std::vector<Eigen::Vector3d>& linacce,
-	                             const int smooth_size){
-		const int N = (int) gyro.size();
-		CHECK_EQ(N, (int)linacce.size());
+	cv::Mat ComputeDirectFeature(const Eigen::Vector3d* gyro,
+	                             const Eigen::Vector3d* linacce, const int N){
 		Mat feature(1, 6 * N, CV_32FC1, cv::Scalar::all(0));
 		for(int i=0; i<N; ++i){
-			feature.at<float>(i, 0) = (float) gyro[i][0];
-			feature.at<float>(i, 1) = (float) gyro[i][1];
-			feature.at<float>(i, 2) = (float) gyro[i][2];
-			feature.at<float>(i, 3) = (float) linacce[i][0];
-			feature.at<float>(i, 4) = (float) linacce[i][1];
-			feature.at<float>(i, 5) = (float) linacce[i][2];
+			feature.at<float>(0, i * 6 + 0) = (float) gyro[i][0];
+			feature.at<float>(0, i * 6 + 1) = (float) gyro[i][1];
+			feature.at<float>(0, i * 6 + 2) = (float) gyro[i][2];
+			feature.at<float>(0, i * 6 + 3) = (float) linacce[i][0];
+			feature.at<float>(0, i * 6 + 4) = (float) linacce[i][1];
+			feature.at<float>(0, i * 6 + 5) = (float) linacce[i][2];
 		}
 
 		return feature;
