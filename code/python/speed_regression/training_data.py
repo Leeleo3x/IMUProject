@@ -43,8 +43,6 @@ def compute_direct_features(data, samples, window_size):
     for i in range(samples.shape[0]):
         features[i, :] = data[samples[i] - window_size:samples[i]].flatten()
     return features
-    # return [list(data[ind - option.window_size_:ind].values.flatten())
-    #         for ind in samples]
 
 
 def compute_speed(time_stamp, position, sample_points=None):
@@ -92,7 +90,7 @@ def compute_delta_angle(time_stamp, position, orientation,
     :param local_axis: the viewing direction in the device frame. Default is set w.r.t. to android coord frame
     :return:
     """
-    if not sample_points:
+    if sample_points is None:
         sample_points = np.arange(0, time_stamp.shape[0], dtype=int)
     epsilon = 1e-10
     speed_dir = compute_speed(time_stamp, position)
@@ -111,7 +109,7 @@ def compute_delta_angle(time_stamp, position, orientation,
     return cos_array, valid_array
 
 
-def get_training_data(data_all, imu_columns, option, sample_points=None, **kwargs):
+def get_training_data(data_all, imu_columns, option, sample_points=None, extra_args=None, feature_only=False):
     """
     Create training data.
     :param data_all: The whole dataset. Must include 'time' column and all columns inside imu_columns
@@ -140,53 +138,25 @@ def get_training_data(data_all, imu_columns, option, sample_points=None, **kwarg
     elif option.target_ == 'local_speed':
         targets = compute_local_speed(time_stamp, pose_data, orientation)
 
-    if 'target_smooth_sigma' in kwargs:
-        targets = gaussian_filter1d(targets, sigma=kwargs['target_smooth_sigma'], axis=0)
+    if extra_args is not None:
+        if 'target_smooth_sigma' in extra_args:
+            print('Smoothing target with sigma: ', extra_args['target_smooth_sigma'])
+            targets = gaussian_filter1d(targets, sigma=extra_args['target_smooth_sigma'], axis=0)
 
     targets = targets[sample_points]
 
     if option.feature_ == 'direct':
-        features = [data_used[ind - option.window_size_:ind].flatten() for ind in sample_points]
+        features = compute_direct_features(data_used, sample_points, option.window_size_)
+        # features = [data_used[ind - option.window_size_:ind].flatten() for ind in sample_points]
     elif option.feature_ == 'fourier':
-        features = compute_fourier_features(data_used, sample_points, option.window_size_, kwargs['frq_threshold'],
-                                                  kwargs['discard_direct'])
+        print('Additional parameters: ', extra_args)
+        features = compute_fourier_features(data_used, sample_points, option.window_size_, extra_args['frq_threshold'],
+                                                  extra_args['discard_direct'])
     else:
         print('Feature type not supported: ' + option.feature_)
         raise ValueError
 
     return features, targets
-
-
-def get_orientation_training_data(data_all, camera_orientation, imu_columns, options, sample_points=None,
-                                  no_feature=False):
-    """
-    Get the 2D view angle feature.
-    :param data_all:
-    :param imu_columns:
-    :param options:
-    :param sample_points:
-    :return:
-    """
-    assert camera_orientation.shape[0] == data_all.shape[0]
-    if sample_points is None:
-        sample_points = np.arange(options.window_size_,
-                                  data_all.shape[0] - 1,
-                                  options.sample_step_,
-                                  dtype=int)
-    # Avoid out of bound error
-    if sample_points[-1] == data_all.shape[0] - 1:
-        sample_points[-1] -= 1
-    if sample_points[0] == 0:
-        sample_points[0] = 1
-    if not no_feature:
-        # Use the same algorithm to compute feature vectors
-        feature_mat = get_training_data(data_all, imu_columns, option=options, sample_points=sample_points)
-    else:
-        feature_mat = np.zeros([sample_points.shape[0], 1], dtype=float)
-    # Compute the cosine of the angle between camera viewing angle and moving angle
-    position_data = data_all[['pos_x', 'pos_y']].values
-    feature_mat[:, -1] = compute_delta_angle(time_stamp, position_data, camera_orientation, sample_points)
-    return feature_mat
 
 
 def split_data(data, ratio=0.3):

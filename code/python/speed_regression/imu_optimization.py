@@ -250,6 +250,31 @@ class AngleFunctor(SparseAccelerationBiasFunctor):
         return loss
 
 
+class LocalSpeedFunctor(SparseAccelerationBiasFunctor):
+
+    identifier_ = 'local_speed'
+
+    def __init__(self, time_stamp, orientation, linacce, variable_ind, speed_ind, target_local_speed):
+        super().__init__(time_stamp, orientation, linacce, variable_ind)
+        self.target_local_speed_ = target_local_speed
+        self.speed_ind_ = speed_ind
+        self.speed_ind_[0] = min(self.speed_ind_[0], 1)
+
+    def __call__(self, x, *args, **kwargs):
+        x = x.reshape([-1, self.initial_bias_.shape[1]])
+        corrected_linacce = self.correct_acceleration(self.linacce_, x)
+        directed_acce = rotate_vector(corrected_linacce, self.orientation_)
+        speed = np.cumsum(directed_acce[:-1] * self.interval_[:, None], axis=0)
+        # Notice that we do not pre-pend the initial zero speed here, so be careful about the
+        # orientation indexing below
+        local_speed = np.empty(speed.shape, dtype=float)
+        for i in range(speed.shape[0]):
+            q = quaternion.quaternion(*orientation[i+1])
+            local_speed[i] = (q.conj() * quaternion.quaternion(1.0, *speed[i]) * q).vec
+        loss = (local_speed[self.speed_ind_ - 1] - self.target_local_speed_).flatten()
+        return loss
+
+
 class SharedSpeedFunctorSet(SparseAccelerationBiasFunctor):
     """
     A collection of functors that require a shared rotation operation
@@ -300,8 +325,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('dir', type=str)
     parser.add_argument('model', type=str)
-    parser.add_argument('--method', type=str, default='speed_and_angle')
-    parser.add_argument('--step', type=int, default=10)
+    parser.add_argument('--step', type=int, default=200)
     parser.add_argument('--interval', type=int, default=20)
     parser.add_argument('--verbose', type=int, default=2)
     FLAGS = parser.parse_args()
@@ -321,7 +345,7 @@ if __name__ == '__main__':
     linacce = data_all[['linacce_x', 'linacce_y', 'linacce_z']].values
 
     # test_N = linacce.shape[0]
-    test_N = 100
+    test_N = 5000
 
     time_stamp = time_stamp[:test_N]
     linacce = linacce[:test_N]
@@ -334,15 +358,11 @@ if __name__ == '__main__':
     Construct constraints
     """
     print('Predicting speed...')
-    options = td.TrainingDataOption(feature='fourier', sample_step=FLAGS.step, frq_threshold=100)
-    # constraint_ind = np.arange(options.window_size_, test_N - 1,
-    #                            options.sample_step_,
-    #                            dtype=int)
+    options = td.TrainingDataOption(feature='direct', sample_step=FLAGS.step, window_size=400)
 
-    constraint_ind = np.arange(0, test_N - 1,
+    constraint_ind = np.arange(options.window_size_, test_N - 1,
                                options.sample_step_,
                                dtype=int)
-    print('Constraint id:', constraint_ind)
     warnings.warn('Currently using ground truth as constraint')
     position_tango = data_all[['pos_x', 'pos_y', 'pos_z']].values
     predicted_speed = td.compute_speed(time_stamp, position_tango, constraint_ind)
@@ -353,11 +373,28 @@ if __name__ == '__main__':
     predicted_speed_margnitude = np.linalg.norm(predicted_speed, axis=1)
 
     # predicted_cos_array = None
-    # if FLAGS.method == 'speed_and_angle':
     predicted_cos_array, valid_array = td.compute_delta_angle(time_stamp,
                                                               position=position_tango,
                                                               orientation=orientation,
                                                               sample_points=constraint_ind)
+
+    # predicted_local_speed = td.compute_local_speed(time_stamp,
+    #                                                position=position_tango,
+    #                                                orientation=orientation)
+    # predicted_local_speed = gaussian_filter1d(predicted_local_speed, sigma=10.0, axis=0)
+    # predicted_local_speed = predicted_local_speed[constraint_ind]
+
+    # regress the local speed
+    predicted_local_speed = np.empty([constraint_ind.shape[0], 3], dtype=float)
+    for i in range(3):
+        model_path = '../../../models/model_direct_local_speed_w400_s10_small.svm_{}'.format(i)
+        regressor = joblib.load(model_path)
+        print(model_path + ' loaded')
+        print('Predicting channel ', i)
+        test_feature, _ = td.get_training_data(data_all, imu_columns, options, constraint_ind)
+        print(test_feature.shape)
+        predicted_local_speed[:, i] = regressor.predict(test_feature)
+
 
     # NOTICE: the values inside the cos_array are not all valid (the speed direction is undefined for static camera).
     #         Therefore it is necessary to construct a separate constraint index array
@@ -393,31 +430,34 @@ if __name__ == '__main__':
     vertical_speed = VerticalSpeedFunctor(time_stamp, orientation, linacce, predicted_speed[:, 2][:, None],
                                           constraint_ind, variable_ind)
     angle_cosine = AngleFunctor(time_stamp, orientation, linacce, predicted_cos_array, constraint_ind_angle, variable_ind)
+
+    local_speed_functor = LocalSpeedFunctor(time_stamp, orientation, linacce, variable_ind,
+                                            constraint_ind, predicted_local_speed)
+
     speed_constraints = SharedSpeedFunctorSet(time_stamp, orientation, linacce, variable_ind)
 
     sigma_zp = 1.0
     sigma_a = 1.0
     sigma_s = 1.0
     sigma_vs = 1.0
+    sigma_ls = 1.0
 
-    speed_constraints.add_functor(magnitude_functor, [magnitude_functor.identifier_], sigma_s)
+    # speed_constraints.add_functor(magnitude_functor, [magnitude_functor.identifier_], sigma_s)
     # speed_constraints.add_functor(zero_z_translation, sigma_zp)
     # speed_constraints.add_functor(angle_cosine, [angle_cosine.identifier_], sigma_a)
-    speed_constraints.add_functor(vertical_speed, [vertical_speed.identifier_], sigma_vs)
-    cost_function.add_functor(speed_constraints, speed_constraints.identifiers_)
+    # speed_constraints.add_functor(vertical_speed, [vertical_speed.identifier_], sigma_vs)
+
+    # speed_constraints.add_functor(local_speed_functor, [local_speed_functor.identifier_], sigma_ls)
+    # cost_function.add_functor(speed_constraints, speed_constraints.identifiers_)
+    cost_function.add_functor(local_speed_functor, [local_speed_functor.identifier_], sigma_ls)
 
     print('Solving...')
     print('Functors: ', cost_function.identifiers_)
-    output_name = 'speed_magnitude_vertical_speed_{}'.format(test_N)
+    output_name = 'local_speed_{}'.format(test_N)
     max_nfev = 50
 
     # Optimize
     init_bias = np.zeros(variable_ind.shape[0] * 3, dtype=float)
-
-    # Inspect the initial residual
-    init_residual = cost_function(init_bias)
-    print('Init residual: ', init_residual)
-    print(np.dot(init_residual, init_residual))
 
     start_t = time.clock()
     optimizer = least_squares(cost_function, init_bias, jac='2-point',
@@ -491,4 +531,7 @@ if __name__ == '__main__':
         plt.plot(time_stamp[1:], raw_speed[:, 2])
         plt.plot(time_stamp[1:], corrected_speed[:, 2])
         plt.legend(['Ground truth', 'Raw', 'Corrected'])
+
+    # if LocalSpeedFunctor.identifier_ in  cost_function.identifiers_:
+
     plt.show()

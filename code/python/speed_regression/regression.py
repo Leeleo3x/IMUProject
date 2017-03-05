@@ -20,10 +20,10 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('list')
     parser.add_argument('--window', default=200, type=int)
-    parser.add_argument('--step', default=5, type=int)
+    parser.add_argument('--step', default=10, type=int)
     parser.add_argument('--feature', default='direct', type=str)
     parser.add_argument('--target', default='local_speed', type=str)
-    parser.add_argument('--frq_threshold', default=100, type=int)
+    parser.add_argument('--frq_threshold', default=50, type=int)
     parser.add_argument('--discard_direct', default=True, type=bool)
     parser.add_argument('--split_ratio', default=0.3, type=float)
     parser.add_argument('--output', default='', type=str)
@@ -61,10 +61,11 @@ if __name__ == '__main__':
         print('Creating training set')
         imu_columns = ['gyro_x', 'gyro_y', 'gyro_z', 'linacce_x', 'linacce_y', 'linacce_z']
 
-        kwargs = {'frq_threshold', args.frq_threshold,
-                  'discard_direct', args.discard_direct}
+        extra_args = {'frq_threshold': args.frq_threshold,
+                      'discard_direct': args.discard_direct,
+                      'target_smooth_sigma': 10}
         training_feature, training_target = td.get_training_data(data_all=data_all, imu_columns=imu_columns,
-                                                                 option=options, kwargs=kwargs)
+                                                                 option=options, extra_args=extra_args)
         training_feature_all.append(training_feature)
         training_target_all.append(training_target)
 
@@ -100,9 +101,8 @@ if __name__ == '__main__':
             #                'loss': ['squared_loss', 'huber', 'epsilon_insensitive']}
             # grid_searcher = GridSearchCV(SGDRegressor(loss='epsilon_insensitive'), search_dict, n_jobs=6, verbose=3)
 
-            search_dict = {'C': [0.01, 0.1, 1.0, 10.0],
+            search_dict = {'C': [0.1, 1.0, 10.0],
                            'epsilon': [0.001, 0.01, 0.1, 1.0],
-                           'gamma': [0.0001, 0.001, 0.01, 0.1],
                            'kernel': ['rbf']}
             grid_searcher = GridSearchCV(svm.SVR(), search_dict, n_jobs=6, verbose=3)
 
