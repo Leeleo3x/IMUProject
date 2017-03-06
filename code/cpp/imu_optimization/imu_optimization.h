@@ -5,6 +5,8 @@
 #ifndef PROJECT_IMU_OPTIMIZATION_H
 #define PROJECT_IMU_OPTIMIZATION_H
 
+#include <memory>
+
 #include <opencv2/opencv.hpp>
 #include <Eigen/Eigen>
 #include <glog/logging.h>
@@ -13,17 +15,16 @@
 namespace IMUProject {
 
 	struct Config {
-		static constexpr int kTotalCount = 15200;
-		static constexpr int kConstriantPoints = 1520;
-		static constexpr int kSparsePoints = 760;
-		static constexpr int kSparseInterval = 20;
+		static constexpr int kTotalCount = 13200;
+		static constexpr int kConstriantPoints = 130;
+		static constexpr int kSparsePoints = 132;
 	};
 
 
-    class SparseGridInterpolator{
-    public:
-        SparseGridInterpolator(const std::vector<double>& time_stamp, const int variable_count,
-                               const std::vector<int>* variable_ind = nullptr);
+	class SparseGrid{
+	public:
+		SparseGrid(const std::vector<double>& time_stamp, const int variable_count,
+		           const std::vector<int>* variable_ind = nullptr);
 
         inline const std::vector<double>& GetAlpha() const {return alpha_;}
         inline double GetAlphaAt(const int ind) const{
@@ -133,22 +134,18 @@ namespace IMUProject {
 			                                                (T) std::numeric_limits<double>::epsilon(),
 			                                                (T) std::numeric_limits<double>::epsilon());
 
-			directed_acce[0] = (rotations_[0] * linacce_[0]).cast<T>();
+			directed_acce[0] = (orientation_[0] * linacce_[0]).cast<T>();
 // #pragma omp parallel for
 			for (int i = 0; i < Config::kTotalCount; ++i) {
-				const int inv_ind = inverse_ind_[i];
+				const int inv_ind = grid_->GetInverseIndAt(i);
 				Eigen::Matrix<T, 3, 1> corrected_acce =
-						linacce_[i] + Eigen::Matrix<T, 3, 1>(alpha_[i] * bx[inv_ind],
-						                                     alpha_[i] * by[inv_ind],
-						                                     alpha_[i] * bz[inv_ind]);
+						linacce_[i] + grid_->GetAlphaAt(i) * Eigen::Matrix<T, 3, 1>(bx[inv_ind], by[inv_ind], bz[inv_ind]);
 				if (inv_ind > 0) {
 					corrected_acce = corrected_acce +
-					                 Eigen::Matrix<T, 3, 1>((1.0 - alpha_[i]) * bx[inv_ind - 1],
-					                                        (1.0 - alpha_[i]) * by[inv_ind - 1],
-					                                        (1.0 - alpha_[i]) * bz[inv_ind - 1]);
+					                 (1.0 - grid_->GetAlphaAt(i)) * Eigen::Matrix<T, 3, 1>(bx[inv_ind - 1], by[inv_ind - 1], bz[inv_ind - 1]);
 				}
 				if (i > 0) {
-					directed_acce[i] = rotations_[i] * corrected_acce;
+					directed_acce[i] = orientation_[i] * corrected_acce;
 					speed[i] = speed[i - 1] + (directed_acce[i - 1]) * dt_[i - 1];
 				}
 			}
@@ -161,19 +158,15 @@ namespace IMUProject {
 			return true;
 		}
 #endif
-		std::vector<Eigen::Vector3d> correcte_acceleration(const std::vector<Eigen::Vector3d> &input,
-														   const std::vector<double> &bx,
-														   const std::vector<double> &by,
-														   const std::vector<double> &bz);
-
 	private:
+
+		std::shared_ptr<SparseGrid> grid_;
+
 		const std::vector<Eigen::Vector3d> &linacce_;
 		//store all quaternions as rotation matrix
-		std::vector<Eigen::Matrix3d> rotations_;
-		std::vector<double> alpha_;
+		const std::vector<Eigen::Quaterniond>& orientation_;
 		std::vector<double> dt_;
-		std::vector<int> inverse_ind_;
-		std::vector<int> variable_ind_;
+
 		const std::vector<int> constraint_ind_;
 		const std::vector<double> target_speed_mag_;
 		const std::vector<double> target_vspeed_;
@@ -184,6 +177,115 @@ namespace IMUProject {
 		const double weight_vs_;
 	};
 
+	template <int KVARIABLE, int KCONSTRAINT>
+	struct LocalSpeedFunctor{
+	public:
+		LocalSpeedFunctor(const std::vector<double> &time_stamp,
+		                  const std::vector<Eigen::Vector3d> &linacce,
+		                  const std::vector<Eigen::Quaterniond> &orientation,
+		                  const std::vector<int>& constraint_ind,
+		                  const std::vector<Eigen::Vector3d> &local_speed,
+		                  const Eigen::Vector3d init_speed, const double weight_ls = 1.0):
+				linacce_(linacce), constraint_ind_(constraint_ind),
+				local_speed_(local_speed), init_speed_(init_speed), weight_ls_(std::sqrt(weight_ls)){
+			CHECK_EQ(local_speed.size(), KCONSTRAINT);
+			CHECK_EQ(constraint_ind.size(), KCONSTRAINT);
+			grid_.reset(new SparseGrid(time_stamp, KVARIABLE));
+			dt_.resize(time_stamp.size(), 0.0);
+			for(int i=0; i < dt_.size() - 1; ++i){
+				dt_[i] = time_stamp[i+1] - time_stamp[i];
+			}
+			orientation_.resize(orientation.size());
+			for(auto i=0; i<orientation.size(); ++i){
+				orientation_[i] = orientation[i].toRotationMatrix();
+			}
+		}
+
+		inline const SparseGrid* GetGrid() const{
+			return grid_.get();
+		}
+#if false
+		bool operator() (const double* const bx, const double* const by, const double* const bz, double* residual) const{
+				for (int i = 0; i < KCONSTRAINT * 3; ++i) {
+					residual[i] = 0.0;
+				}
+
+				std::vector<Eigen::Matrix <double, 3, 1> > directed_acce(linacce_.size());
+				std::vector<Eigen::Matrix <double, 3, 1> > speed((size_t) Config::kTotalCount);
+				speed[0] = init_speed_ + Eigen::Matrix <double, 3, 1>(std::numeric_limits<double>::epsilon(),
+				                                                      std::numeric_limits<double>::epsilon(),
+				                                                      std::numeric_limits<double>::epsilon());
+
+				directed_acce[0] = (orientation_[0] * linacce_[0]);
+				for (int i = 0; i < Config::kTotalCount; ++i) {
+					const int inv_ind = grid_->GetInverseIndAt(i);
+					Eigen::Matrix<double, 3, 1> corrected_acce =
+							linacce_[i] + grid_->GetAlphaAt(i) * Eigen::Matrix<double, 3, 1>(bx[inv_ind], by[inv_ind], bz[inv_ind]);
+					if (inv_ind > 0) {
+						corrected_acce = corrected_acce + (1.0 - grid_->GetAlphaAt(i)) *
+						                 Eigen::Matrix<double, 3, 1>(bx[inv_ind - 1], by[inv_ind - 1], bz[inv_ind - 1]);
+					}
+					if (i > 0) {
+						directed_acce[i] = orientation_[i] * corrected_acce;
+						speed[i] = speed[i - 1] + dt_[i-1] * directed_acce[i - 1];
+					}
+				}
+
+				for (int cid = 0; cid < constraint_ind_.size(); ++cid) {
+					const int ind = constraint_ind_[cid];
+					Eigen::Vector3d ls = orientation_[ind].conjugate() * speed[ind];
+					residual[cid] = weight_ls_ * (ls[0] - local_speed_[cid][0]);
+					residual[cid + KCONSTRAINT] = weight_ls_ * (ls[1] - local_speed_[cid][1]);
+					residual[cid + 2 * KCONSTRAINT] = weight_ls_ * (ls[2] - local_speed_[cid][2]);
+				}
+				return true;
+			}
+#else
+		template <typename T>
+		bool operator() (const T* const bx, const T* const by, const T* const bz, T* residual) const{
+			std::vector<Eigen::Matrix <T, 3, 1> > directed_acce(linacce_.size());
+			std::vector<Eigen::Matrix <T, 3, 1> > speed((size_t) Config::kTotalCount);
+			speed[0] = init_speed_ + Eigen::Matrix <T, 3, 1>((T)std::numeric_limits<double>::epsilon(),
+			                                                 (T)std::numeric_limits<double>::epsilon(),
+			                                                 (T)std::numeric_limits<double>::epsilon());
+
+			directed_acce[0] = (orientation_[0] * linacce_[0]).template cast<T>();
+			for (int i = 0; i < Config::kTotalCount; ++i) {
+				const int inv_ind = grid_->GetInverseIndAt(i);
+				Eigen::Matrix<T, 3, 1> corrected_acce =
+						linacce_[i] + grid_->GetAlphaAt(i) * Eigen::Matrix<T, 3, 1>(bx[inv_ind], by[inv_ind], bz[inv_ind]);
+				if (inv_ind > 0) {
+					corrected_acce = corrected_acce + (1.0 - grid_->GetAlphaAt(i)) *
+					                                  Eigen::Matrix<T, 3, 1>(bx[inv_ind - 1], by[inv_ind - 1], bz[inv_ind - 1]);
+				}
+				if (i > 0) {
+					directed_acce[i] = orientation_[i] * corrected_acce;
+					speed[i] = speed[i - 1] + directed_acce[i - 1] * dt_[i - 1];
+				}
+			}
+
+			for (int cid = 0; cid < constraint_ind_.size(); ++cid) {
+				const int ind = constraint_ind_[cid];
+				Eigen::Matrix<T, 3, 1> ls = orientation_[ind].transpose() * speed[ind];
+				residual[cid] = weight_ls_ * (ls[0] - (T)local_speed_[cid][0]);
+				residual[cid + KCONSTRAINT] = weight_ls_ * (ls[1] - (T)local_speed_[cid][1]);
+				residual[cid + 2 * KCONSTRAINT] = weight_ls_ * (ls[2] - (T)local_speed_[cid][2]);
+			}
+			return true;
+		}
+#endif
+
+	private:
+		std::shared_ptr<SparseGrid> grid_;
+		std::vector<double> dt_;
+		const std::vector<Eigen::Vector3d>& linacce_;
+		std::vector<Eigen::Matrix3d> orientation_;
+		const std::vector<int>& constraint_ind_;
+		const std::vector<Eigen::Vector3d>& local_speed_;
+
+		const Eigen::Vector3d init_speed_;
+		const double weight_ls_;
+	};
 
 	struct WeightDecay {
 	public:
@@ -196,14 +298,6 @@ namespace IMUProject {
 			}
 			return true;
 		}
-
-//        bool operator () (const double* const x, double* residual) const{
-//            for(int i=0; i<Config::kSparsePoints; ++i){
-//                residual[i] = weight_ * x[i];
-//            }
-//            return true;
-//        }
-
 	private:
 		const double weight_;
 	};

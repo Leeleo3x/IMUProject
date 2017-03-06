@@ -59,6 +59,7 @@ namespace IMUProject{
         for(int i=0; i<kSamples; ++i){
             timestamp_[i] = timestamp_[i] / kNanoToSec;
         }
+
 //		const double init_time = timestamp_[0];
 //		for(int i=0; i<kSamples; ++i){
 //			timestamp_[i] = timestamp_[i] - init_time;

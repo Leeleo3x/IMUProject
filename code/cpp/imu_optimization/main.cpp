@@ -14,12 +14,15 @@
 
 #include <utility/data_io.h>
 #include <utility/utility.h>
+#include <speed_regression/speed_regression.h>
 
 #include "imu_optimization.h"
 
 using namespace std;
 
 DEFINE_int32(max_iter, 500, "maximum iteration");
+DEFINE_int32(window, 200, "Window size");
+DEFINE_string(model_path, "../../../../models", "Path to models");
 
 int main(int argc, char** argv) {
     if (argc < 2) {
@@ -35,54 +38,58 @@ int main(int argc, char** argv) {
 
     printf("Loading...\n");
     IMUProject::IMUDataset dataset(argv[1]);
+	printf("Total count: %d\n", (int)dataset.GetTimeStamp().size());
+	CHECK_GT(dataset.GetTimeStamp().size(), IMUProject::Config::kTotalCount);
 	const std::vector<double> ts(dataset.GetTimeStamp().begin(),
 	                             dataset.GetTimeStamp().begin() + IMUProject::Config::kTotalCount);
+	const std::vector<Eigen::Vector3d> gyro(dataset.GetGyro().begin(),
+	                                        dataset.GetGyro().begin() + IMUProject::Config::kTotalCount);
 	const std::vector<Eigen::Vector3d> linacce(dataset.GetLinearAcceleration().begin(),
 	                                           dataset.GetLinearAcceleration().begin() + IMUProject::Config::kTotalCount);
 	const std::vector<Eigen::Quaterniond> orientation(dataset.GetOrientation().begin(),
 	                                                  dataset.GetOrientation().begin() + IMUProject::Config::kTotalCount);
 
+	// Load regressors
+	std::vector<cv::Ptr<cv::ml::SVM> > regressors(3);
+	for(int i = 0; i<3; ++i){
+		sprintf(buffer, "%s/model_direct_local_speed_w200_s10_%d_cv.yml", FLAGS_model_path.c_str(), i);
+		regressors[i] = cv::ml::SVM::load(buffer);
+		cout << buffer << " loaded" << endl;
+		CHECK(regressors[i].get()) << "Can not load " << buffer;
+	}
+
 	// Load constraints
-	std::vector<double> target_speed_mag;
-    std::vector<double> target_vspeed;
-    std::vector<int> constraint_ind;
+	std::vector<int> constraint_ind;
+	std::vector<Eigen::Vector3d> local_speed;
 
-    {
-        // load speed magnitude
-        sprintf(buffer, "%s/processed/speed_magnitude.txt", argv[1]);
-        ifstream sm_in(buffer);
-        CHECK(sm_in.is_open()) << "Can not open file " << buffer;
-        int kSMConstraints;
-        sm_in >> kSMConstraints;
-	    CHECK_GE(kSMConstraints, IMUProject::Config::kConstriantPoints);
-        target_speed_mag.resize((size_t) IMUProject::Config::kConstriantPoints);
-        constraint_ind.resize((size_t) IMUProject::Config::kConstriantPoints);
-        for (int i = 0; i < IMUProject::Config::kConstriantPoints; ++i) {
-            sm_in >> constraint_ind[i] >> target_speed_mag[i];
-        }
-    }
+	{
+		// regress local speed
+		constraint_ind.resize(IMUProject::Config::kConstriantPoints);
+		local_speed.resize(constraint_ind.size(), Eigen::Vector3d(0, 0, 0));
+		constraint_ind[0] = FLAGS_window;
+		const int constraint_interval = (IMUProject::Config::kTotalCount - FLAGS_window) /
+				(IMUProject::Config::kConstriantPoints - 1);
 
-    {
-        // load vertical speed
-        sprintf(buffer, "%s/processed/vertical_speed.txt", argv[1]);
-        ifstream vs_in(buffer);
-        CHECK(vs_in.is_open()) << "Can not open file " << buffer;
-        int kVSConstraints;
-        vs_in >> kVSConstraints;
-        target_vspeed.resize((size_t) IMUProject::Config::kConstriantPoints);
-        int cid;
-        for (int i = 0; i < IMUProject::Config::kConstriantPoints; ++i) {
-            vs_in >> cid;
-            CHECK_EQ(cid, constraint_ind[i]);
-            vs_in >> target_vspeed[i];
-        }
-    }
+		for(int i=1; i<constraint_ind.size(); ++i){
+			constraint_ind[i] = constraint_ind[i-1] + constraint_interval;
+		}
+
+		printf("Regressing local speed...\n");
+		for(int i=0; i<constraint_ind.size(); ++i){
+			const int sid = constraint_ind[i] - FLAGS_window;
+			const int eid = constraint_ind[i];
+			cv::Mat feature = IMUProject::ComputeDirectFeature(&gyro[sid], &linacce[sid], FLAGS_window);
+			for(int j=0; j<regressors.size(); ++j){
+				local_speed[i][j] = static_cast<double>(regressors[j]->predict(feature));
+			}
+		}
+	}
 
 
-    // Formulate problem
+	// Formulate problem
     printf("Constructing problem...\n");
     ceres::Problem problem;
-    constexpr int kResiduals = IMUProject::Config::kConstriantPoints * 2;
+    constexpr int kResiduals = IMUProject::Config::kConstriantPoints;
     constexpr int kSparsePoint = IMUProject::Config::kSparsePoints;
     // Initialize bias with gaussian distribution
     std::vector<double> bx((size_t)kSparsePoint, 0.0), by((size_t)kSparsePoint, 0.0), bz((size_t)kSparsePoint,0.0);
@@ -94,17 +101,12 @@ int main(int argc, char** argv) {
         bz[i] = distribution(generator);
     }
 
-	IMUProject::SizedSharedSpeedFunctor* functor = new IMUProject::SizedSharedSpeedFunctor(ts, linacce, orientation,
-	                                                                                       constraint_ind, target_speed_mag, target_vspeed,
-	                                                                                       Eigen::Vector3d(0, 0, 0), 1.0);
+	IMUProject::LocalSpeedFunctor<kSparsePoint, kResiduals>* functor =
+			new IMUProject::LocalSpeedFunctor<kSparsePoint, kResiduals>(ts, linacce, orientation, constraint_ind, local_speed, Eigen::Vector3d(0, 0, 0));
 
-//    ceres::CostFunction *cost_function =
-//            new ceres::NumericDiffCostFunction<IMUProject::SizedSharedSpeedFunctor, ceres::CENTRAL, kResiduals, kSparsePoint, kSparsePoint, kSparsePoint>(
-//                    functor);
-
-	ceres::CostFunction *cost_function =
-			new ceres::AutoDiffCostFunction<IMUProject::SizedSharedSpeedFunctor, kResiduals, kSparsePoint, kSparsePoint, kSparsePoint>(functor);
-    problem.AddResidualBlock(cost_function, nullptr, bx.data(), by.data(), bz.data());
+	constexpr int kVar = IMUProject::Config::kSparsePoints;
+	problem.AddResidualBlock(new ceres::AutoDiffCostFunction<IMUProject::LocalSpeedFunctor<kSparsePoint, kResiduals>, kResiduals * 3, kSparsePoint, kSparsePoint, kSparsePoint>(
+			functor), nullptr, bx.data(), by.data(), bz.data());
 
     problem.AddResidualBlock(new ceres::AutoDiffCostFunction<IMUProject::WeightDecay, kSparsePoint, kSparsePoint>(
             new IMUProject::WeightDecay(1.0)
@@ -135,8 +137,9 @@ int main(int argc, char** argv) {
 
 	// Compute corrected trajectory
 	printf("Computing trajectory...\n");
-	std::vector<Eigen::Vector3d> corrected_linacce = functor->correcte_acceleration(linacce, bx, by, bz);
 
+	std::vector<Eigen::Vector3d> corrected_linacce = linacce;
+	functor->GetGrid()->correct_bias<double>(corrected_linacce.data(), bx.data(), by.data(), bz.data());
 	std::vector<Eigen::Vector3d> corrected_position =
 			IMUProject::Integration(ts,
 			                        IMUProject::Integration(ts,
