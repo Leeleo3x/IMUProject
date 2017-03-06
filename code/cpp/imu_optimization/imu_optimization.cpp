@@ -65,8 +65,8 @@ namespace IMUProject {
 
 		grid_.reset(new SparseGrid(time_stamp, Config::kSparsePoints));
 
-		dt_.resize(Config::kTotalCount, 0);
-		for (int i = 0; i < Config::kTotalCount - 1; ++i) {
+		dt_.resize((int)grid_->GetTotalCount(), 0);
+		for (int i = 0; i < grid_->GetTotalCount() - 1; ++i) {
 			dt_[i] = time_stamp[i + 1] - time_stamp[i];
 		}
 		dt_[dt_.size() - 1] = dt_[dt_.size() - 2];

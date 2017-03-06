@@ -67,7 +67,7 @@ namespace IMUProject{
     }
 
 	void WriteToPly(const std::string& path, const std::vector<Eigen::Vector3d>& position,
-	                const std::vector<Eigen::Quaterniond>& orientation,
+	                const std::vector<Eigen::Quaterniond>& orientation, const bool only_xy,
 	                const double axis_length, const int kpoints, const int interval){
 	    using TriMesh = OpenMesh::TriMesh_ArrayKernelT<>;
 	    TriMesh mesh;
@@ -78,7 +78,11 @@ namespace IMUProject{
 
 	    // First add trajectory points
 	    for (int i = 0; i < position.size(); ++i) {
-		    TriMesh::VertexHandle vertex = mesh.add_vertex(TriMesh::Point(position[i][0], position[i][1], position[i][2]));
+			Eigen::Vector3d pt = position[i];
+			if(only_xy){
+				pt[2] = 0.0;
+			}
+		    TriMesh::VertexHandle vertex = mesh.add_vertex(TriMesh::Point(pt[0], pt[1], pt[2]));
 		    mesh.set_color(vertex, TriMesh::Color(traj_color[0], traj_color[1], traj_color[2]));
 	    }
 
@@ -89,7 +93,11 @@ namespace IMUProject{
 			    Eigen::Matrix3d axis_dir = orientation[i].toRotationMatrix() * local_axis;
 			    for (int j = 0; j < kpoints; ++j) {
 				    for(int k=0; k<3; ++k){
-					    Eigen::Vector3d pt = position[i] + axis_length / kpoints * j * axis_dir.block<3,1>(0, k);
+						Eigen::Vector3d pos = position[i];
+						if(only_xy){
+							pos[2] = 0.0;
+						}
+						Eigen::Vector3d pt = pos + axis_length / kpoints * j * axis_dir.block<3,1>(0, k);
 					    TriMesh::VertexHandle vertex = mesh.add_vertex(TriMesh::Point(pt[0], pt[1], pt[2]));
 					    mesh.set_color(vertex, TriMesh::Color(axis_color[k][0], axis_color[k][1], axis_color[k][2]));
 				    }

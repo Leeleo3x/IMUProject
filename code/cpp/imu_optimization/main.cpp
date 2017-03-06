@@ -23,6 +23,9 @@ using namespace std;
 DEFINE_int32(max_iter, 500, "maximum iteration");
 DEFINE_int32(window, 200, "Window size");
 DEFINE_string(model_path, "../../../../models", "Path to models");
+DEFINE_bool(gt, false, "Use ground truth");
+DEFINE_double(weight_ls, 1.0, "The weight of local speed residual");
+DEFINE_double(weight_vs, 1.0, "The weight of vertical speed residual");
 
 int main(int argc, char** argv) {
     if (argc < 2) {
@@ -38,43 +41,66 @@ int main(int argc, char** argv) {
 
     printf("Loading...\n");
     IMUProject::IMUDataset dataset(argv[1]);
-	printf("Total count: %d\n", (int)dataset.GetTimeStamp().size());
-	CHECK_GT(dataset.GetTimeStamp().size(), IMUProject::Config::kTotalCount);
+	const int kTotalCount = (int)dataset.GetTimeStamp().size();
+	printf("Total count: %d\n", kTotalCount);
 	const std::vector<double> ts(dataset.GetTimeStamp().begin(),
-	                             dataset.GetTimeStamp().begin() + IMUProject::Config::kTotalCount);
+	                             dataset.GetTimeStamp().begin() + kTotalCount);
 	const std::vector<Eigen::Vector3d> gyro(dataset.GetGyro().begin(),
-	                                        dataset.GetGyro().begin() + IMUProject::Config::kTotalCount);
+	                                        dataset.GetGyro().begin() + kTotalCount);
 	const std::vector<Eigen::Vector3d> linacce(dataset.GetLinearAcceleration().begin(),
-	                                           dataset.GetLinearAcceleration().begin() + IMUProject::Config::kTotalCount);
+	                                           dataset.GetLinearAcceleration().begin() + kTotalCount);
 	const std::vector<Eigen::Quaterniond> orientation(dataset.GetOrientation().begin(),
-	                                                  dataset.GetOrientation().begin() + IMUProject::Config::kTotalCount);
+	                                                  dataset.GetOrientation().begin() + kTotalCount);
 
-	// Load regressors
-	std::vector<cv::Ptr<cv::ml::SVM> > regressors(3);
-	for(int i = 0; i<3; ++i){
-		sprintf(buffer, "%s/model_direct_local_speed_w200_s10_%d_cv.yml", FLAGS_model_path.c_str(), i);
-		regressors[i] = cv::ml::SVM::load(buffer);
-		cout << buffer << " loaded" << endl;
-		CHECK(regressors[i].get()) << "Can not load " << buffer;
-	}
+//	std::vector<Eigen::Quaterniond> orientation(dataset.GetRotationVector().begin(),
+//												dataset.GetRotationVector().begin() + kTotalCount);
+//
+//	const Eigen::Quaterniond& tango_init_ori = dataset.GetOrientation()[0];
+//	const Eigen::Quaterniond imu_init_ori = orientation[0];
+//	auto align_ori = tango_init_ori * imu_init_ori.conjugate();
+//	for(auto i=0; i<orientation.size(); ++i){
+//		orientation[i] = align_ori * orientation[i];
+//	}
 
 	// Load constraints
 	std::vector<int> constraint_ind;
 	std::vector<Eigen::Vector3d> local_speed;
 
-	{
-		// regress local speed
-		constraint_ind.resize(IMUProject::Config::kConstriantPoints);
-		local_speed.resize(constraint_ind.size(), Eigen::Vector3d(0, 0, 0));
-		constraint_ind[0] = FLAGS_window;
-		const int constraint_interval = (IMUProject::Config::kTotalCount - FLAGS_window) /
-				(IMUProject::Config::kConstriantPoints - 1);
+	// regress local speed
+	constraint_ind.resize(IMUProject::Config::kConstriantPoints);
+	local_speed.resize(constraint_ind.size(), Eigen::Vector3d(0, 0, 0));
+	constraint_ind[0] = FLAGS_window;
+	const int constraint_interval = (kTotalCount - FLAGS_window) /
+									(IMUProject::Config::kConstriantPoints - 1);
 
-		for(int i=1; i<constraint_ind.size(); ++i){
-			constraint_ind[i] = constraint_ind[i-1] + constraint_interval;
+	for(int i=1; i<constraint_ind.size(); ++i){
+		constraint_ind[i] = constraint_ind[i-1] + constraint_interval;
+	}
+
+	if(FLAGS_gt){
+		LOG(WARNING) << "Using ground truth as constraint";
+		const std::vector<Eigen::Vector3d> positions(
+				dataset.GetPosition().begin(),
+				dataset.GetPosition().begin() + kTotalCount);
+		cv::Mat local_speed_mat = IMUProject::ComputeLocalSpeedTarget(ts, positions, orientation, constraint_ind, 10);
+		CHECK_EQ(local_speed_mat.rows, local_speed.size());
+		for(auto i=0; i<local_speed.size(); ++i){
+			local_speed[i][0] = (double)local_speed_mat.at<float>(i, 0);
+			local_speed[i][1] = (double)local_speed_mat.at<float>(i, 1);
+			local_speed[i][2] = (double)local_speed_mat.at<float>(i, 2);
+		}
+	}else{
+		printf("Regressing local speed...\n");
+		// Load regressors
+		std::vector<cv::Ptr<cv::ml::SVM> > regressors(3);
+		for(int i = 0; i<3; ++i){
+			sprintf(buffer, "%s/model_0306_w200_s10_%d_cv.yml", FLAGS_model_path.c_str(), i);
+			regressors[i] = cv::ml::SVM::load(buffer);
+			cout << buffer << " loaded" << endl;
+			CHECK(regressors[i].get()) << "Can not load " << buffer;
 		}
 
-		printf("Regressing local speed...\n");
+#pragma omp parallel for
 		for(int i=0; i<constraint_ind.size(); ++i){
 			const int sid = constraint_ind[i] - FLAGS_window;
 			const int eid = constraint_ind[i];
@@ -84,6 +110,7 @@ int main(int argc, char** argv) {
 			}
 		}
 	}
+
 
 
 	// Formulate problem
@@ -102,10 +129,11 @@ int main(int argc, char** argv) {
     }
 
 	IMUProject::LocalSpeedFunctor<kSparsePoint, kResiduals>* functor =
-			new IMUProject::LocalSpeedFunctor<kSparsePoint, kResiduals>(ts, linacce, orientation, constraint_ind, local_speed, Eigen::Vector3d(0, 0, 0));
+			new IMUProject::LocalSpeedFunctor<kSparsePoint, kResiduals>(ts, linacce, orientation, constraint_ind,
+																		local_speed, Eigen::Vector3d(0, 0, 0), FLAGS_weight_ls, FLAGS_weight_vs);
 
 	constexpr int kVar = IMUProject::Config::kSparsePoints;
-	problem.AddResidualBlock(new ceres::AutoDiffCostFunction<IMUProject::LocalSpeedFunctor<kSparsePoint, kResiduals>, kResiduals * 3, kSparsePoint, kSparsePoint, kSparsePoint>(
+	problem.AddResidualBlock(new ceres::AutoDiffCostFunction<IMUProject::LocalSpeedFunctor<kSparsePoint, kResiduals>, 3 * kResiduals, kSparsePoint, kSparsePoint, kSparsePoint>(
 			functor), nullptr, bx.data(), by.data(), bz.data());
 
     problem.AddResidualBlock(new ceres::AutoDiffCostFunction<IMUProject::WeightDecay, kSparsePoint, kSparsePoint>(
@@ -146,6 +174,12 @@ int main(int argc, char** argv) {
 			                                                IMUProject::Rotate3DVector(corrected_linacce, orientation)));
 	sprintf(buffer, "%s/optimized_cpp.ply", argv[1]);
 	IMUProject::WriteToPly(std::string(buffer), corrected_position, orientation);
+
+	std::vector<Eigen::Vector3d> raw_position = IMUProject::Integration(ts,
+																		IMUProject::Integration(ts,
+																								IMUProject::Rotate3DVector(linacce, orientation)));
+	sprintf(buffer, "%s/raw.ply", argv[1]);
+	IMUProject::WriteToPly(std::string(buffer), raw_position, orientation);
 
     return 0;
 }

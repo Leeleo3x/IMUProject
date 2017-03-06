@@ -153,7 +153,7 @@ namespace IMUProject{
 	/// \param kpoints
 	/// \param interval the interval of axis visualization, set to negative value to omit axis
 	void WriteToPly(const std::string& path, const std::vector<Eigen::Vector3d>& position,
-	                const std::vector<Eigen::Quaterniond>& orientation,
+	                const std::vector<Eigen::Quaterniond>& orientation, const bool only_xy = false,
 	                const double axis_length = 0.5, const int kpoints = 100, const int interval=100);
 
 } //namespace IMUProject

@@ -15,9 +15,8 @@
 namespace IMUProject {
 
 	struct Config {
-		static constexpr int kTotalCount = 13200;
-		static constexpr int kConstriantPoints = 130;
-		static constexpr int kSparsePoints = 132;
+		static constexpr int kConstriantPoints = 200;
+		static constexpr int kSparsePoints = 200;
 	};
 
 
@@ -44,6 +43,9 @@ namespace IMUProject {
             return inverse_ind_[ind];
         }
 
+		inline const int GetTotalCount() const{
+			return kTotalCount;
+		}
         template <typename T>
         void correct_bias(Eigen::Matrix<T, 3, 1>* data, const T* bx, const T* by, const T* bz) const {
             for (int i = 0; i < kTotalCount; ++i) {
@@ -124,19 +126,20 @@ namespace IMUProject {
 
 		template<typename T>
 		bool operator()(const T *const bx, const T *const by, const T *const bz, T *residual) const {
-			for (int i = 0; i < Config::kConstriantPoints * 2; ++i) {
+			for (int i = 0; i < Config::kConstriantPoints * 3; ++i) {
 				residual[i] = (T) 0.0;
 			}
 
-			std::vector<Eigen::Matrix<T, 3, 1> > directed_acce((size_t) Config::kTotalCount);
-			std::vector<Eigen::Matrix<T, 3, 1> > speed((size_t) Config::kTotalCount);
+			std::vector<Eigen::Matrix<T, 3, 1> > directed_acce((size_t) grid_->GetTotalCount());
+			std::vector<Eigen::Matrix<T, 3, 1> > speed((size_t) grid_->GetTotalCount());
+
 			speed[0] = init_speed_ + Eigen::Matrix<T, 3, 1>((T) std::numeric_limits<double>::epsilon(),
 			                                                (T) std::numeric_limits<double>::epsilon(),
 			                                                (T) std::numeric_limits<double>::epsilon());
 
 			directed_acce[0] = (orientation_[0] * linacce_[0]).cast<T>();
 // #pragma omp parallel for
-			for (int i = 0; i < Config::kTotalCount; ++i) {
+			for (int i = 0; i < grid_->GetTotalCount(); ++i) {
 				const int inv_ind = grid_->GetInverseIndAt(i);
 				Eigen::Matrix<T, 3, 1> corrected_acce =
 						linacce_[i] + grid_->GetAlphaAt(i) * Eigen::Matrix<T, 3, 1>(bx[inv_ind], by[inv_ind], bz[inv_ind]);
@@ -185,9 +188,11 @@ namespace IMUProject {
 		                  const std::vector<Eigen::Quaterniond> &orientation,
 		                  const std::vector<int>& constraint_ind,
 		                  const std::vector<Eigen::Vector3d> &local_speed,
-		                  const Eigen::Vector3d init_speed, const double weight_ls = 1.0):
+		                  const Eigen::Vector3d init_speed,
+						  const double weight_ls = 1.0, const double weight_vs = 1.0):
 				linacce_(linacce), constraint_ind_(constraint_ind),
-				local_speed_(local_speed), init_speed_(init_speed), weight_ls_(std::sqrt(weight_ls)){
+				local_speed_(local_speed), init_speed_(init_speed),
+				weight_ls_(std::sqrt(weight_ls)), weight_vs_(std::sqrt(weight_vs)){
 			CHECK_EQ(local_speed.size(), KCONSTRAINT);
 			CHECK_EQ(constraint_ind.size(), KCONSTRAINT);
 			grid_.reset(new SparseGrid(time_stamp, KVARIABLE));
@@ -244,13 +249,13 @@ namespace IMUProject {
 		template <typename T>
 		bool operator() (const T* const bx, const T* const by, const T* const bz, T* residual) const{
 			std::vector<Eigen::Matrix <T, 3, 1> > directed_acce(linacce_.size());
-			std::vector<Eigen::Matrix <T, 3, 1> > speed((size_t) Config::kTotalCount);
+			std::vector<Eigen::Matrix <T, 3, 1> > speed((size_t) grid_->GetTotalCount());
+
 			speed[0] = init_speed_ + Eigen::Matrix <T, 3, 1>((T)std::numeric_limits<double>::epsilon(),
 			                                                 (T)std::numeric_limits<double>::epsilon(),
 			                                                 (T)std::numeric_limits<double>::epsilon());
-
 			directed_acce[0] = (orientation_[0] * linacce_[0]).template cast<T>();
-			for (int i = 0; i < Config::kTotalCount; ++i) {
+			for (int i = 0; i < grid_->GetTotalCount(); ++i) {
 				const int inv_ind = grid_->GetInverseIndAt(i);
 				Eigen::Matrix<T, 3, 1> corrected_acce =
 						linacce_[i] + grid_->GetAlphaAt(i) * Eigen::Matrix<T, 3, 1>(bx[inv_ind], by[inv_ind], bz[inv_ind]);
@@ -270,6 +275,7 @@ namespace IMUProject {
 				residual[cid] = weight_ls_ * (ls[0] - (T)local_speed_[cid][0]);
 				residual[cid + KCONSTRAINT] = weight_ls_ * (ls[1] - (T)local_speed_[cid][1]);
 				residual[cid + 2 * KCONSTRAINT] = weight_ls_ * (ls[2] - (T)local_speed_[cid][2]);
+//				residual[cid + 3 * KCONSTRAINT] = weight_vs_ * speed[ind][2];
 			}
 			return true;
 		}
@@ -285,6 +291,7 @@ namespace IMUProject {
 
 		const Eigen::Vector3d init_speed_;
 		const double weight_ls_;
+		const double weight_vs_;
 	};
 
 	struct WeightDecay {
