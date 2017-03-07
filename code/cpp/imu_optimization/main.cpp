@@ -21,9 +21,10 @@
 using namespace std;
 
 DEFINE_int32(max_iter, 500, "maximum iteration");
-DEFINE_int32(window, 400, "Window size");
-DEFINE_string(model_path, "../../../../models/model_w400_s10", "Path to models");
+DEFINE_int32(window, 200, "Window size");
+DEFINE_string(model_path, "../../../../models/model_0307_w200_s10", "Path to models");
 DEFINE_bool(gt, false, "Use ground truth");
+DEFINE_double(feature_smooth_alpha, -1, "cut-off threshold for ");
 DEFINE_double(weight_ls, 1.0, "The weight of local speed residual");
 DEFINE_double(weight_vs, 1.0, "The weight of vertical speed residual");
 
@@ -120,36 +121,47 @@ int main(int argc, char** argv) {
     constexpr int kSparsePoint = IMUProject::Config::kSparsePoints;
     // Initialize bias with gaussian distribution
     std::vector<double> bx((size_t)kSparsePoint, 0.0), by((size_t)kSparsePoint, 0.0), bz((size_t)kSparsePoint,0.0);
-    std::default_random_engine generator;
-    std::normal_distribution<double> distribution(0.0, 0.01);
-    for(int i=0; i<kSparsePoint; ++i){
-        bx[i] = distribution(generator);
-        by[i] = distribution(generator);
-        bz[i] = distribution(generator);
-    }
+//    std::default_random_engine generator;
+//    std::normal_distribution<double> distribution(0.0, 0.001);
+//    for(int i=0; i<kSparsePoint; ++i){
+//        bx[i] = distribution(generator);
+//        by[i] = distribution(generator);
+//        bz[i] = distribution(generator);
+//    }
 
 	IMUProject::LocalSpeedFunctor<kSparsePoint, kResiduals>* functor =
 			new IMUProject::LocalSpeedFunctor<kSparsePoint, kResiduals>(ts, linacce, orientation, constraint_ind,
 																		local_speed, Eigen::Vector3d(0, 0, 0), FLAGS_weight_ls, FLAGS_weight_vs);
 
-	constexpr int kVar = IMUProject::Config::kSparsePoints;
-	problem.AddResidualBlock(new ceres::AutoDiffCostFunction<IMUProject::LocalSpeedFunctor<kSparsePoint, kResiduals>, 3 * kResiduals, kSparsePoint, kSparsePoint, kSparsePoint>(
+	problem.AddResidualBlock(new ceres::AutoDiffCostFunction<IMUProject::LocalSpeedFunctor<kSparsePoint, kResiduals>,
+			3 * kResiduals, kSparsePoint, kSparsePoint, kSparsePoint>(
 			functor), nullptr, bx.data(), by.data(), bz.data());
 
-    problem.AddResidualBlock(new ceres::AutoDiffCostFunction<IMUProject::WeightDecay, kSparsePoint, kSparsePoint>(
-            new IMUProject::WeightDecay(1.0)
+    problem.AddResidualBlock(new ceres::AutoDiffCostFunction<IMUProject::WeightDecay<kSparsePoint>, kSparsePoint, kSparsePoint>(
+            new IMUProject::WeightDecay<kSparsePoint>(1.0)
     ), nullptr, bx.data());
 
-    problem.AddResidualBlock(new ceres::AutoDiffCostFunction<IMUProject::WeightDecay, kSparsePoint, kSparsePoint>(
-            new IMUProject::WeightDecay(1.0)
-    ), nullptr, by.data());
+	problem.AddResidualBlock(new ceres::AutoDiffCostFunction<IMUProject::WeightDecay<kSparsePoint>, kSparsePoint, kSparsePoint>(
+			new IMUProject::WeightDecay<kSparsePoint>(1.0)
+	), nullptr, by.data());
 
-    problem.AddResidualBlock(new ceres::AutoDiffCostFunction<IMUProject::WeightDecay, kSparsePoint, kSparsePoint>(
-            new IMUProject::WeightDecay(1.0)
-    ), nullptr, bz.data());
+	problem.AddResidualBlock(new ceres::AutoDiffCostFunction<IMUProject::WeightDecay<kSparsePoint>, kSparsePoint, kSparsePoint>(
+			new IMUProject::WeightDecay<kSparsePoint>(1.0)
+	), nullptr, bz.data());
 
+//	problem.AddResidualBlock(new ceres::AutoDiffCostFunction<IMUProject::WeightDecay<1>, 1, 1>(
+//			new IMUProject::WeightDecay<1>(1.0)
+//	), nullptr, &bx_glob);
+//
+//	problem.AddResidualBlock(new ceres::AutoDiffCostFunction<IMUProject::WeightDecay<1>, 1, 1>(
+//			new IMUProject::WeightDecay<1>(1.0)
+//	), nullptr, &by_glob);
+//
+//	problem.AddResidualBlock(new ceres::AutoDiffCostFunction<IMUProject::WeightDecay<1>, 1, 1>(
+//			new IMUProject::WeightDecay<1>(1.0)
+//	), nullptr, &bz_glob);
 
-    float start_t = cv::getTickCount();
+	float start_t = cv::getTickCount();
     ceres::Solver::Options options;
     options.linear_solver_type = ceres::DENSE_QR;
 	options.num_threads = 6;
@@ -168,16 +180,17 @@ int main(int argc, char** argv) {
 
 	std::vector<Eigen::Vector3d> corrected_linacce = linacce;
 	functor->GetGrid()->correct_bias<double>(corrected_linacce.data(), bx.data(), by.data(), bz.data());
-	std::vector<Eigen::Vector3d> corrected_position =
-			IMUProject::Integration(ts,
-			                        IMUProject::Integration(ts,
-			                                                IMUProject::Rotate3DVector(corrected_linacce, orientation)));
+	std::vector<Eigen::Vector3d> directed_corrected_linacce = IMUProject::Rotate3DVector(corrected_linacce, orientation);
+	std::vector<Eigen::Vector3d> corrected_speed = IMUProject::Integration(ts, directed_corrected_linacce);
+	std::vector<Eigen::Vector3d> corrected_position = IMUProject::Integration(ts, corrected_speed, dataset.GetPosition()[0]);
+
 	sprintf(buffer, "%s/optimized_cpp.ply", argv[1]);
 	IMUProject::WriteToPly(std::string(buffer), corrected_position, orientation);
 
-	std::vector<Eigen::Vector3d> raw_position = IMUProject::Integration(ts,
-																		IMUProject::Integration(ts,
-																								IMUProject::Rotate3DVector(linacce, orientation)));
+	std::vector<Eigen::Vector3d> directed_linacce = IMUProject::Rotate3DVector(linacce, orientation);
+	std::vector<Eigen::Vector3d> speed = IMUProject::Integration(ts, directed_linacce);
+	std::vector<Eigen::Vector3d> raw_position = IMUProject::Integration(ts, speed, dataset.GetPosition()[0]);
+
 	sprintf(buffer, "%s/raw.ply", argv[1]);
 	IMUProject::WriteToPly(std::string(buffer), raw_position, orientation);
 

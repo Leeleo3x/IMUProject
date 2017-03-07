@@ -29,4 +29,8 @@ namespace IMUProject{
 		return output;
 	}
 
+	void LowPassFilter(std::vector<Eigen::Vector3d>& data, const double alpha){
+
+	}
+
 }//namespace IMUProject

@@ -16,6 +16,7 @@ namespace IMUProject{
 	                                         const std::vector<Eigen::Vector3d>& input,
 	                                         const Eigen::Vector3d& initial=Eigen::Vector3d(0, 0, 0));
 
+	void LowPassFilter(std::vector<Eigen::Vector3d>& data, const double alpha = 1.0);
 
 }//namespace IMUProject
 

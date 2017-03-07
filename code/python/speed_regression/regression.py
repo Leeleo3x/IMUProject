@@ -13,6 +13,7 @@ import cv2
 
 # from speed_regression import training_data as td
 # from speed_regression import grid_search
+
 import training_data as td
 
 if __name__ == '__main__':
@@ -64,9 +65,9 @@ if __name__ == '__main__':
 
         extra_args = {'frq_threshold': args.frq_threshold,
                       'discard_direct': args.discard_direct,
-                      'target_smooth_sigma': 20.0}
+                      'target_smooth_sigma': 30.0,
+                      'feature_smooth_alpha': 0.2}
 
-        extra_args = {}
         training_feature, training_target = td.get_training_data(data_all=data_all, imu_columns=imu_columns,
                                                                  option=options, extra_args=extra_args)
         training_feature_all.append(training_feature)
@@ -93,7 +94,7 @@ if __name__ == '__main__':
         if args.C is None or args.e is None:
             print('Running grid search')
 
-            search_dict = {'C': [0.1, 1.0, 10.0],
+            search_dict = {'C': [0.1, 1.0, 10.0, 100.0],
                            'epsilon': [0.001, 0.01, 0.1, 1.0],
                            'kernel': ['rbf']}
             grid_searcher = GridSearchCV(svm.SVR(), search_dict, n_jobs=6, verbose=3)
@@ -140,6 +141,6 @@ if __name__ == '__main__':
             # print('Model written to ' + out_path)
 
             if args.train_cv:
-                cv_model_path = '{}_w{}_s{}_{}_cv.yml'.format(args.output, args.window, args.step, chn)
+                cv_model_path = '{}_w{}_s{}_{}.yml'.format(args.output, args.window, args.step, chn)
                 print('CV model written into ', cv_model_path)
                 regressor_cv.save(cv_model_path)

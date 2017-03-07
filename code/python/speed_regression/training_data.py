@@ -21,6 +21,13 @@ class TrainingDataOption:
         self.nanoToSec = 1000000000.0
 
 
+@jit
+def low_pass_filter(data, alpha):
+    output = np.copy(data)
+    for i in range(1, output.shape[0]):
+        output[i] = (1.0 - alpha) * output[i-1] + alpha * data[i]
+    return output
+
 #@jit
 def compute_fourier_features(data, samples, window_size, threshold, discard_direct=False):
     """
@@ -109,7 +116,7 @@ def compute_delta_angle(time_stamp, position, orientation,
     return cos_array, valid_array
 
 
-def get_training_data(data_all, imu_columns, option, sample_points=None, extra_args=None, feature_only=False):
+def get_training_data(data_all, imu_columns, option, sample_points=None, extra_args=None):
     """
     Create training data.
     :param data_all: The whole dataset. Must include 'time' column and all columns inside imu_columns
@@ -130,6 +137,11 @@ def get_training_data(data_all, imu_columns, option, sample_points=None, extra_a
     time_stamp = data_all['time'].values / 1e09
 
     targets = None
+
+    if extra_args is not None:
+        if 'feature_smooth_alpha' in extra_args:
+            print('Smoothing the signal by low pass filter: alpha = ', extra_args['feature_smooth_alpha'])
+            data_used = low_pass_filter(data_used, extra_args['feature_smooth_alpha'])
 
     if option.target_ == 'speed_magnitude':
         targets = np.linalg.norm(compute_speed(time_stamp, pose_data), axis=1)

@@ -52,7 +52,8 @@ namespace IMUProject{
 	}
 
 	cv::Mat ComputeDirectFeature(const Eigen::Vector3d* gyro,
-	                             const Eigen::Vector3d* linacce, const int N){
+	                             const Eigen::Vector3d* linacce,
+								 const int N){
 		Mat feature(1, 6 * N, CV_32FC1, cv::Scalar::all(0));
 		for(int i=0; i<N; ++i){
 			feature.at<float>(0, i * 6 + 0) = (float) gyro[i][0];

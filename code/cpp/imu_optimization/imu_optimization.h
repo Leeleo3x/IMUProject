@@ -15,7 +15,7 @@
 namespace IMUProject {
 
 	struct Config {
-		static constexpr int kConstriantPoints = 200;
+		static constexpr int kConstriantPoints = 1000;
 		static constexpr int kSparsePoints = 200;
 	};
 
@@ -47,7 +47,8 @@ namespace IMUProject {
 			return kTotalCount;
 		}
         template <typename T>
-        void correct_bias(Eigen::Matrix<T, 3, 1>* data, const T* bx, const T* by, const T* bz) const {
+        void correct_bias(Eigen::Matrix<T, 3, 1>* data, const T* bx, const T* by, const T* bz,
+		const Eigen::Matrix<T, 3, 1> bias_global = Eigen::Matrix<T, 3, 1>::Zero()) const {
             for (int i = 0; i < kTotalCount; ++i) {
                 const int vid = inverse_ind_[i];
                 data[i] += alpha_[i] * Eigen::Matrix<T, 3, 1>(bx[vid], by[vid], bz[vid]);
@@ -247,7 +248,10 @@ namespace IMUProject {
 			}
 #else
 		template <typename T>
-		bool operator() (const T* const bx, const T* const by, const T* const bz, T* residual) const{
+		bool operator() (const T* const bx, const T* const by, const T* const bz,
+						 //const T* const bx_glob, const T* const by_glob, const T* const bz_glob,
+						 T* residual) const{
+
 			std::vector<Eigen::Matrix <T, 3, 1> > directed_acce(linacce_.size());
 			std::vector<Eigen::Matrix <T, 3, 1> > speed((size_t) grid_->GetTotalCount());
 
@@ -259,6 +263,7 @@ namespace IMUProject {
 				const int inv_ind = grid_->GetInverseIndAt(i);
 				Eigen::Matrix<T, 3, 1> corrected_acce =
 						linacce_[i] + grid_->GetAlphaAt(i) * Eigen::Matrix<T, 3, 1>(bx[inv_ind], by[inv_ind], bz[inv_ind]);
+
 				if (inv_ind > 0) {
 					corrected_acce = corrected_acce + (1.0 - grid_->GetAlphaAt(i)) *
 					                                  Eigen::Matrix<T, 3, 1>(bx[inv_ind - 1], by[inv_ind - 1], bz[inv_ind - 1]);
@@ -273,9 +278,11 @@ namespace IMUProject {
 				const int ind = constraint_ind_[cid];
 				Eigen::Matrix<T, 3, 1> ls = orientation_[ind].transpose() * speed[ind];
 				residual[cid] = weight_ls_ * (ls[0] - (T)local_speed_[cid][0]);
-				residual[cid + KCONSTRAINT] = weight_ls_ * (ls[1] - (T)local_speed_[cid][1]);
+				// residual[cid + KCONSTRAINT] = weight_ls_ * (ls[1] - (T)local_speed_[cid][1]);
+				// residual[cid + KCONSTRAINT] = weight_ls_ * ls[1];
+				residual[cid + KCONSTRAINT] = weight_vs_ * speed[ind][2];
 				residual[cid + 2 * KCONSTRAINT] = weight_ls_ * (ls[2] - (T)local_speed_[cid][2]);
-//				residual[cid + 3 * KCONSTRAINT] = weight_vs_ * speed[ind][2];
+
 			}
 			return true;
 		}
@@ -294,13 +301,14 @@ namespace IMUProject {
 		const double weight_vs_;
 	};
 
+	template<int KVARIABLE>
 	struct WeightDecay {
 	public:
 		WeightDecay(const double weight) : weight_(std::sqrt(weight)) {}
 
 		template<typename T>
 		bool operator()(const T *const x, T *residual) const {
-			for (int i = 0; i < Config::kSparsePoints; ++i) {
+			for (int i = 0; i < KVARIABLE; ++i) {
 				residual[i] = weight_ * x[i];
 			}
 			return true;

@@ -43,7 +43,8 @@ namespace IMUProject {
 	                                const int smooth_size);
 
 	cv::Mat ComputeDirectFeature(const Eigen::Vector3d* gyro,
-	                             const Eigen::Vector3d* linacce, const int N);
+	                             const Eigen::Vector3d* linacce,
+								 const int N);
 
 
 
