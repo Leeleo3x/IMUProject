@@ -135,10 +135,11 @@ if __name__ == '__main__':
 
         # write model to file
         if len(args.output) > 0:
-            out_path = '{}_{}'.format(args.output, chn)
-            joblib.dump(regressor, out_path)
-            print('Model written to ' + out_path)
+            # out_path = '{}_{}'.format(args.output, chn)
+            # joblib.dump(regressor, out_path)
+            # print('Model written to ' + out_path)
 
             if args.train_cv:
-                cv_model_path = '{}_{}_cv.yml'.format(args.output, chn)
+                cv_model_path = '{}_w{}_s{}_{}_cv.yml'.format(args.output, args.window, args.step, chn)
+                print('CV model written into ', cv_model_path)
                 regressor_cv.save(cv_model_path)

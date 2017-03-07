@@ -21,8 +21,8 @@
 using namespace std;
 
 DEFINE_int32(max_iter, 500, "maximum iteration");
-DEFINE_int32(window, 200, "Window size");
-DEFINE_string(model_path, "../../../../models", "Path to models");
+DEFINE_int32(window, 400, "Window size");
+DEFINE_string(model_path, "../../../../models/model_w400_s10", "Path to models");
 DEFINE_bool(gt, false, "Use ground truth");
 DEFINE_double(weight_ls, 1.0, "The weight of local speed residual");
 DEFINE_double(weight_vs, 1.0, "The weight of vertical speed residual");
@@ -94,7 +94,7 @@ int main(int argc, char** argv) {
 		// Load regressors
 		std::vector<cv::Ptr<cv::ml::SVM> > regressors(3);
 		for(int i = 0; i<3; ++i){
-			sprintf(buffer, "%s/model_0306_w200_s10_%d_cv.yml", FLAGS_model_path.c_str(), i);
+			sprintf(buffer, "%s_%d.yml", FLAGS_model_path.c_str(), i);
 			regressors[i] = cv::ml::SVM::load(buffer);
 			cout << buffer << " loaded" << endl;
 			CHECK(regressors[i].get()) << "Can not load " << buffer;
