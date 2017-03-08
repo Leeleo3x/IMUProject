@@ -22,7 +22,7 @@ using namespace std;
 
 DEFINE_int32(max_iter, 500, "maximum iteration");
 DEFINE_int32(window, 200, "Window size");
-DEFINE_string(model_path, "../../../../models/model_0307_w200_s10", "Path to models");
+DEFINE_string(model_path, "../../../../models/model_0307_gaussian_w200_s10", "Path to models");
 DEFINE_bool(gt, false, "Use ground truth");
 DEFINE_double(feature_smooth_alpha, -1, "cut-off threshold for ");
 DEFINE_double(weight_ls, 1.0, "The weight of local speed residual");
@@ -46,9 +46,9 @@ int main(int argc, char** argv) {
 	printf("Total count: %d\n", kTotalCount);
 	const std::vector<double> ts(dataset.GetTimeStamp().begin(),
 	                             dataset.GetTimeStamp().begin() + kTotalCount);
-	const std::vector<Eigen::Vector3d> gyro(dataset.GetGyro().begin(),
+	std::vector<Eigen::Vector3d> gyro(dataset.GetGyro().begin(),
 	                                        dataset.GetGyro().begin() + kTotalCount);
-	const std::vector<Eigen::Vector3d> linacce(dataset.GetLinearAcceleration().begin(),
+	std::vector<Eigen::Vector3d> linacce(dataset.GetLinearAcceleration().begin(),
 	                                           dataset.GetLinearAcceleration().begin() + kTotalCount);
 	const std::vector<Eigen::Quaterniond> orientation(dataset.GetOrientation().begin(),
 	                                                  dataset.GetOrientation().begin() + kTotalCount);
@@ -62,6 +62,11 @@ int main(int argc, char** argv) {
 //	for(auto i=0; i<orientation.size(); ++i){
 //		orientation[i] = align_ori * orientation[i];
 //	}
+
+
+	const double feature_smooth_sigma = 2.0;
+	IMUProject::GaussianFilter(&gyro[0], (int)gyro.size(), feature_smooth_sigma);
+	IMUProject::GaussianFilter(&linacce[0], (int)linacce.size(), feature_smooth_sigma);
 
 	// Load constraints
 	std::vector<int> constraint_ind;
@@ -94,7 +99,7 @@ int main(int argc, char** argv) {
 		printf("Regressing local speed...\n");
 		// Load regressors
 		std::vector<cv::Ptr<cv::ml::SVM> > regressors(3);
-		for(int i = 0; i<3; ++i){
+		for(auto i: {0, 2}){
 			sprintf(buffer, "%s_%d.yml", FLAGS_model_path.c_str(), i);
 			regressors[i] = cv::ml::SVM::load(buffer);
 			cout << buffer << " loaded" << endl;
@@ -106,7 +111,7 @@ int main(int argc, char** argv) {
 			const int sid = constraint_ind[i] - FLAGS_window;
 			const int eid = constraint_ind[i];
 			cv::Mat feature = IMUProject::ComputeDirectFeature(&gyro[sid], &linacce[sid], FLAGS_window);
-			for(int j=0; j<regressors.size(); ++j){
+			for(auto j: {0, 2}){
 				local_speed[i][j] = static_cast<double>(regressors[j]->predict(feature));
 			}
 		}
@@ -184,7 +189,7 @@ int main(int argc, char** argv) {
 	std::vector<Eigen::Vector3d> corrected_speed = IMUProject::Integration(ts, directed_corrected_linacce);
 	std::vector<Eigen::Vector3d> corrected_position = IMUProject::Integration(ts, corrected_speed, dataset.GetPosition()[0]);
 
-	sprintf(buffer, "%s/optimized_cpp.ply", argv[1]);
+	sprintf(buffer, "%s/optimized_cpp_gaussian.ply", argv[1]);
 	IMUProject::WriteToPly(std::string(buffer), corrected_position, orientation);
 
 	std::vector<Eigen::Vector3d> directed_linacce = IMUProject::Rotate3DVector(linacce, orientation);

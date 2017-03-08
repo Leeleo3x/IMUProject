@@ -29,8 +29,22 @@ namespace IMUProject{
 		return output;
 	}
 
-	void LowPassFilter(std::vector<Eigen::Vector3d>& data, const double alpha){
+	void LowPassFilter(Eigen::Vector3d* data, const int N, const double alpha){
 
+	}
+
+	void GaussianFilter(Eigen::Vector3d* data, const int N, const double sigma){
+		for(int i=0; i<3; ++i){
+			cv::Mat col_mat(N, 1, CV_64FC1, cv::Scalar::all(0));
+			double* ptr = (double*) col_mat.data;
+			for(int j=0; j<N; ++j){
+				ptr[j] = data[j][i];
+			}
+			cv::GaussianBlur(col_mat, col_mat, cv::Size(0, 0), sigma);
+			for(int j=0; j<N; ++j){
+				data[j][i] = ptr[j];
+			}
+		}
 	}
 
 }//namespace IMUProject
