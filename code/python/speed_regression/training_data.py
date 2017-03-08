@@ -142,6 +142,10 @@ def get_training_data(data_all, imu_columns, option, sample_points=None, extra_a
         if 'feature_smooth_alpha' in extra_args:
             print('Smoothing the signal by low pass filter: alpha = ', extra_args['feature_smooth_alpha'])
             data_used = low_pass_filter(data_used, extra_args['feature_smooth_alpha'])
+        if 'feature_smooth_sigma' in extra_args:
+            print('Smoothing the signal by gaussin filter: sigma = ', extra_args['feature_smooth_sigma'])
+            data_used = gaussian_filter1d(data_used, sigma=extra_args['feature_smooth_sigma'], axis=0)
+            
 
     if option.target_ == 'speed_magnitude':
         targets = np.linalg.norm(compute_speed(time_stamp, pose_data), axis=1)

@@ -4,6 +4,7 @@ import warnings
 import os
 
 from sklearn import svm
+from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import r2_score
 from sklearn.externals import joblib
 from sklearn.model_selection import GridSearchCV
@@ -66,7 +67,7 @@ if __name__ == '__main__':
         extra_args = {'frq_threshold': args.frq_threshold,
                       'discard_direct': args.discard_direct,
                       'target_smooth_sigma': 30.0,
-                      'feature_smooth_alpha': 0.2}
+                      'feature_smooth_sigma': 2.0}
 
         training_feature, training_target = td.get_training_data(data_all=data_all, imu_columns=imu_columns,
                                                                  option=options, extra_args=extra_args)
@@ -77,13 +78,14 @@ if __name__ == '__main__':
     training_feature_all = np.concatenate(training_feature_all, axis=0)
     training_target_all = np.concatenate(training_target_all, axis=0)
 
-    print("{} samples in total".format(training_target_all.shape[0]))
+    n_feature = training_feature_all.shape[1]
+    print("{} samples in total. feature dimension: {}".format(training_target_all.shape[0], n_feature))
 
     # Training separate regressor for each target channel
     if training_target_all.ndim == 1:
         training_target_all = training_target_all[:, None]
 
-    for chn in range(training_target_all.shape[1]):
+    for chn in [0, 2]:
         print('Training SVM for target ', chn)
         bestC = 0
         bestE = 0
@@ -93,11 +95,12 @@ if __name__ == '__main__':
 
         if args.C is None or args.e is None:
             print('Running grid search')
-
-            search_dict = {'C': [0.1, 1.0, 10.0, 100.0],
-                           'epsilon': [0.001, 0.01, 0.1, 1.0],
+            
+            search_dict = {'C': [1.0, 10.0, 20.0],
+                           'epsilon': [0.001, 0.01, 0.1],
                            'kernel': ['rbf']}
-            grid_searcher = GridSearchCV(svm.SVR(), search_dict, n_jobs=6, verbose=3)
+
+            grid_searcher = GridSearchCV(svm.SVR(), search_dict, n_jobs=6, verbose=3, scoring='neg_mean_squared_error')
 
             start_t = time.clock()
             grid_searcher.fit(training_feature_all, training_target_all[:, chn])
@@ -126,6 +129,11 @@ if __name__ == '__main__':
                 predicted_training = regressor_cv.predict(training_feature_cv)[1]
                 score_cv = r2_score(training_target_all[:, chn], predicted_training)
                 print('Training score by OpenCV: {}, support vectors: {}'.format(score_cv, regressor_cv.getSupportVectors().shape[0]))
+                if len(args.output) > 0:
+                     cv_model_path = '{}_w{}_s{}_{}.yml'.format(args.output, args.window, args.step, chn)
+                     print('CV model written into ', cv_model_path)
+                     regressor_cv.save(cv_model_path)
+                     
             else:
                 print('Train with parameter C={}, e={}'.format(args.C, args.e))
                 regressor = svm.SVR(C=args.C, epsilon=args.e)
@@ -133,14 +141,8 @@ if __name__ == '__main__':
                 # score = mean_squared_error(regressor.predict(training_set_all[:, :-1]), training_set_all[:, -1])
                 score = regressor.score(training_feature_all, training_target_all[:, chn])
                 print('Training score:', score)
-
-        # write model to file
-        if len(args.output) > 0:
-            # out_path = '{}_{}'.format(args.output, chn)
-            # joblib.dump(regressor, out_path)
-            # print('Model written to ' + out_path)
-
-            if args.train_cv:
-                cv_model_path = '{}_w{}_s{}_{}.yml'.format(args.output, args.window, args.step, chn)
-                print('CV model written into ', cv_model_path)
-                regressor_cv.save(cv_model_path)
+                        # write model to file
+                # if len(args.output) > 0:
+                # out_path = '{}_{}'.format(args.output, chn)
+                # joblib.dump(regressor, out_path)
+                # print('Model written to ' + out_path)
