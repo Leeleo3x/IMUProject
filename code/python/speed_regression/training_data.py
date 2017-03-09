@@ -11,7 +11,7 @@ from scipy.fftpack import fft
 from scipy.ndimage.filters import gaussian_filter1d
 import matplotlib.pyplot as plt
 
-sys.path.append('~/Documents/research/IMUProject/code/python')
+sys.path.append('/home/yanhang/Documents/research/IMUProject/code/python')
 from algorithms import geometry
 
 
@@ -56,7 +56,8 @@ def compute_direct_features(data, samples_points, window_size):
 
 
 def compute_direct_feature_gravity(gyro, linacce, samples, window_size):
-    gyro_gravity =
+    pass
+    # gyro_gravity =
 
 
 
@@ -167,17 +168,16 @@ def get_training_data(data_all, imu_columns, option, sample_points=None, extra_a
         if 'feature_smooth_sigma' in extra_args:
             print('Smoothing the signal by gaussin filter: sigma = ', extra_args['feature_smooth_sigma'])
             data_used = gaussian_filter1d(data_used, sigma=extra_args['feature_smooth_sigma'], axis=0)
-            
 
     if option.target_ == 'speed_magnitude':
-        targets = np.linalg.norm(compute_speed(time_stamp, pose_data, sample_points), axis=1)
+        targets = np.linalg.norm(compute_speed(time_stamp, pose_data), axis=1)
     elif option.target_ == 'angle':
-        targets, valid_array = compute_delta_angle(time_stamp, pose_data, orientation, sample_points=sample_points)
+        targets, valid_array = compute_delta_angle(time_stamp, pose_data, orientation)
     elif option.target_ == 'local_speed':
-        targets = compute_local_speed(time_stamp, pose_data, orientation, sample_points)
+        targets = compute_local_speed(time_stamp, pose_data, orientation)
     elif option.target_ == 'local_speed_gravity':
         gravity = data_all[['grav_x', 'grav_y', 'grav_z']].values
-        targets = compute_local_speed_with_gravity(time_stamp, pose_data, orientation, gravity, sample_points)
+        targets = compute_local_speed_with_gravity(time_stamp, pose_data, orientation, gravity)
 
     if extra_args is not None:
         if 'target_smooth_sigma' in extra_args:

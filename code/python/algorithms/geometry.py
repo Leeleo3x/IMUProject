@@ -63,6 +63,32 @@ def align_3dvector_with_gravity(data, gravity, local_g_direction=np.array([0, 1,
     return output
 
 
+@jit
+def adjust_eular_angle(source, target, max_v=math.pi/2):
+    # The eular axes might be flipped. Try convert to the original direction
+    # The heuristics used here are that 1. the values should be small. 2. the y direction should be same as input
+    assert source.shape == target.shape
+    output = np.copy(source)
+    for i in range(source.shape[0]):
+        sign = 1.0
+        if output[i][1] > max_v:
+            output[i][1] -= math.pi
+            sign *= -1
+        elif output[i][1] < -max_v:
+            output[i][1] += math.pi
+            sign *= -1
+        if output[i][1] * target[i][1] < 0:
+            output[i][1] *= -1
+            sign *= -1
+
+        for j in [0, 2]:
+            if output[i][j] > max_v:
+                output[i][j] = (output[i][j] - math.pi) * -1.0 * sign
+            elif output[i][j] < -max_v:
+                output[i][j] = (output[i][j] + math.pi) * -1.0 * sign
+    return output
+
+
 def align_eular_rotation_with_gravity(data, gravity, local_g_direction=np.array([0, 1, 0])):
     """
     Transform the coordinate frame of orientations such that the gravity is aligned with $local_g_direction
@@ -78,7 +104,30 @@ def align_eular_rotation_with_gravity(data, gravity, local_g_direction=np.array(
 
     # be careful of the ambiguity of eular angle representation
     for i in range(data.shape[0]):
-        q = quaternion_from_two_vectors(local_g_direction, gravity[i])
-        
+        rotor = quaternion_from_two_vectors(local_g_direction, gravity[i])
+        q = rotor * quaternion.from_euler_angles(*data[i]) * rotor.conj()
+        output[i] = quaternion.as_euler_angles(q)
 
-    return output
+    return adjust_eular_angle(output)
+
+if __name__ == '__main__':
+    import pandas
+    data_all = pandas.read_csv('../../../data/phab_body/cse1/processed/data.csv')
+
+    gyro = data_all[['gyro_x', 'gyro_y', 'gyro_z']].values
+
+    gyro_q_to_e = np.empty(gyro.shape, dtype=float)
+    for i in range(gyro.shape[0]):
+        q = quaternion.from_euler_angles(*gyro[i])
+        gyro_q_to_e[i] = quaternion.as_euler_angles(q)
+
+    gyro_adjusted = adjust_eular_angle(gyro_q_to_e, gyro)
+    for i in range(gyro_adjusted.shape[0]):
+        if np.linalg.norm(gyro_adjusted[i] - gyro[i]) > 1e-5:
+            print('{}, ({:.6f}, {:.6f}, {:.6f}), ({:.6f}, {:.6f}, {:.6f}), ({:.6f}, {:.6f}, {:.6f})'.
+                  format(i, gyro[i][0], gyro_q_to_e[i][0], gyro_adjusted[i][0],
+                         gyro[i][1], gyro_q_to_e[i][1], gyro_adjusted[i][1],
+                         gyro[i][2], gyro_q_to_e[i][2], gyro_adjusted[i][2]))
+    print("Diff: ", np.linalg.norm(gyro_adjusted - gyro))
+
+

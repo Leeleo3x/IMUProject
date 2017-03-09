@@ -42,7 +42,9 @@ int main(int argc, char** argv) {
 
     printf("Loading...\n");
     IMUProject::IMUDataset dataset(argv[1]);
-	const int kTotalCount = (int)dataset.GetTimeStamp().size();
+	// const int kTotalCount = (int)dataset.GetTimeStamp().size();
+    const int kTotalCount = 3000;
+
 	printf("Total count: %d\n", kTotalCount);
 	const std::vector<double> ts(dataset.GetTimeStamp().begin(),
 	                             dataset.GetTimeStamp().begin() + kTotalCount);

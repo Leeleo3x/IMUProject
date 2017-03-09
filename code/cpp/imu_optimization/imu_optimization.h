@@ -318,5 +318,58 @@ namespace IMUProject {
 	};
 
 
+    template<int KVARIABLE, int KCONSTRAINT>
+    struct LocalSpeedAndOrientationFunctor{
+    public:
+        LocalSpeedAndOrientationFunctor(const std::vector<double> &time_stamp,
+                                        const std::vector<Eigen::Vector3d> &linacce,
+                                        const std::vector<Eigen::Quaterniond> &orientation,
+                                        const std::vector<int>& constraint_ind,
+                                        const std::vector<Eigen::Vector3d> &local_speed,
+                                        const Eigen::Vector3d init_speed,
+                                        const double weight_ls = 1.0, const double weight_vs = 1.0):
+                linacce_(linacce), constraint_ind_(constraint_ind),
+                local_speed_(local_speed), init_speed_(init_speed),
+                weight_ls_(std::sqrt(weight_ls)), weight_vs_(std::sqrt(weight_vs)){
+            CHECK_EQ(local_speed.size(), KCONSTRAINT);
+            CHECK_EQ(constraint_ind.size(), KCONSTRAINT);
+            grid_.reset(new SparseGrid(time_stamp, KVARIABLE));
+            dt_.resize(time_stamp.size(), 0.0);
+            for(int i=0; i < dt_.size() - 1; ++i){
+                dt_[i] = time_stamp[i+1] - time_stamp[i];
+            }
+            orientation_.resize(orientation.size());
+            for(auto i=0; i<orientation.size(); ++i){
+                orientation_[i] = orientation[i].toRotationMatrix();
+            }
+
+            orientation_variable_ind_.resize(kOrienationBlock);
+            for(auto i=0; i<time_stamp.size(); ++i){
+                
+            }
+        }
+
+        template<typename T>
+        bool operator() (const T* const bx, const T* const by, const T* const bz,
+                         const T* const ob1, const T*const ob2, const T* const ob3, const T* const ob4, const T* const ob5){
+
+
+            return true;
+        }
+
+        static constexpr int kOrienationBlock = 5;
+    private:
+        std::shared_ptr<SparseGrid> grid_;
+        std::vector<double> dt_;
+        const std::vector<Eigen::Vector3d>& linacce_;
+        std::vector<Eigen::Matrix3d> orientation_;
+        const std::vector<int>& constraint_ind_;
+        std::vector<int> orientation_variable_ind_;
+        const std::vector<Eigen::Vector3d>& local_speed_;
+
+        const Eigen::Vector3d init_speed_;
+        const double weight_ls_;
+        const double weight_vs_;
+    };
 }//IMUProject
 #endif //PROJECT_IMU_OPTIMIZATION_H

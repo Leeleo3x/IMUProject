@@ -13,7 +13,7 @@ class AllTests(unittest.TestCase):
             v2 = np.random.random(3)
             v1 /= np.linalg.norm(v1)
             v2 /= np.linalg.norm(v2)
-            R = gen_dataset.rotationMatrixFromTwoVectors(v1, v2)
+            R = geometry.rotationMatrixFromTwoVectors(v1, v2)
             print('--------\nTest {}\nv1:{}\nv2:{}\nR:{}'.format(i, v1, v2, R))
             self.assertEqual(np.dot(v1, R).all(), v2.all())
 
@@ -23,7 +23,7 @@ class AllTests(unittest.TestCase):
             v2 = np.random.random(3)
             v1 /= np.linalg.norm(v1)
             v2 /= np.linalg.norm(v2)
-            q = gen_dataset.quaternionFromTwoVectors(v1, v2)
+            q = geometry.quaternionFromTwoVectors(v1, v2)
             print('--------\nTest {}\nv1:{}\nv2:{}\nq:{}'.format(i, v1, v2, q))
             q1 = quaternion.quaternion(0.0, *v1)
             self.assertEqual((q * q1 * q.conjugate()).vec.all(), v2.all())

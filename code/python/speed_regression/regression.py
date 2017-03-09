@@ -34,6 +34,7 @@ if __name__ == '__main__':
     parser.add_argument('--C', default=None, type=float)
     parser.add_argument('--e', default=None, type=float)
     parser.add_argument('--g', default=None, type=float)
+    parser.add_argument('--grid', action='store_true')
 
     args = parser.parse_args()
 
@@ -85,19 +86,20 @@ if __name__ == '__main__':
     if training_target_all.ndim == 1:
         training_target_all = training_target_all[:, None]
 
+    best_C = [1.0, 10.0, 1.0]
+    best_e = [0.001, 0.01, 0.001]
+
     for chn in [0, 2]:
         print('Training SVM for target ', chn)
-        bestC = 0
-        bestE = 0
 
         regressor = None
         regressor_cv = None
 
-        if args.C is None or args.e is None:
+        if args.grid:
             print('Running grid search')
             
-            search_dict = {'C': [1.0, 10.0, 20.0],
-                           'epsilon': [0.001, 0.01, 0.1],
+            search_dict = {'C': [1.0, 10.0, 1.0],
+                           'epsilon': [0.001, 0.01, 0.001],
                            'kernel': ['rbf']}
 
             grid_searcher = GridSearchCV(svm.SVR(), search_dict, n_jobs=6, verbose=3, scoring='neg_mean_squared_error')
@@ -113,12 +115,12 @@ if __name__ == '__main__':
 
         else:
             if args.train_cv:
-                print('Training with OpenCV, C: {}, epsilon: {}'.format(args.C, args.e))
+                print('Training with OpenCV, C: {}, epsilon: {}'.format(best_C[chn], best_e[chn]))
                 regressor_cv = cv2.ml.SVM_create()
                 regressor_cv.setType(cv2.ml.SVM_EPS_SVR)
                 regressor_cv.setKernel(cv2.ml.SVM_RBF)
-                regressor_cv.setC(args.C)
-                regressor_cv.setP(args.e)
+                regressor_cv.setC(best_C[chn])
+                regressor_cv.setP(best_e[chn])
                 regressor_cv.setGamma(1.0 / training_feature_all.shape[1])
                 regressor_cv.setTermCriteria((cv2.TERM_CRITERIA_MAX_ITER + cv2.TERM_CRITERIA_EPS, 10000, 1e-09))
                 training_feature_cv = training_feature_all.astype(np.float32)
