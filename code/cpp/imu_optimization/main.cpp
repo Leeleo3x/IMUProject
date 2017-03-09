@@ -22,7 +22,7 @@ using namespace std;
 
 DEFINE_int32(max_iter, 500, "maximum iteration");
 DEFINE_int32(window, 200, "Window size");
-DEFINE_string(model_path, "../../../../models/model_0307_gaussian_w200_s10", "Path to models");
+DEFINE_string(model_path, "../../../../models/model_0308_gaussian_w200_s10", "Path to models");
 DEFINE_bool(gt, false, "Use ground truth");
 DEFINE_double(feature_smooth_alpha, -1, "cut-off threshold for ");
 DEFINE_double(weight_ls, 1.0, "The weight of local speed residual");

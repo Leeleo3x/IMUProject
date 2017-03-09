@@ -11,6 +11,9 @@ from scipy.fftpack import fft
 from scipy.ndimage.filters import gaussian_filter1d
 import matplotlib.pyplot as plt
 
+sys.path.append('~/Documents/research/IMUProject/code/python')
+from algorithms import geometry
+
 
 class TrainingDataOption:
     def __init__(self, sample_step=10, window_size=200, feature='fourier', target='speed_magnitude'):
@@ -85,6 +88,20 @@ def compute_local_speed(time_stamp, position, orientation, sample_points=None):
         q = quaternion.quaternion(*orientation[sample_points[i]])
         speed[i] = (q.conj() * quaternion.quaternion(1.0, *speed[i]) * q).vec
     return speed
+
+
+def compute_local_speed_with_gravity(time_stamp, position, orientation, gravity,
+                                     sample_points=None, local_gravity=np.array([0., 1., 0.])):
+    if sample_points is None:
+        sample_points = np.arange(0, time_stamp.shape[0], dtype=int)
+    sample_points[-1] = min(sample_points[-1], time_stamp.shape[0] - 2)
+    local_speed = compute_local_speed(time_stamp, position, orientation, sample_points)
+    # rotate the local speed such at the gravity is along $local_gravity direction
+    for i in range(local_speed.shape[0]):
+        g = gravity[sample_points[i]]
+        rot_q = geometry.quaternion_from_two_vectors(g, local_gravity)
+        local_speed[i] = (rot_q * quaternion.quaternion(1.0, *local_speed[i]) * rot_q.conj()).vec
+    return local_speed
 
 
 def compute_delta_angle(time_stamp, position, orientation,

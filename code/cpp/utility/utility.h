@@ -20,6 +20,7 @@ namespace IMUProject{
 	void LowPassFilter(Eigen::Vector3d* data, const int N, const double alpha = 1.0);
 
 	void GaussianFilter(Eigen::Vector3d* data, const int N, const double sigma);
+
 }//namespace IMUProject
 
 #endif //PROJECT_UTILITY_H

@@ -3,8 +3,7 @@ import unittest
 import numpy as np
 import quaternion
 
-from pre_processing import gen_dataset
-
+import geometry
 
 class AllTests(unittest.TestCase):
 
