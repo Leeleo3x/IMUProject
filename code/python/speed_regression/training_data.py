@@ -48,11 +48,16 @@ def compute_fourier_features(data, samples, window_size, threshold, discard_dire
 
 
 #@jit
-def compute_direct_features(data, samples, window_size):
-    features = np.empty([samples.shape[0], data.shape[1] * window_size], dtype=np.float)
-    for i in range(samples.shape[0]):
-        features[i, :] = data[samples[i] - window_size:samples[i]].flatten()
+def compute_direct_features(data, samples_points, window_size):
+    features = np.empty([samples_points.shape[0], data.shape[1] * window_size], dtype=np.float)
+    for i in range(samples_points.shape[0]):
+        features[i, :] = data[samples_points[i] - window_size:samples_points[i]].flatten()
     return features
+
+
+def compute_direct_feature_gravity(gyro, linacce, samples, window_size):
+    gyro_gravity =
+
 
 
 def compute_speed(time_stamp, position, sample_points=None):
@@ -99,7 +104,7 @@ def compute_local_speed_with_gravity(time_stamp, position, orientation, gravity,
     # rotate the local speed such at the gravity is along $local_gravity direction
     for i in range(local_speed.shape[0]):
         g = gravity[sample_points[i]]
-        rot_q = geometry.quaternion_from_two_vectors(g, local_gravity)
+        rot_q = geometry.quaternion_from_two_vectors(local_gravity, g)
         local_speed[i] = (rot_q * quaternion.quaternion(1.0, *local_speed[i]) * rot_q.conj()).vec
     return local_speed
 
@@ -165,11 +170,14 @@ def get_training_data(data_all, imu_columns, option, sample_points=None, extra_a
             
 
     if option.target_ == 'speed_magnitude':
-        targets = np.linalg.norm(compute_speed(time_stamp, pose_data), axis=1)
+        targets = np.linalg.norm(compute_speed(time_stamp, pose_data, sample_points), axis=1)
     elif option.target_ == 'angle':
         targets, valid_array = compute_delta_angle(time_stamp, pose_data, orientation, sample_points=sample_points)
     elif option.target_ == 'local_speed':
-        targets = compute_local_speed(time_stamp, pose_data, orientation)
+        targets = compute_local_speed(time_stamp, pose_data, orientation, sample_points)
+    elif option.target_ == 'local_speed_gravity':
+        gravity = data_all[['grav_x', 'grav_y', 'grav_z']].values
+        targets = compute_local_speed_with_gravity(time_stamp, pose_data, orientation, gravity, sample_points)
 
     if extra_args is not None:
         if 'target_smooth_sigma' in extra_args:

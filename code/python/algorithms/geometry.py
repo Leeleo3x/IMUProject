@@ -1,9 +1,11 @@
 import math
 
 import numpy as np
+from numba import jit
 import quaternion
 
 
+@jit
 def rotation_matrix_from_two_vectors(v1, v2):
     """
     Using Rodrigues rotation formula
@@ -25,6 +27,7 @@ def rotation_matrix_from_two_vectors(v1, v2):
     return np.identity(3) + math.sqrt(1 - theta * theta) * K + np.dot((1 - theta) * K * K, v1)
 
 
+@jit
 def quaternion_from_two_vectors(v1, v2):
     """
     Compute quaternion from two vectors
@@ -40,19 +43,42 @@ def quaternion_from_two_vectors(v1, v2):
     return quaternion.quaternion(*q)
 
 
-def align_with_gravity(poses, gravity, local_g_direction=np.array([0, 0, -1])):
+def align_3dvector_with_gravity(data, gravity, local_g_direction=np.array([0, 1, 0])):
     """
     Adjust pose such that the gravity is at $target$ direction
-    @:param poses: N x 7 array, each row is position + orientation (quaternion). The array will be modified in place.
+    @:param data: N x 3 array
     @:param gravity: real gravity direction
     @:param local_g_direction: z direction before alignment
-    @:return None.
+    @:return
     """
-    assert poses.ndim == 2, 'Expect 2 dimensional array input'
-    assert poses.shape[1] == 7, 'Expect Nx7 array input'
-    rotor = quaternion_from_two_vectors(local_g_direction, gravity)
-    for pose in poses:
-        distance = np.linalg.norm(pose[0:3])
-        position_n = pose[0:3] / distance
-        pose[0:3] = distance * (rotor * quaternion.quaternion(0.0, *position_n) * rotor.conjugate()).vec
-        pose[-4:] = quaternion.as_float_array(rotor * quaternion.quaternion(*pose[-4:]) * rotor.conjugate())
+    assert data.ndim == 2, 'Expect 2 dimensional array input'
+    assert data.shape[1] == 3, 'Expect Nx3 array input'
+    assert data.shape[0] == gravity.shape[0], '{}, {}'.format(data.shape[0], gravity.shape[0])
+
+    output = np.empty(data.shape, dtype=float)
+    for i in range(data.shape[0]):
+        q = quaternion_from_two_vectors(local_g_direction, gravity[i])
+        output[i] = (q * quaternion.quaternion(1.0, *data[i]) * q.conj()).vec
+
+    return output
+
+
+def align_eular_rotation_with_gravity(data, gravity, local_g_direction=np.array([0, 1, 0])):
+    """
+    Transform the coordinate frame of orientations such that the gravity is aligned with $local_g_direction
+    :param data: input orientation in Eular
+    :param gravity:
+    :param local_g_direction:
+    :return:
+    """
+    assert data.shape[1] == 3, 'Expect Nx3 array'
+    assert data.shape[0] == gravity.shape[0], '{}, {}'.format(data.shape[0], gravity.shape[0])
+
+    output = np.empty(data.shape, dtype=float)
+
+    # be careful of the ambiguity of eular angle representation
+    for i in range(data.shape[0]):
+        q = quaternion_from_two_vectors(local_g_direction, gravity[i])
+        
+
+    return output
