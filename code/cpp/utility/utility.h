@@ -13,6 +13,10 @@ namespace IMUProject{
 
 	std::vector<Eigen::Vector3d> Rotate3DVector(const std::vector<Eigen::Vector3d>& input,
 	                                            const std::vector<Eigen::Quaterniond>& orientation);
+
+	std::vector<Eigen::Vector3d> Rotate3DVector(const std::vector<Eigen::Vector3d>& input,
+												const std::vector<Eigen::Matrix3d>& orientation);
+
 	std::vector<Eigen::Vector3d> Integration(const std::vector<double>& ts,
 	                                         const std::vector<Eigen::Vector3d>& input,
 	                                         const Eigen::Vector3d& initial=Eigen::Vector3d(0, 0, 0));

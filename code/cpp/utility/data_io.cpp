@@ -66,18 +66,18 @@ namespace IMUProject{
 //		}
     }
 
-	void WriteToPly(const std::string& path, const std::vector<Eigen::Vector3d>& position,
-	                const std::vector<Eigen::Quaterniond>& orientation, const bool only_xy,
-	                const double axis_length, const int kpoints, const int interval){
-	    using TriMesh = OpenMesh::TriMesh_ArrayKernelT<>;
-	    TriMesh mesh;
+	void WriteToPly(const std::string& path, const Eigen::Vector3d* position,
+					const Eigen::Matrix3d* orientation, const int N, const bool only_xy,
+					const double axis_length, const int kpoints, const int interval){
+		using TriMesh = OpenMesh::TriMesh_ArrayKernelT<>;
+		TriMesh mesh;
         mesh.request_vertex_colors();
 
 	    constexpr int traj_color[3] = {0, 255, 255};
 	    constexpr int axis_color[3][3] = {{255, 0, 0}, {0, 255, 0}, {0, 0, 255}};
 
 	    // First add trajectory points
-	    for (int i = 0; i < position.size(); ++i) {
+	    for (int i = 0; i < N; ++i) {
 			Eigen::Vector3d pt = position[i];
 			if(only_xy){
 				pt[2] = 0.0;
@@ -89,8 +89,8 @@ namespace IMUProject{
         // Then add axis points
 	    if (kpoints > 0 && interval > 0 && axis_length > 0) {
 		    Eigen::Matrix3d local_axis = Eigen::Matrix3d::Identity();
-		    for (int i = 0; i < position.size(); i += interval) {
-			    Eigen::Matrix3d axis_dir = orientation[i].toRotationMatrix() * local_axis;
+		    for (int i = 0; i < N; i += interval) {
+			    Eigen::Matrix3d axis_dir = orientation[i] * local_axis;
 			    for (int j = 0; j < kpoints; ++j) {
 				    for(int k=0; k<3; ++k){
 						Eigen::Vector3d pos = position[i];

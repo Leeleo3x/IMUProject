@@ -54,23 +54,20 @@ int main(int argc, char** argv) {
 	std::vector<Eigen::Vector3d> linacce(dataset.GetLinearAcceleration().begin(),
 	                                           dataset.GetLinearAcceleration().begin() + kTotalCount);
 
-	std::vector<Eigen::Quaterniond> orientation;
+	std::vector<Eigen::Matrix3d> orientation((size_t) kTotalCount);
 	if(FLAGS_rv){
-		orientation = std::vector<Eigen::Quaterniond>(dataset.GetRotationVector().begin(),
-													  dataset.GetRotationVector().begin() + kTotalCount);
 		const Eigen::Quaterniond& tango_init_ori = dataset.GetOrientation()[0];
-		const Eigen::Quaterniond imu_init_ori = orientation[0];
-		auto align_ori = tango_init_ori * imu_init_ori.conjugate();
+		const Eigen::Quaterniond& imu_init_ori = dataset.GetRotationVector()[0];
+		const Eigen::Quaterniond align_ori = tango_init_ori * imu_init_ori.conjugate();
 		for(auto i=0; i<orientation.size(); ++i){
-			orientation[i] = align_ori * orientation[i];
+			orientation[i] = (align_ori * dataset.GetRotationVector()[i]).toRotationMatrix();
 		}
 	}else{
 		LOG(WARNING) << "Using ground truth orientation";
-		orientation = std::vector<Eigen::Quaterniond>(dataset.GetOrientation().begin(),
-													  dataset.GetOrientation().begin() + kTotalCount);
+		for(auto i=0; i<orientation.size(); ++i){
+			orientation[i] = dataset.GetOrientation()[i].toRotationMatrix();
+		}
 	}
-
-
 
 	const double feature_smooth_sigma = 2.0;
 	IMUProject::GaussianFilter(&gyro[0], (int)gyro.size(), feature_smooth_sigma);
@@ -93,10 +90,14 @@ int main(int argc, char** argv) {
 
 	if(FLAGS_gt){
 		LOG(WARNING) << "Using ground truth as constraint";
-		const std::vector<Eigen::Vector3d> positions(
+		const std::vector<Eigen::Vector3d> positions_slice(
 				dataset.GetPosition().begin(),
 				dataset.GetPosition().begin() + kTotalCount);
-		cv::Mat local_speed_mat = IMUProject::ComputeLocalSpeedTarget(ts, positions, orientation, constraint_ind, 10);
+		const std::vector<Eigen::Quaterniond> orientations_slice(
+				dataset.GetOrientation().begin(),
+				dataset.GetOrientation().begin() + kTotalCount
+		);
+		cv::Mat local_speed_mat = IMUProject::ComputeLocalSpeedTarget(ts, positions_slice, orientations_slice, constraint_ind, 10);
 		CHECK_EQ(local_speed_mat.rows, local_speed.size());
 		for(auto i=0; i<local_speed.size(); ++i){
 			local_speed[i][0] = (double)local_speed_mat.at<float>(i, 0);
@@ -125,16 +126,18 @@ int main(int argc, char** argv) {
 		}
 	}
 
-
-
-	// Formulate problem
-    printf("Constructing problem...\n");
-    ceres::Problem problem;
-    constexpr int kResiduals = IMUProject::Config::kConstriantPoints;
+	constexpr int kResiduals = IMUProject::Config::kConstriantPoints;
 	constexpr int kOriSparsePoint = IMUProject::Config::kOriSparsePoint;
-    constexpr int kSparsePoint = IMUProject::Config::kSparsePoints;
-    // Initialize bias with gaussian distribution
-    std::vector<double> bx((size_t)kSparsePoint, 0.0), by((size_t)kSparsePoint, 0.0), bz((size_t)kSparsePoint,0.0);
+	constexpr int kSparsePoint = IMUProject::Config::kSparsePoints;
+
+	std::vector<Eigen::Vector3d> corrected_linacce = linacce;
+	std::vector<Eigen::Matrix3d> corrected_orientation = orientation;
+	{
+		printf("Optimizing linear acceleration bias...\n");
+		ceres::Problem problem_linacce;
+		// Initialize bias with gaussian distribution
+		std::vector<double> bx((size_t) kSparsePoint, 0.0), by((size_t) kSparsePoint, 0.0), bz((size_t) kSparsePoint,
+																							   0.0);
 
 //	std::vector<double> rz((size_t)kOriSparsePoint, 0.0);
 //    std::default_random_engine generator;
@@ -145,59 +148,87 @@ int main(int argc, char** argv) {
 //        bz[i] = distribution(generator);
 //    }
 
+		using FunctorTypeLinacce = IMUProject::LocalSpeedFunctor<kSparsePoint, kResiduals>;
+
+		FunctorTypeLinacce *functor = new FunctorTypeLinacce(ts, linacce, orientation, constraint_ind, local_speed,
+											   Eigen::Vector3d(0, 0, 0), FLAGS_weight_ls, FLAGS_weight_vs);
+		problem_linacce.AddResidualBlock(
+				new ceres::AutoDiffCostFunction<FunctorTypeLinacce, 3 * kResiduals, kSparsePoint, kSparsePoint, kSparsePoint>(
+						functor), nullptr, bx.data(), by.data(), bz.data());
 
 
-//	using FunctorType = IMUProject::LocalSpeedAndOrientationFunctor<kSparsePoint, kOriSparsePoint, kResiduals>;
-	using FunctorType = IMUProject::LocalSpeedFunctor<kSparsePoint, kResiduals>;
+		problem_linacce.AddResidualBlock(
+				new ceres::AutoDiffCostFunction<IMUProject::WeightDecay<kSparsePoint>, kSparsePoint, kSparsePoint>(
+						new IMUProject::WeightDecay<kSparsePoint>(1.0)
+				), nullptr, bx.data());
 
-	FunctorType* functor = new FunctorType(ts, linacce, orientation, constraint_ind, local_speed, Eigen::Vector3d(0, 0, 0), FLAGS_weight_ls, FLAGS_weight_vs);
-	problem.AddResidualBlock(new ceres::AutoDiffCostFunction<FunctorType, 3 * kResiduals, kSparsePoint, kSparsePoint, kSparsePoint>(
-			functor), nullptr, bx.data(), by.data(), bz.data());
+		problem_linacce.AddResidualBlock(
+				new ceres::AutoDiffCostFunction<IMUProject::WeightDecay<kSparsePoint>, kSparsePoint, kSparsePoint>(
+						new IMUProject::WeightDecay<kSparsePoint>(1.0)
+				), nullptr, by.data());
 
+		problem_linacce.AddResidualBlock(
+				new ceres::AutoDiffCostFunction<IMUProject::WeightDecay<kSparsePoint>, kSparsePoint, kSparsePoint>(
+						new IMUProject::WeightDecay<kSparsePoint>(1.0)
+				), nullptr, bz.data());
 
-	// Use LocalSpeedAndOrientation functor
-//	FunctorType* functor = new FunctorType(ts, linacce, orientation, constraint_ind, local_speed, Eigen::Vector3d(0,0,0), FLAGS_weight_ls, FLAGS_weight_vs);
-//	problem.AddResidualBlock(new ceres::NumericDiffCostFunction<FunctorType, ceres::CENTRAL, 3 * kResiduals, kSparsePoint, kSparsePoint, kSparsePoint, kOriSparsePoint>(
-//			functor), nullptr, bx.data(), by.data(), bz.data(), rz.data());
+		float start_t = cv::getTickCount();
+		ceres::Solver::Options options;
+		options.linear_solver_type = ceres::DENSE_QR;
+		options.num_threads = 6;
+		options.minimizer_progress_to_stdout = true;
+		options.max_num_iterations = FLAGS_max_iter;
+		ceres::Solver::Summary summary;
 
+		printf("Solving...\n");
+		ceres::Solve(options, &problem_linacce, &summary);
 
-    problem.AddResidualBlock(new ceres::AutoDiffCostFunction<IMUProject::WeightDecay<kSparsePoint>, kSparsePoint, kSparsePoint>(
-            new IMUProject::WeightDecay<kSparsePoint>(1.0)
-    ), nullptr, bx.data());
+		std::cout << summary.BriefReport() << endl;
+		printf("Time usage: %.3fs\n", ((float) cv::getTickCount() - start_t) / cv::getTickFrequency());
 
-	problem.AddResidualBlock(new ceres::AutoDiffCostFunction<IMUProject::WeightDecay<kSparsePoint>, kSparsePoint, kSparsePoint>(
-			new IMUProject::WeightDecay<kSparsePoint>(1.0)
-	), nullptr, by.data());
+		functor->GetLinacceGrid()->correct_linacce_bias<double>(corrected_linacce.data(), bx.data(), by.data(),
+																bz.data());
+	}
 
-	problem.AddResidualBlock(new ceres::AutoDiffCostFunction<IMUProject::WeightDecay<kSparsePoint>, kSparsePoint, kSparsePoint>(
-			new IMUProject::WeightDecay<kSparsePoint>(1.0)
-	), nullptr, bz.data());
-
-//	problem.AddResidualBlock(new ceres::AutoDiffCostFunction<IMUProject::WeightDecay<kOriSparsePoint>, kOriSparsePoint, kOriSparsePoint>(
-//			new IMUProject::WeightDecay<kOriSparsePoint>(1.0)
-//	), nullptr, rz.data());
-
-	float start_t = cv::getTickCount();
-    ceres::Solver::Options options;
-    options.linear_solver_type = ceres::DENSE_QR;
-	options.num_threads = 6;
-    options.minimizer_progress_to_stdout = true;
-    options.max_num_iterations = FLAGS_max_iter;
-    ceres::Solver::Summary summary;
-
-    printf("Solving...\n");
-    ceres::Solve(options, &problem, &summary);
-
-    std::cout << summary.BriefReport() << endl;
-    printf("Time usage: %.3fs\n", ((float)cv::getTickCount() - start_t) / cv::getTickFrequency());
-
-	// Compute corrected trajectory
-	printf("Computing trajectory...\n");
-
-	std::vector<Eigen::Vector3d> corrected_linacce = linacce;
-	std::vector<Eigen::Quaterniond> corrected_orientation = orientation;
-
-	functor->GetLinacceGrid()->correct_linacce_bias<double>(corrected_linacce.data(), bx.data(), by.data(), bz.data());
+	{
+//		printf("Optimizing orientation drifting...\n");
+//		ceres::Problem problem_orientation;
+//
+//		using FunctorTypeOri = IMUProject::OrientationFunctor<kOriSparsePoint, kResiduals>;
+//		FunctorTypeOri* functor_ori = new FunctorTypeOri(ts, corrected_linacce, corrected_orientation, constraint_ind, local_speed, Eigen::Vector3d(0, 0, 0));
+//
+//		std::vector<double> rz((size_t) kOriSparsePoint, 0.0);
+////		problem_orientation.AddResidualBlock(new ceres::NumericDiffCostFunction<FunctorTypeOri, ceres::CENTRAL, 3 * kResiduals, kOriSparsePoint>(
+////				functor_ori), nullptr, rz.data());
+//		problem_orientation.AddResidualBlock(new ceres::AutoDiffCostFunction<FunctorTypeOri, 3 * kResiduals, kOriSparsePoint>(
+//				functor_ori), nullptr, rz.data());
+//
+//		problem_orientation.AddResidualBlock(
+//				new ceres::AutoDiffCostFunction<IMUProject::FirstOrderSmoothFunctor<kOriSparsePoint>, kOriSparsePoint, kOriSparsePoint>(
+//				new IMUProject::FirstOrderSmoothFunctor<kOriSparsePoint>(0.0001)), nullptr, rz.data());
+//
+//		float start_t = cv::getTickCount();
+//		ceres::Solver::Options options;
+//		options.linear_solver_type = ceres::DENSE_QR;
+//		options.num_threads = 6;
+//		options.minimizer_progress_to_stdout = true;
+//		options.max_num_iterations = FLAGS_max_iter;
+//		ceres::Solver::Summary summary;
+//		printf("Solving...\n");
+//		ceres::Solve(options, &problem_orientation, &summary);
+//
+//		std::cout << summary.BriefReport() << std::endl;
+//		printf("Time usage: %.3fs\n", ((float) cv::getTickCount() - start_t) / cv::getTickFrequency());
+//
+//		cout << "Orientation drifting:" << endl;
+//		for(auto i=0; i<rz.size(); ++i){
+//			cout << rz[i] << ' ';
+//		}
+//		cout << endl;
+//
+//		functor_ori->GetOriGrid()->correct_orientation(corrected_orientation.data(), rz.data());
+//
+	}
 //	functor->GetOrientationGrid()->correct_orientation(corrected_orientation.data(), rz.data());
 
 	std::vector<Eigen::Vector3d> directed_corrected_linacce = IMUProject::Rotate3DVector(corrected_linacce, corrected_orientation);
@@ -205,14 +236,17 @@ int main(int argc, char** argv) {
 	std::vector<Eigen::Vector3d> corrected_position = IMUProject::Integration(ts, corrected_speed, dataset.GetPosition()[0]);
 
 	sprintf(buffer, "%s/optimized_cpp_gaussian.ply", argv[1]);
-	IMUProject::WriteToPly(std::string(buffer), corrected_position, orientation);
+	IMUProject::WriteToPly(std::string(buffer), corrected_position.data(), orientation.data(), kTotalCount);
 
 	std::vector<Eigen::Vector3d> directed_linacce = IMUProject::Rotate3DVector(linacce, orientation);
 	std::vector<Eigen::Vector3d> speed = IMUProject::Integration(ts, directed_linacce);
 	std::vector<Eigen::Vector3d> raw_position = IMUProject::Integration(ts, speed, dataset.GetPosition()[0]);
 
 	sprintf(buffer, "%s/raw.ply", argv[1]);
-	IMUProject::WriteToPly(std::string(buffer), raw_position, orientation);
+	IMUProject::WriteToPly(std::string(buffer), raw_position.data(), orientation.data(), kTotalCount);
+
+	sprintf(buffer, "%s/drift_correction.ply", argv[1]);
+	IMUProject::WriteToPly(std::string(buffer), dataset.GetPosition().data(), corrected_orientation.data(), kTotalCount);
 
     return 0;
 }

@@ -18,7 +18,7 @@ namespace IMUProject {
 	struct Config {
 		static constexpr int kConstriantPoints = 1000;
 		static constexpr int kSparsePoints = 200;
-		static constexpr int kOriSparsePoint = 10;
+		static constexpr int kOriSparsePoint = 100;
 	};
 
 
@@ -60,7 +60,7 @@ namespace IMUProject {
             }
         }
 
-		void correct_orientation(Eigen::Quaterniond* data, const double* rz,
+		void correct_orientation(Eigen::Matrix3d* data, const double* rz,
 		                         const Eigen::Vector3d drift_axis = Eigen::Vector3d(0, 0, 1)) const{
 			for (int i = 0; i<kTotalCount; ++i){
 				const int vid = inverse_ind_[i];
@@ -68,8 +68,11 @@ namespace IMUProject {
 				if(vid > 0){
 					rot_z += (1.0 - alpha_[i]) * rz[vid - 1];
 				}
-				Eigen::AngleAxisd rot_aa(rot_z, drift_axis);
-				data[i] = Eigen::Quaterniond(rot_aa) * data[i];
+                const double sv = std::sin(rot_z);
+                const double cv = std::cos(rot_z);
+                Eigen::Matrix3d rotor;
+                rotor << cv, -1 * sv, 0, sv, cv, 0, 0, 0, 1;
+				data[i] = rotor * data[i];
 			}
 		}
 
@@ -202,12 +205,12 @@ namespace IMUProject {
 	public:
 		LocalSpeedFunctor(const std::vector<double> &time_stamp,
 		                  const std::vector<Eigen::Vector3d> &linacce,
-		                  const std::vector<Eigen::Quaterniond> &orientation,
+		                  const std::vector<Eigen::Matrix3d> &orientation,
 		                  const std::vector<int>& constraint_ind,
 		                  const std::vector<Eigen::Vector3d> &local_speed,
 		                  const Eigen::Vector3d init_speed,
 						  const double weight_ls = 1.0, const double weight_vs = 1.0):
-				linacce_(linacce), constraint_ind_(constraint_ind),
+				linacce_(linacce), orientation_(orientation), constraint_ind_(constraint_ind),
 				local_speed_(local_speed), init_speed_(init_speed),
 				weight_ls_(std::sqrt(weight_ls)), weight_vs_(std::sqrt(weight_vs)){
 			CHECK_EQ(local_speed.size(), KCONSTRAINT);
@@ -216,10 +219,6 @@ namespace IMUProject {
 			dt_.resize(time_stamp.size(), 0.0);
 			for(int i=0; i < dt_.size() - 1; ++i){
 				dt_[i] = time_stamp[i+1] - time_stamp[i];
-			}
-			orientation_.resize(orientation.size());
-			for(auto i=0; i<orientation.size(); ++i){
-				orientation_[i] = orientation[i].toRotationMatrix();
 			}
 		}
 
@@ -339,23 +338,18 @@ namespace IMUProject {
     public:
         LocalSpeedAndOrientationFunctor(const std::vector<double> &time_stamp,
                                         const std::vector<Eigen::Vector3d> &linacce,
-                                        const std::vector<Eigen::Quaterniond> &orientation,
+                                        const std::vector<Eigen::Matrix3d> &orientation,
                                         const std::vector<int>& constraint_ind,
                                         const std::vector<Eigen::Vector3d> &local_speed,
                                         const Eigen::Vector3d init_speed,
                                         const double weight_ls = 1.0, const double weight_vs = 1.0):
-                time_stamp_(time_stamp), linacce_(linacce), constraint_ind_(constraint_ind),
-                local_speed_(local_speed), init_speed_(init_speed), drift_axis(0, 0, 1),
+                time_stamp_(time_stamp), linacce_(linacce), orientation_(orientation),
+                constraint_ind_(constraint_ind), local_speed_(local_speed), init_speed_(init_speed), drift_axis(0, 0, 1),
                 weight_ls_(std::sqrt(weight_ls)), weight_vs_(std::sqrt(weight_vs)) {
 	        CHECK_EQ(local_speed.size(), KCONSTRAINT);
 	        CHECK_EQ(constraint_ind.size(), KCONSTRAINT);
 	        grid_.reset(new SparseGrid(time_stamp, KVAR_LINACCE));
 	        grid_orientation_.reset(new SparseGrid(time_stamp, KVAR_ROTATION));
-
-	        orientation_.resize(orientation.size());
-	        for (auto i = 0; i < orientation_.size(); ++i) {
-		        orientation_[i] = orientation[i].toRotationMatrix();
-	        }
         }
 
 #if false
@@ -483,6 +477,132 @@ namespace IMUProject {
         const Eigen::Vector3d init_speed_;
         const double weight_ls_;
         const double weight_vs_;
+    };
+
+
+    template <int KVAR, int KCONSTRAINT>
+    struct OrientationFunctor{
+    public:
+        OrientationFunctor(const std::vector<double> &time_stamp,
+                           const std::vector<Eigen::Vector3d> &linacce,
+                           const std::vector<Eigen::Matrix3d> &orientation,
+                           const std::vector<int>& constraint_ind,
+                           const std::vector<Eigen::Vector3d> &local_speed,
+                           const Eigen::Vector3d init_speed,
+                           const double weight_ls = 1.0, const double weight_vs = 1.0):
+                time_stamp_(time_stamp), linacce_(linacce), orientation_(orientation),
+                constraint_ind_(constraint_ind), local_speed_(local_speed), init_speed_(init_speed), drift_axis_(0, 0, 1),
+                weight_ls_(std::sqrt(weight_ls)), weight_vs_(std::sqrt(weight_vs)){
+            CHECK_EQ(constraint_ind_.size(), KCONSTRAINT);
+            CHECK_EQ(local_speed_.size(), KCONSTRAINT);
+            grid_orientation_.reset(new SparseGrid(time_stamp, KVAR));
+
+        }
+
+        const SparseGrid* GetOriGrid() const {return grid_orientation_.get(); }
+#if false
+        bool operator()(const double* const rz, double* residual) const{
+            std::vector<Eigen::Matrix<double, 3, 3> > corrected_orientation((size_t) grid_orientation_->GetTotalCount());
+            std::vector<Eigen::Matrix<double, 3, 1> > speed((size_t) grid_orientation_->GetTotalCount());
+            speed[0] = init_speed_;
+
+            const std::vector<double>& alpha = grid_orientation_->GetAlpha();
+            const std::vector<int>& inv_ind = grid_orientation_->GetInverseInd();
+            for(auto i=0; i<grid_orientation_->GetTotalCount(); ++i){
+                double rad_z = alpha[i] * rz[inv_ind[i]];
+                if(inv_ind[i] > 0){
+                    rad_z += (1.0 - alpha[i]) * rz[inv_ind[i] - 1];
+                }
+                Eigen::Matrix<double, 3, 3> rotor;
+                const double sv = ceres::sin(rad_z);
+                const double cv = ceres::cos(rad_z);
+                rotor << cv, -1 * sv, 0, sv, cv, 0, 0, 0, 1;
+                corrected_orientation[i] = rotor * orientation_[i];
+                if(i > 0){
+                    Eigen::Matrix<double, 3, 1> acce = corrected_orientation[i] * linacce_[i];
+                    speed[i] = speed[i-1] + acce * (time_stamp_[i] - time_stamp_[i-1]);
+                }
+            }
+
+            for (int cid = 0; cid < constraint_ind_.size(); ++cid) {
+                const int ind = constraint_ind_[cid];
+                Eigen::Matrix<double, 3, 1> ls = corrected_orientation[ind].transpose() * speed[ind];
+                residual[cid] = weight_ls_ * (ls[0] - local_speed_[cid][0]);
+                residual[cid + KCONSTRAINT] = weight_vs_ * speed[ind][2];
+                residual[cid + 2 * KCONSTRAINT] = weight_ls_ * (ls[2] - local_speed_[cid][2]);
+            }
+            return true;
+        }
+#else
+        template <typename T>
+        bool operator()(const T* const rz, T* residual) const{
+            std::vector<Eigen::Matrix<T, 3, 3> > corrected_orientation((size_t) grid_orientation_->GetTotalCount());
+            std::vector<Eigen::Matrix<T, 3, 1> > speed((size_t) grid_orientation_->GetTotalCount());
+            speed[0] = init_speed_.template cast<T>();
+
+            const std::vector<double>& alpha = grid_orientation_->GetAlpha();
+            const std::vector<int>& inv_ind = grid_orientation_->GetInverseInd();
+            for(auto i=0; i<grid_orientation_->GetTotalCount(); ++i){
+                T rad_z = alpha[i] * rz[inv_ind[i]];
+                if(inv_ind[i] > 0){
+                    rad_z += (1.0 - alpha[i]) * rz[inv_ind[i] - 1];
+                }
+                Eigen::Matrix<T, 3, 3> rotor;
+                const T sv = ceres::sin(rad_z);
+                const T cv = ceres::cos(rad_z);
+                rotor << cv, -1.0 * sv, 0, sv, cv, 0, 0, 0, 1.0;
+                corrected_orientation[i] = rotor * orientation_[i];
+                if(i > 0){
+                    Eigen::Matrix<T, 3, 1> acce = corrected_orientation[i] * linacce_[i];
+                    speed[i] = speed[i-1] + acce * (time_stamp_[i] - time_stamp_[i-1]);
+                }
+            }
+
+            for (int cid = 0; cid < constraint_ind_.size(); ++cid) {
+                const int ind = constraint_ind_[cid];
+                Eigen::Matrix<T, 3, 1> ls = corrected_orientation[ind].transpose() * speed[ind];
+                residual[cid] = weight_ls_ * (ls[0] - local_speed_[cid][0]);
+                residual[cid + KCONSTRAINT] = weight_vs_ * speed[ind][2];
+                residual[cid + 2 * KCONSTRAINT] = weight_ls_ * (ls[2] - local_speed_[cid][2]);
+            }
+            return true;
+        }
+#endif
+    private:
+        std::shared_ptr<SparseGrid> grid_orientation_;
+        const std::vector<double>& time_stamp_;
+        const std::vector<Eigen::Vector3d>& linacce_;
+        std::vector<Eigen::Matrix3d> orientation_;
+        const std::vector<int>& constraint_ind_;
+        const std::vector<Eigen::Vector3d>& local_speed_;
+
+        const Eigen::Vector3d drift_axis_;
+
+        const Eigen::Vector3d init_speed_;
+
+        const double weight_ls_;
+        const double weight_vs_;
+    };
+
+    template <int KVAR>
+    struct FirstOrderSmoothFunctor{
+        explicit FirstOrderSmoothFunctor(const double weight): weight_(std::sqrt(weight)){}
+
+        template <typename T>
+        bool operator()(const T* const x, T* residual) const{
+//            residual[0] = weight_ * x[0];
+//            for(int i=1; i<KVAR; ++i){
+//                residual[i] = weight_ * (x[i] - x[i-1]);
+//            }
+
+			for(int i=0; i<KVAR; ++i){
+				residual[i] = weight_ * x[i];
+			}
+
+            return true;
+        }
+    private:
+        const double weight_;
     };
 }//IMUProject
 #endif //PROJECT_IMU_OPTIMIZATION_H

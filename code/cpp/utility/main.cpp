@@ -28,6 +28,7 @@ int main(int argc, char** argv){
     printf("Writing the trajectory\n");
     sprintf(buffer, "%s/test.ply", argv[1]);
 
-    WriteToPly(std::string(buffer), dataset.GetPosition(), dataset.GetOrientation());
+    WriteToPly(std::string(buffer), dataset.GetPosition().data(), dataset.GetOrientation().data(),
+               (int)dataset.GetOrientation().size());
     return 0;
 }
