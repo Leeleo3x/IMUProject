@@ -345,7 +345,7 @@ namespace IMUProject {
 
             orientation_variable_ind_.resize(kOrienationBlock);
             for(auto i=0; i<time_stamp.size(); ++i){
-                
+
             }
         }
 
