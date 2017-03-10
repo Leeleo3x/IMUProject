@@ -42,8 +42,8 @@ int main(int argc, char** argv) {
 
     printf("Loading...\n");
     IMUProject::IMUDataset dataset(argv[1]);
-	// const int kTotalCount = (int)dataset.GetTimeStamp().size();
-    const int kTotalCount = 3000;
+	const int kTotalCount = (int)dataset.GetTimeStamp().size();
+//    const int kTotalCount = 3000;
 
 	printf("Total count: %d\n", kTotalCount);
 	const std::vector<double> ts(dataset.GetTimeStamp().begin(),
@@ -52,18 +52,18 @@ int main(int argc, char** argv) {
 	                                        dataset.GetGyro().begin() + kTotalCount);
 	std::vector<Eigen::Vector3d> linacce(dataset.GetLinearAcceleration().begin(),
 	                                           dataset.GetLinearAcceleration().begin() + kTotalCount);
-	const std::vector<Eigen::Quaterniond> orientation(dataset.GetOrientation().begin(),
-	                                                  dataset.GetOrientation().begin() + kTotalCount);
+//	const std::vector<Eigen::Quaterniond> orientation(dataset.GetOrientation().begin(),
+//	                                                  dataset.GetOrientation().begin() + kTotalCount);
 
-//	std::vector<Eigen::Quaterniond> orientation(dataset.GetRotationVector().begin(),
-//												dataset.GetRotationVector().begin() + kTotalCount);
-//
-//	const Eigen::Quaterniond& tango_init_ori = dataset.GetOrientation()[0];
-//	const Eigen::Quaterniond imu_init_ori = orientation[0];
-//	auto align_ori = tango_init_ori * imu_init_ori.conjugate();
-//	for(auto i=0; i<orientation.size(); ++i){
-//		orientation[i] = align_ori * orientation[i];
-//	}
+	std::vector<Eigen::Quaterniond> orientation(dataset.GetRotationVector().begin(),
+												dataset.GetRotationVector().begin() + kTotalCount);
+
+	const Eigen::Quaterniond& tango_init_ori = dataset.GetOrientation()[0];
+	const Eigen::Quaterniond imu_init_ori = orientation[0];
+	auto align_ori = tango_init_ori * imu_init_ori.conjugate();
+	for(auto i=0; i<orientation.size(); ++i){
+		orientation[i] = align_ori * orientation[i];
+	}
 
 
 	const double feature_smooth_sigma = 2.0;
@@ -125,9 +125,12 @@ int main(int argc, char** argv) {
     printf("Constructing problem...\n");
     ceres::Problem problem;
     constexpr int kResiduals = IMUProject::Config::kConstriantPoints;
+	constexpr int kOriSparsePoint = IMUProject::Config::kOriSparsePoint;
     constexpr int kSparsePoint = IMUProject::Config::kSparsePoints;
     // Initialize bias with gaussian distribution
     std::vector<double> bx((size_t)kSparsePoint, 0.0), by((size_t)kSparsePoint, 0.0), bz((size_t)kSparsePoint,0.0);
+
+//	std::vector<double> rz((size_t)kOriSparsePoint, 0.0);
 //    std::default_random_engine generator;
 //    std::normal_distribution<double> distribution(0.0, 0.001);
 //    for(int i=0; i<kSparsePoint; ++i){
@@ -136,13 +139,21 @@ int main(int argc, char** argv) {
 //        bz[i] = distribution(generator);
 //    }
 
-	IMUProject::LocalSpeedFunctor<kSparsePoint, kResiduals>* functor =
-			new IMUProject::LocalSpeedFunctor<kSparsePoint, kResiduals>(ts, linacce, orientation, constraint_ind,
-																		local_speed, Eigen::Vector3d(0, 0, 0), FLAGS_weight_ls, FLAGS_weight_vs);
 
-	problem.AddResidualBlock(new ceres::AutoDiffCostFunction<IMUProject::LocalSpeedFunctor<kSparsePoint, kResiduals>,
-			3 * kResiduals, kSparsePoint, kSparsePoint, kSparsePoint>(
+
+//	using FunctorType = IMUProject::LocalSpeedAndOrientationFunctor<kSparsePoint, kOriSparsePoint, kResiduals>;
+	using FunctorType = IMUProject::LocalSpeedFunctor<kSparsePoint, kResiduals>;
+
+	FunctorType* functor = new FunctorType(ts, linacce, orientation, constraint_ind, local_speed, Eigen::Vector3d(0, 0, 0), FLAGS_weight_ls, FLAGS_weight_vs);
+	problem.AddResidualBlock(new ceres::AutoDiffCostFunction<FunctorType, 3 * kResiduals, kSparsePoint, kSparsePoint, kSparsePoint>(
 			functor), nullptr, bx.data(), by.data(), bz.data());
+
+
+	// Use LocalSpeedAndOrientation functor
+//	FunctorType* functor = new FunctorType(ts, linacce, orientation, constraint_ind, local_speed, Eigen::Vector3d(0,0,0), FLAGS_weight_ls, FLAGS_weight_vs);
+//	problem.AddResidualBlock(new ceres::NumericDiffCostFunction<FunctorType, ceres::CENTRAL, 3 * kResiduals, kSparsePoint, kSparsePoint, kSparsePoint, kOriSparsePoint>(
+//			functor), nullptr, bx.data(), by.data(), bz.data(), rz.data());
+
 
     problem.AddResidualBlock(new ceres::AutoDiffCostFunction<IMUProject::WeightDecay<kSparsePoint>, kSparsePoint, kSparsePoint>(
             new IMUProject::WeightDecay<kSparsePoint>(1.0)
@@ -156,17 +167,9 @@ int main(int argc, char** argv) {
 			new IMUProject::WeightDecay<kSparsePoint>(1.0)
 	), nullptr, bz.data());
 
-//	problem.AddResidualBlock(new ceres::AutoDiffCostFunction<IMUProject::WeightDecay<1>, 1, 1>(
-//			new IMUProject::WeightDecay<1>(1.0)
-//	), nullptr, &bx_glob);
-//
-//	problem.AddResidualBlock(new ceres::AutoDiffCostFunction<IMUProject::WeightDecay<1>, 1, 1>(
-//			new IMUProject::WeightDecay<1>(1.0)
-//	), nullptr, &by_glob);
-//
-//	problem.AddResidualBlock(new ceres::AutoDiffCostFunction<IMUProject::WeightDecay<1>, 1, 1>(
-//			new IMUProject::WeightDecay<1>(1.0)
-//	), nullptr, &bz_glob);
+//	problem.AddResidualBlock(new ceres::AutoDiffCostFunction<IMUProject::WeightDecay<kOriSparsePoint>, kOriSparsePoint, kOriSparsePoint>(
+//			new IMUProject::WeightDecay<kOriSparsePoint>(1.0)
+//	), nullptr, rz.data());
 
 	float start_t = cv::getTickCount();
     ceres::Solver::Options options;
@@ -186,8 +189,12 @@ int main(int argc, char** argv) {
 	printf("Computing trajectory...\n");
 
 	std::vector<Eigen::Vector3d> corrected_linacce = linacce;
-	functor->GetGrid()->correct_bias<double>(corrected_linacce.data(), bx.data(), by.data(), bz.data());
-	std::vector<Eigen::Vector3d> directed_corrected_linacce = IMUProject::Rotate3DVector(corrected_linacce, orientation);
+	std::vector<Eigen::Quaterniond> corrected_orientation = orientation;
+
+	functor->GetLinacceGrid()->correct_linacce_bias<double>(corrected_linacce.data(), bx.data(), by.data(), bz.data());
+//	functor->GetOrientationGrid()->correct_orientation(corrected_orientation.data(), rz.data());
+
+	std::vector<Eigen::Vector3d> directed_corrected_linacce = IMUProject::Rotate3DVector(corrected_linacce, corrected_orientation);
 	std::vector<Eigen::Vector3d> corrected_speed = IMUProject::Integration(ts, directed_corrected_linacce);
 	std::vector<Eigen::Vector3d> corrected_position = IMUProject::Integration(ts, corrected_speed, dataset.GetPosition()[0]);
 

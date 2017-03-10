@@ -11,12 +11,14 @@
 #include <Eigen/Eigen>
 #include <glog/logging.h>
 #include <ceres/ceres.h>
+#include <ceres/rotation.h>
 
 namespace IMUProject {
 
 	struct Config {
 		static constexpr int kConstriantPoints = 1000;
 		static constexpr int kSparsePoints = 200;
+		static constexpr int kOriSparsePoint = 10;
 	};
 
 
@@ -47,7 +49,7 @@ namespace IMUProject {
 			return kTotalCount;
 		}
         template <typename T>
-        void correct_bias(Eigen::Matrix<T, 3, 1>* data, const T* bx, const T* by, const T* bz,
+        void correct_linacce_bias(Eigen::Matrix<T, 3, 1>* data, const T* bx, const T* by, const T* bz,
 		const Eigen::Matrix<T, 3, 1> bias_global = Eigen::Matrix<T, 3, 1>::Zero()) const {
             for (int i = 0; i < kTotalCount; ++i) {
                 const int vid = inverse_ind_[i];
@@ -57,6 +59,20 @@ namespace IMUProject {
                 }
             }
         }
+
+		void correct_orientation(Eigen::Quaterniond* data, const double* rz,
+		                         const Eigen::Vector3d drift_axis = Eigen::Vector3d(0, 0, 1)) const{
+			for (int i = 0; i<kTotalCount; ++i){
+				const int vid = inverse_ind_[i];
+				double rot_z = alpha_[i] * rz[vid];
+				if(vid > 0){
+					rot_z += (1.0 - alpha_[i]) * rz[vid - 1];
+				}
+				Eigen::AngleAxisd rot_aa(rot_z, drift_axis);
+				data[i] = Eigen::Quaterniond(rot_aa) * data[i];
+			}
+		}
+
     private:
         const int kTotalCount;
         const int kVariableCount;
@@ -207,7 +223,7 @@ namespace IMUProject {
 			}
 		}
 
-		inline const SparseGrid* GetGrid() const{
+		inline const SparseGrid* GetLinacceGrid() const{
 			return grid_.get();
 		}
 #if false
@@ -318,7 +334,7 @@ namespace IMUProject {
 	};
 
 
-    template<int KVARIABLE, int KCONSTRAINT>
+    template<int KVAR_LINACCE, int KVAR_ROTATION, int KCONSTRAINT>
     struct LocalSpeedAndOrientationFunctor{
     public:
         LocalSpeedAndOrientationFunctor(const std::vector<double> &time_stamp,
@@ -328,44 +344,141 @@ namespace IMUProject {
                                         const std::vector<Eigen::Vector3d> &local_speed,
                                         const Eigen::Vector3d init_speed,
                                         const double weight_ls = 1.0, const double weight_vs = 1.0):
-                linacce_(linacce), constraint_ind_(constraint_ind),
-                local_speed_(local_speed), init_speed_(init_speed),
-                weight_ls_(std::sqrt(weight_ls)), weight_vs_(std::sqrt(weight_vs)){
-            CHECK_EQ(local_speed.size(), KCONSTRAINT);
-            CHECK_EQ(constraint_ind.size(), KCONSTRAINT);
-            grid_.reset(new SparseGrid(time_stamp, KVARIABLE));
-            dt_.resize(time_stamp.size(), 0.0);
-            for(int i=0; i < dt_.size() - 1; ++i){
-                dt_[i] = time_stamp[i+1] - time_stamp[i];
-            }
-            orientation_.resize(orientation.size());
-            for(auto i=0; i<orientation.size(); ++i){
-                orientation_[i] = orientation[i].toRotationMatrix();
-            }
+                time_stamp_(time_stamp), linacce_(linacce), constraint_ind_(constraint_ind),
+                local_speed_(local_speed), init_speed_(init_speed), drift_axis(0, 0, 1),
+                weight_ls_(std::sqrt(weight_ls)), weight_vs_(std::sqrt(weight_vs)) {
+	        CHECK_EQ(local_speed.size(), KCONSTRAINT);
+	        CHECK_EQ(constraint_ind.size(), KCONSTRAINT);
+	        grid_.reset(new SparseGrid(time_stamp, KVAR_LINACCE));
+	        grid_orientation_.reset(new SparseGrid(time_stamp, KVAR_ROTATION));
 
-            orientation_variable_ind_.resize(kOrienationBlock);
-            for(auto i=0; i<time_stamp.size(); ++i){
-                
-            }
+	        orientation_.resize(orientation.size());
+	        for (auto i = 0; i < orientation_.size(); ++i) {
+		        orientation_[i] = orientation[i].toRotationMatrix();
+	        }
         }
 
+#if false
         template<typename T>
         bool operator() (const T* const bx, const T* const by, const T* const bz,
-                         const T* const ob1, const T*const ob2, const T* const ob3, const T* const ob4, const T* const ob5){
+                         const T* const ob1, const T*const ob2, const T* const ob3, const T* const ob4, const T* const ob5,
+                         T* residual) const{
 
+	        std::vector<Eigen::Matrix <T, 3, 1> > directed_acce(linacce_.size());
+	        std::vector<Eigen::Matrix <T, 3, 1> > speed((size_t) grid_->GetTotalCount());
+	        std::vector<Eigen::Quaternion<T> > corrected_orientation((size_t) grid_->GetTotalCount());
 
+	        speed[0] = init_speed_ + Eigen::Matrix <T, 3, 1>((T)std::numeric_limits<double>::epsilon(),
+	                                                         (T)std::numeric_limits<double>::epsilon(),
+	                                                         (T)std::numeric_limits<double>::epsilon());
+	        directed_acce[0] = (orientation_[0] * linacce_[0]).template cast<T>();
+	        for (int i = 0; i < grid_->GetTotalCount(); ++i) {
+		        const int inv_ind = grid_->GetInverseIndAt(i);
+
+		        const double alpha_ori = grid_orientation_->GetAlphaAt(i);
+		        switch(grid_orientation_->GetInverseIndAt(i)){
+			        case 0:
+				        corrected_orientation[i] = orientation_[i] +
+				        break;
+			        case 1:
+				        corrected_orientation[i] = orientation_[i] + alpha_ori * Eigen::Quaternion<T>(ob1) +
+						        (1.0 - grid_orientation_->GetAlphaAt(lph))
+		        }
+		        Eigen::Matrix<T, 3, 1> corrected_acce =
+				        linacce_[i] + grid_->GetAlphaAt(i) * Eigen::Matrix<T, 3, 1>(bx[inv_ind], by[inv_ind], bz[inv_ind]);
+
+		        if (inv_ind > 0) {
+			        corrected_acce = corrected_acce + (1.0 - grid_->GetAlphaAt(i)) *
+			                                          Eigen::Matrix<T, 3, 1>(bx[inv_ind - 1], by[inv_ind - 1], bz[inv_ind - 1]);
+		        }
+		        if (i > 0) {
+			        directed_acce[i] = orientation_[i] * corrected_acce;
+			        speed[i] = speed[i - 1] + directed_acce[i - 1] * (time_stamp_[i] - time_stamp_[i-1]);
+		        }
+	        }
+
+	        for (int cid = 0; cid < constraint_ind_.size(); ++cid) {
+		        const int ind = constraint_ind_[cid];
+		        Eigen::Matrix<T, 3, 1> ls = corrected_orientation[ind] * speed[ind];
+		        residual[cid] = weight_ls_ * (ls[0] - (T)local_speed_[cid][0]);
+		        // residual[cid + KCONSTRAINT] = weight_ls_ * (ls[1] - (T)local_speed_[cid][1]);
+		        // residual[cid + KCONSTRAINT] = weight_ls_ * ls[1];
+		        residual[cid + KCONSTRAINT] = weight_vs_ * speed[ind][2];
+		        residual[cid + 2 * KCONSTRAINT] = weight_ls_ * (ls[2] - (T)local_speed_[cid][2]);
+
+	        }
             return true;
         }
+#else
+	    bool operator() (const double* const bx, const double* const by, const double* const bz, const double* rz,
+	                     double* residual) const{
 
-        static constexpr int kOrienationBlock = 5;
+		    std::vector<Eigen::Matrix <double, 3, 1> > directed_acce(linacce_.size());
+		    std::vector<Eigen::Matrix <double, 3, 1> > speed((size_t) grid_->GetTotalCount());
+		    std::vector<Eigen::Matrix <double, 3, 3> > corrected_orientation((size_t) grid_->GetTotalCount());
+
+		    speed[0] = init_speed_ + Eigen::Matrix <double, 3, 1>(std::numeric_limits<double>::epsilon(),
+		                                                          std::numeric_limits<double>::epsilon(),
+		                                                          std::numeric_limits<double>::epsilon());
+		    directed_acce[0] = orientation_[0] * linacce_[0];
+
+		    for(int i=0; i<grid_orientation_->GetTotalCount(); ++i){
+			    const int inv_ind = grid_orientation_->GetInverseIndAt(i);
+			    double rot_z = grid_orientation_->GetAlphaAt(i) * rz[inv_ind];
+			    if(inv_ind > 0){
+				    rot_z += (1.0 - grid_orientation_->GetAlphaAt(i)) * rz[inv_ind - 1];
+			    }
+
+			    double rot_zz[4] = {0, 0, rot_z};
+			    ceres::AngleAxisToRotationMatrix<double>(rot_zz, corrected_orientation[i].data());
+		    }
+
+		    for (int i = 0; i < grid_->GetTotalCount(); ++i) {
+			    const int inv_ind = grid_->GetInverseIndAt(i);
+			    Eigen::Matrix<double, 3, 1> corrected_acce =
+					    linacce_[i] + grid_->GetAlphaAt(i) * Eigen::Matrix<double, 3, 1>(bx[inv_ind], by[inv_ind], bz[inv_ind]);
+			    if (inv_ind > 0) {
+				    corrected_acce = corrected_acce + (1.0 - grid_->GetAlphaAt(i)) *
+				                                      Eigen::Matrix<double, 3, 1>(bx[inv_ind - 1], by[inv_ind - 1], bz[inv_ind - 1]);
+			    }
+			    if (i > 0) {
+				    directed_acce[i] = corrected_orientation[i] * corrected_acce;
+				    speed[i] = speed[i - 1] + directed_acce[i - 1] * (time_stamp_[i] - time_stamp_[i-1]);
+			    }
+		    }
+
+		    for (int cid = 0; cid < constraint_ind_.size(); ++cid) {
+			    const int ind = constraint_ind_[cid];
+			    Eigen::Matrix<double, 3, 1> ls = corrected_orientation[ind].transpose() * speed[ind];
+			    residual[cid] = weight_ls_ * (ls[0] - local_speed_[cid][0]);
+			    // residual[cid + KCONSTRAINT] = weight_ls_ * (ls[1] - (T)local_speed_[cid][1]);
+			    // residual[cid + KCONSTRAINT] = weight_ls_ * ls[1];
+			    residual[cid + KCONSTRAINT] = weight_vs_ * speed[ind][2];
+			    residual[cid + 2 * KCONSTRAINT] = weight_ls_ * (ls[2] - local_speed_[cid][2]);
+
+		    }
+		    return true;
+	    }
+#endif
+
+	    const SparseGrid* GetLinacceGrid() const{
+		    return grid_.get();
+	    }
+
+	    const SparseGrid* GetOrientationGrid() const{
+		    return grid_orientation_.get();
+	    }
     private:
         std::shared_ptr<SparseGrid> grid_;
-        std::vector<double> dt_;
+	    std::shared_ptr<SparseGrid> grid_orientation_;
+
+        const std::vector<double>& time_stamp_;
         const std::vector<Eigen::Vector3d>& linacce_;
         std::vector<Eigen::Matrix3d> orientation_;
         const std::vector<int>& constraint_ind_;
-        std::vector<int> orientation_variable_ind_;
         const std::vector<Eigen::Vector3d>& local_speed_;
+
+	     const Eigen::Vector3d drift_axis;
 
         const Eigen::Vector3d init_speed_;
         const double weight_ls_;
