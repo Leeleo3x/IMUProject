@@ -43,30 +43,27 @@ int main(int argc, char** argv) {
 
     printf("Loading...\n");
     IMUProject::IMUDataset dataset(argv[1]);
+
 	const int kTotalCount = (int)dataset.GetTimeStamp().size();
 //    const int kTotalCount = 3000;
 
 	printf("Total count: %d\n", kTotalCount);
-	const std::vector<double> ts(dataset.GetTimeStamp().begin(),
-	                             dataset.GetTimeStamp().begin() + kTotalCount);
-	std::vector<Eigen::Vector3d> gyro(dataset.GetGyro().begin(),
-	                                        dataset.GetGyro().begin() + kTotalCount);
-	std::vector<Eigen::Vector3d> linacce(dataset.GetLinearAcceleration().begin(),
-	                                           dataset.GetLinearAcceleration().begin() + kTotalCount);
+	const std::vector<double>& ts = dataset.GetTimeStamp();
+	std::vector<Eigen::Vector3d> gyro = dataset.GetGyro();
+	std::vector<Eigen::Vector3d> linacce = dataset.GetLinearAcceleration();
 
-	std::vector<Eigen::Matrix3d> orientation((size_t) kTotalCount);
+	std::vector<Eigen::Quaterniond> orientation((size_t) kTotalCount);
 	if(FLAGS_rv){
 		const Eigen::Quaterniond& tango_init_ori = dataset.GetOrientation()[0];
 		const Eigen::Quaterniond& imu_init_ori = dataset.GetRotationVector()[0];
 		const Eigen::Quaterniond align_ori = tango_init_ori * imu_init_ori.conjugate();
 		for(auto i=0; i<orientation.size(); ++i){
-			orientation[i] = (align_ori * dataset.GetRotationVector()[i]).toRotationMatrix();
+			orientation[i] = align_ori * dataset.GetRotationVector()[i];
 		}
 	}else{
 		LOG(WARNING) << "Using ground truth orientation";
-		for(auto i=0; i<orientation.size(); ++i){
-			orientation[i] = dataset.GetOrientation()[i].toRotationMatrix();
-		}
+		orientation = std::vector<Eigen::Quaterniond>(dataset.GetOrientation().begin(),
+													  dataset.GetOrientation().begin() + kTotalCount);
 	}
 
 	const double feature_smooth_sigma = 2.0;
@@ -131,7 +128,7 @@ int main(int argc, char** argv) {
 	constexpr int kSparsePoint = IMUProject::Config::kSparsePoints;
 
 	std::vector<Eigen::Vector3d> corrected_linacce = linacce;
-	std::vector<Eigen::Matrix3d> corrected_orientation = orientation;
+	std::vector<Eigen::Quaterniond> corrected_orientation = orientation;
 	{
 		printf("Optimizing linear acceleration bias...\n");
 		ceres::Problem problem_linacce;
@@ -150,8 +147,8 @@ int main(int argc, char** argv) {
 
 		using FunctorTypeLinacce = IMUProject::LocalSpeedFunctor<kSparsePoint, kResiduals>;
 
-		FunctorTypeLinacce *functor = new FunctorTypeLinacce(ts, linacce, orientation, constraint_ind, local_speed,
-											   Eigen::Vector3d(0, 0, 0), FLAGS_weight_ls, FLAGS_weight_vs);
+		FunctorTypeLinacce *functor = new FunctorTypeLinacce(ts.data(), (int)ts.size(), linacce.data(), orientation.data(),
+															 constraint_ind.data(), local_speed.data(), Eigen::Vector3d(0, 0, 0), FLAGS_weight_ls, FLAGS_weight_vs);
 		problem_linacce.AddResidualBlock(
 				new ceres::AutoDiffCostFunction<FunctorTypeLinacce, 3 * kResiduals, kSparsePoint, kSparsePoint, kSparsePoint>(
 						functor), nullptr, bx.data(), by.data(), bz.data());

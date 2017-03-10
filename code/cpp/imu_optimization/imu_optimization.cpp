@@ -8,14 +8,13 @@ using namespace std;
 
 namespace IMUProject {
 
-	SparseGrid::SparseGrid(const std::vector<double> &time_stamp,
+	SparseGrid::SparseGrid(const double* time_stamp, const int N,
 	                       const int variable_count,
 	                       const std::vector<int>* variable_ind):
-			kTotalCount((int)time_stamp.size()) ,kVariableCount(variable_count){
+			kTotalCount(N) ,kVariableCount(variable_count){
 		alpha_.resize((size_t)kTotalCount);
 		inverse_ind_.resize((size_t)kTotalCount);
 		variable_ind_.resize((size_t)kVariableCount);
-
 		if(variable_ind != nullptr){
 			CHECK_EQ(variable_ind->size(), kVariableCount);
 			for(auto i=0; i<kVariableCount; ++i){
@@ -45,31 +44,4 @@ namespace IMUProject {
 			}
 		}
 	}
-
-	SizedSharedSpeedFunctor::SizedSharedSpeedFunctor(const std::vector<double> &time_stamp,
-	                                                 const std::vector<Eigen::Vector3d> &linacce,
-	                                                 const std::vector<Eigen::Quaterniond> &orientation,
-	                                                 const std::vector<int> &constraint_ind,
-	                                                 const std::vector<double> &target_speed_mag,
-	                                                 const std::vector<double> &target_vspeed,
-	                                                 const Eigen::Vector3d &init_speed,
-	                                                 const double weight_sm,
-	                                                 const double weight_vs) :
-			linacce_(linacce), orientation_(orientation), constraint_ind_(constraint_ind),
-			target_speed_mag_(target_speed_mag), target_vspeed_(target_vspeed),
-			init_speed_(init_speed), weight_sm_(std::sqrt(weight_sm)), weight_vs_(std::sqrt(weight_vs)) {
-		// Sanity check
-		CHECK_EQ(constraint_ind_.size(), Config::kConstriantPoints);
-		CHECK_LE(constraint_ind_.size(), target_speed_mag_.size());
-		CHECK_LE(constraint_ind_.size(), target_vspeed_.size());
-
-		grid_.reset(new SparseGrid(time_stamp, Config::kSparsePoints));
-
-		dt_.resize((int)grid_->GetTotalCount(), 0);
-		for (int i = 0; i < grid_->GetTotalCount() - 1; ++i) {
-			dt_[i] = time_stamp[i + 1] - time_stamp[i];
-		}
-		dt_[dt_.size() - 1] = dt_[dt_.size() - 2];
-	}
-
 }//IMUProject

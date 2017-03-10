@@ -67,7 +67,7 @@ namespace IMUProject{
     }
 
 	void WriteToPly(const std::string& path, const Eigen::Vector3d* position,
-					const Eigen::Matrix3d* orientation, const int N, const bool only_xy,
+					const Eigen::Quaterniond* orientation, const int N, const bool only_xy,
 					const double axis_length, const int kpoints, const int interval){
 		using TriMesh = OpenMesh::TriMesh_ArrayKernelT<>;
 		TriMesh mesh;
@@ -90,7 +90,7 @@ namespace IMUProject{
 	    if (kpoints > 0 && interval > 0 && axis_length > 0) {
 		    Eigen::Matrix3d local_axis = Eigen::Matrix3d::Identity();
 		    for (int i = 0; i < N; i += interval) {
-			    Eigen::Matrix3d axis_dir = orientation[i] * local_axis;
+			    Eigen::Matrix3d axis_dir = orientation[i].toRotationMatrix() * local_axis;
 			    for (int j = 0; j < kpoints; ++j) {
 				    for(int k=0; k<3; ++k){
 						Eigen::Vector3d pos = position[i];
