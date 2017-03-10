@@ -24,6 +24,7 @@ DEFINE_int32(max_iter, 500, "maximum iteration");
 DEFINE_int32(window, 200, "Window size");
 DEFINE_string(model_path, "../../../../models/model_0309_body_w200_s10", "Path to models");
 DEFINE_bool(gt, false, "Use ground truth");
+DEFINE_bool(rv, false, "Use rotation vector");
 DEFINE_double(feature_smooth_alpha, -1, "cut-off threshold for ");
 DEFINE_double(weight_ls, 1.0, "The weight of local speed residual");
 DEFINE_double(weight_vs, 1.0, "The weight of vertical speed residual");
@@ -52,18 +53,23 @@ int main(int argc, char** argv) {
 	                                        dataset.GetGyro().begin() + kTotalCount);
 	std::vector<Eigen::Vector3d> linacce(dataset.GetLinearAcceleration().begin(),
 	                                           dataset.GetLinearAcceleration().begin() + kTotalCount);
-//	const std::vector<Eigen::Quaterniond> orientation(dataset.GetOrientation().begin(),
-//	                                                  dataset.GetOrientation().begin() + kTotalCount);
 
-	std::vector<Eigen::Quaterniond> orientation(dataset.GetRotationVector().begin(),
-												dataset.GetRotationVector().begin() + kTotalCount);
-
-	const Eigen::Quaterniond& tango_init_ori = dataset.GetOrientation()[0];
-	const Eigen::Quaterniond imu_init_ori = orientation[0];
-	auto align_ori = tango_init_ori * imu_init_ori.conjugate();
-	for(auto i=0; i<orientation.size(); ++i){
-		orientation[i] = align_ori * orientation[i];
+	std::vector<Eigen::Quaterniond> orientation;
+	if(FLAGS_rv){
+		orientation = std::vector<Eigen::Quaterniond>(dataset.GetRotationVector().begin(),
+													  dataset.GetRotationVector().begin() + kTotalCount);
+		const Eigen::Quaterniond& tango_init_ori = dataset.GetOrientation()[0];
+		const Eigen::Quaterniond imu_init_ori = orientation[0];
+		auto align_ori = tango_init_ori * imu_init_ori.conjugate();
+		for(auto i=0; i<orientation.size(); ++i){
+			orientation[i] = align_ori * orientation[i];
+		}
+	}else{
+		LOG(WARNING) << "Using ground truth orientation";
+		orientation = std::vector<Eigen::Quaterniond>(dataset.GetOrientation().begin(),
+													  dataset.GetOrientation().begin() + kTotalCount);
 	}
+
 
 
 	const double feature_smooth_sigma = 2.0;
