@@ -242,8 +242,5 @@ int main(int argc, char** argv) {
 	sprintf(buffer, "%s/raw.ply", argv[1]);
 	IMUProject::WriteToPly(std::string(buffer), raw_position.data(), orientation.data(), kTotalCount);
 
-	sprintf(buffer, "%s/drift_correction.ply", argv[1]);
-	IMUProject::WriteToPly(std::string(buffer), dataset.GetPosition().data(), corrected_orientation.data(), kTotalCount);
-
     return 0;
 }
