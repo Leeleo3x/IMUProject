@@ -102,12 +102,6 @@ if __name__ == '__main__':
         rv_device = np.genfromtxt(device_dir + '/orientation.txt')[args.margin:-args.margin]
         print('Rotation vector: {:.2f}Hz'.format(sample_rate(rv_device)))
 
-        if args.device == 'iphone':
-            print('Using iphone, invert the acceleration value')
-            acce_device[:, 1:] *= -1
-            linacce_device[:, 1:] *= -9.81
-            gravity_device[:, 1:] *= -1
-
         pose_data = np.genfromtxt(args.dir + '/tango/pose.txt')[args.margin:-args.margin]
         # reorder the quaternion representation
         pose_data[:, [-4, -3, -2, -1]] = pose_data[:, [-1, -4, -3, -2]]

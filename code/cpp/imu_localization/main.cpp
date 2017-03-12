@@ -13,8 +13,9 @@
 
 #include "imu_localization.h"
 
-DEFINE_string(model_path, "../../../../models/model_0309_body_w200_s10", "Path to model");
+DEFINE_string(model_path, "../../../../models/model_0312_body_w200_s10", "Path to model");
 DEFINE_int32(log_interval, 1000, "logging interval");
+DEFINE_bool(tango_ori, false, "Use ground truth orientation");
 
 using namespace std;
 
@@ -52,10 +53,15 @@ int main(int argc, char** argv){
     const std::vector<double>& ts = dataset.GetTimeStamp();
     const std::vector<Eigen::Vector3d>& gyro = dataset.GetGyro();
     const std::vector<Eigen::Vector3d>& linacce = dataset.GetLinearAcceleration();
-    std::vector<Eigen::Quaterniond> orientation = dataset.GetRotationVector();
-    Eigen::Quaterniond rv_to_tango = dataset.GetOrientation()[0] * dataset.GetRotationVector()[0].conjugate();
-    for(auto& v: orientation){
-        v = rv_to_tango * v;
+    std::vector<Eigen::Quaterniond> orientation;
+    if(FLAGS_tango_ori){
+        orientation = dataset.GetOrientation();
+    }else {
+        orientation = dataset.GetRotationVector();
+        Eigen::Quaterniond rv_to_tango = dataset.GetOrientation()[0] * dataset.GetRotationVector()[0].conjugate();
+        for(auto& v: orientation){
+            v = rv_to_tango * v;
+        }
     }
 
     float start_t = (float)cv::getTickCount();

@@ -48,17 +48,19 @@ def compute_fourier_features(data, samples, window_size, threshold, discard_dire
 
 
 #@jit
-def compute_direct_features(data, samples_points, window_size):
+def compute_direct_features(data, samples_points, window_size, sigma=-1):
     features = np.empty([samples_points.shape[0], data.shape[1] * window_size], dtype=np.float)
     for i in range(samples_points.shape[0]):
-        features[i, :] = data[samples_points[i] - window_size:samples_points[i]].flatten()
+        data_slice = data[samples_points[i] - window_size:samples_points[i]]
+        if sigma > 0:
+            data_slice = gaussian_filter1d(data_slice, sigma, axis=0)
+        features[i, :] = data_slice.flatten()
     return features
 
 
 def compute_direct_feature_gravity(gyro, linacce, samples, window_size):
     pass
     # gyro_gravity =
-
 
 
 def compute_speed(time_stamp, position, sample_points=None):
@@ -161,14 +163,6 @@ def get_training_data(data_all, imu_columns, option, sample_points=None, extra_a
 
     targets = None
 
-    if extra_args is not None:
-        if 'feature_smooth_alpha' in extra_args:
-            print('Smoothing the signal by low pass filter: alpha = ', extra_args['feature_smooth_alpha'])
-            data_used = low_pass_filter(data_used, extra_args['feature_smooth_alpha'])
-        if 'feature_smooth_sigma' in extra_args:
-            print('Smoothing the signal by gaussin filter: sigma = ', extra_args['feature_smooth_sigma'])
-            data_used = gaussian_filter1d(data_used, sigma=extra_args['feature_smooth_sigma'], axis=0)
-
     if option.target_ == 'speed_magnitude':
         targets = np.linalg.norm(compute_speed(time_stamp, pose_data), axis=1)
     elif option.target_ == 'angle':
@@ -186,9 +180,18 @@ def get_training_data(data_all, imu_columns, option, sample_points=None, extra_a
 
     targets = targets[sample_points]
 
+    gaussian_sigma = -1
+    if extra_args is not None:
+        if 'feature_smooth_alpha' in extra_args:
+            print('Smoothing the signal by low pass filter: alpha = ', extra_args['feature_smooth_alpha'])
+            data_used = low_pass_filter(data_used, extra_args['feature_smooth_alpha'])
+        if 'feature_smooth_sigma' in extra_args:
+            print('Smoothing the signal by gaussin filter: sigma = ', extra_args['feature_smooth_sigma'])
+            # gaussian_sigma = extra_args['feature_smooth_sigma']
+            # data_used = gaussian_filter1d(data_used, extra_args['feature_smooth_sigma'], axis=0)
+
     if option.feature_ == 'direct':
-        features = compute_direct_features(data_used, sample_points, option.window_size_)
-        # features = [data_used[ind - option.window_size_:ind].flatten() for ind in sample_points]
+        features = compute_direct_features(data_used, sample_points, option.window_size_, gaussian_sigma)
     elif option.feature_ == 'fourier':
         print('Additional parameters: ', extra_args)
         features = compute_fourier_features(data_used, sample_points, option.window_size_, extra_args['frq_threshold'],
