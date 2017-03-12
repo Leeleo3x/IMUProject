@@ -118,7 +118,7 @@ int main(int argc, char** argv){
     sprintf(buffer, "%s/result_trajectory.ply", argv[1]);
     // IMUProject::WriteToPly(std::string(buffer), positions_opt.data(), orientations_opt.data(), (int)positions_opt.size());
     IMUProject::WriteToPly(std::string(buffer), trajectory.GetPositions().data(),
-                           trajectory.GetOrientations().data(), trajectory.GetNumFrames());
+                           trajectory.GetOrientations().data(), trajectory.GetNumFrames(), true);
     LOG(INFO) << "Optimized trajectory written to " << buffer;
 
     return 0;
