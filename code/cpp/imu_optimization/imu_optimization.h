@@ -16,7 +16,7 @@
 namespace IMUProject {
 
 	struct Config {
-		static constexpr int kConstriantPoints = 300;
+		static constexpr int kConstriantPoints = 100;
 		static constexpr int kSparsePoints = 200;
 		static constexpr int kOriSparsePoint = 100;
 	};
