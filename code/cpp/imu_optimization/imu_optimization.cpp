@@ -30,7 +30,7 @@ namespace IMUProject {
 		// Compute the interpolation weights and inverse indexing
 		// y[i] = (1.0 - alpha[i]) * x[i-1] + alpha[i] * x[i]
 		for (int j = 0; j <= variable_ind_[0]; ++j) {
-			CHECK_GT(time_stamp[variable_ind_[0]] - time_stamp[0], std::numeric_limits<double>::epsilon());
+			CHECK_GT(time_stamp[variable_ind_[0]] - time_stamp[0], std::numeric_limits<double>::epsilon()) << variable_ind_[0];
 			alpha_[j] = (time_stamp[j] - time_stamp[0]) / (time_stamp[variable_ind_[0]] - time_stamp[0]);
 		}
 

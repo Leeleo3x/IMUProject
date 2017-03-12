@@ -82,6 +82,7 @@ namespace IMUProject {
 				time_stamp_(time_stamp), linacce_(linacce), orientation_(orientation),
 				constraint_ind_(constraint_ind), local_speed_(local_speed), init_speed_(init_speed),
 				weight_ls_(std::sqrt(weight_ls)), weight_vs_(std::sqrt(weight_vs)){
+
 			grid_.reset(new SparseGrid(time_stamp, N, KVARIABLE));
 		}
 
@@ -132,9 +133,7 @@ namespace IMUProject {
 			std::vector<Eigen::Matrix <T, 3, 1> > directed_acce((size_t) grid_->GetTotalCount());
 			std::vector<Eigen::Matrix <T, 3, 1> > speed((size_t) grid_->GetTotalCount());
 
-			speed[0] = init_speed_ + Eigen::Matrix <T, 3, 1>((T)std::numeric_limits<double>::epsilon(),
-			                                                 (T)std::numeric_limits<double>::epsilon(),
-			                                                 (T)std::numeric_limits<double>::epsilon());
+			speed[0] = init_speed_.template cast<T>();
 			directed_acce[0] = (orientation_[0] * linacce_[0]).template cast<T>();
 			for (int i = 0; i < grid_->GetTotalCount(); ++i) {
 				const int inv_ind = grid_->GetInverseIndAt(i);
@@ -157,7 +156,6 @@ namespace IMUProject {
 				residual[cid] = weight_ls_ * (ls[0] - (T)local_speed_[cid][0]);
 				residual[cid + KCONSTRAINT] = weight_vs_ * speed[ind][2];
 				residual[cid + 2 * KCONSTRAINT] = weight_ls_ * (ls[2] - (T)local_speed_[cid][2]);
-
 			}
 			return true;
 		}

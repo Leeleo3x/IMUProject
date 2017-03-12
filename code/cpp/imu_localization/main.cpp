@@ -66,30 +66,31 @@ int main(int argc, char** argv){
 //    positions_opt.reserve(init_capacity);
 //    orientations_opt.reserve(init_capacity);
 
-    for(int i=0; i < N; ++i){
-        if(i > 1000){
-            if(i % option.global_opt_interval_ == 0) {
-                LOG(INFO) << "Running global optimzation at frame " << i;
-//                trajectory.RunOptimization(0, trajectory.GetNumFrames());
+    for(int i = 0; i < N; ++i){
+	    trajectory.AddRecord(ts[i], gyro[i], linacce[i], orientation[i]);
 
-                //block the execution is there are too many tasks in the background thread
-                while(true) {
-                    if(trajectory.CanAdd()){
-                        break;
-                    }
-                }
-                trajectory.ScheduleOptimization(0, trajectory.GetNumFrames());
-            }else if(i % option.opt_interval_ == 0){
+	    if(i > option.local_opt_window_){
+            if(i % option.global_opt_interval_ == 0) {
+//                LOG(INFO) << "Running global optimzation at frame " << i;
+////                trajectory.RunOptimization(0, trajectory.GetNumFrames());
+//
+//                //block the execution is there are too many tasks in the background thread
 //                while(true) {
 //                    if(trajectory.CanAdd()){
 //                        break;
 //                    }
 //                }
-//                LOG(INFO) << "Running local optimzation at frame " << i;
-//                //trajectory.RunOptimization(i - 1000, 1000);
-//                trajectory.ScheduleOptimization(i - 1000, 800);
+//                trajectory.ScheduleOptimization(0, trajectory.GetNumFrames());
+            }else if(i % option.local_opt_interval_ == 0){
+	            LOG(INFO) << "Running local optimzation at frame " << i;
+                while(true) {
+                    if(trajectory.CanAdd()){
+                        break;
+                    }
+                }
+	            trajectory.ScheduleOptimization(i - option.local_opt_window_, option.local_opt_window_);
+//	            trajectory.RunOptimization(i  - option.local_opt_window_, option.local_opt_window_);
             }
-            trajectory.AddRecord(ts[i], gyro[i], linacce[i], orientation[i]);
         }
         if(FLAGS_log_interval > 0 && i > 0 && i % FLAGS_log_interval == 0){
             const float time_passage = std::max(((float)cv::getTickCount() - start_t) / (float)cv::getTickFrequency(),
@@ -97,6 +98,7 @@ int main(int argc, char** argv){
             sprintf(buffer, "%d records added in %.5fs, fps=%.2fHz\n", i, time_passage, (float) i / time_passage);
             LOG(INFO) << buffer;
         }
+
     }
 
     trajectory.EndTrajectory();

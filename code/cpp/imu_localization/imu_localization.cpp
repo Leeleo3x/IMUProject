@@ -90,9 +90,12 @@ namespace IMUProject{
     }
 
 	void IMUTrajectory::RunOptimization(const int start_id, const int N) {
+		CHECK_GE(start_id, 0);
         CHECK_GE(N, 600);
         // Complete the speed regression up to this point
+
         RegressSpeed(start_id + N);
+
 		ceres::Problem problem;
         const SparseGrid* grid = nullptr;
         std::vector<double> bx, by, bz;
@@ -100,16 +103,13 @@ namespace IMUProject{
 		std::vector<int> cur_constraint_id;
 		std::vector<Eigen::Vector3d> cur_local_speed;
 
-		cur_constraint_id.reserve(constraint_ind_.size());
-		cur_local_speed.reserve(local_speed_.size());
-
 		Eigen::Vector3d cur_init_speed;
 
 		auto ConstructConstraint = [&](const int kCon){
 			CHECK_GE(constraint_ind_.size(), kCon);
 			if(start_id > 0) {
 				for(auto i=constraint_ind_.size() - kCon; i<constraint_ind_.size(); ++i){
-					cur_constraint_id.push_back(constraint_ind_[i]);
+					cur_constraint_id.push_back(constraint_ind_[i] - start_id);
 					cur_local_speed.push_back(local_speed_[i]);
 				}
 				cur_init_speed = speed_[start_id];
@@ -165,7 +165,7 @@ namespace IMUProject{
 	}
 
 	void IMUTrajectory::StartOptmizationThread(){
-		auto check_interval = std::chrono::microseconds(100);
+		auto check_interval = std::chrono::microseconds(10);
 
 		LOG(INFO) << "Background thread started";
 		while(true){

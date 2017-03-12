@@ -21,9 +21,10 @@
 namespace IMUProject{
 
     struct IMULocalizationOption{
+        int local_opt_interval_ = 400;
+	    int local_opt_window_ = 1000;
 
-        int opt_interval_ = 400;
-        int global_opt_interval_ = 1000;
+	    int global_opt_interval_ = 2000;
         const double weight_ls_ = 1.0;
         const double weight_vs_ = 1.0;
 
@@ -91,6 +92,7 @@ namespace IMUProject{
                                            const Eigen::Vector3d init_speed,
                                            std::vector<double>& bx, std::vector<double>& by, std::vector<double>& bz){
             CHECK_GE(constraint_ind_.size(), kCon);
+
             FunctorType * functor = new FunctorType(&ts_[start_id], N, &linacce_[start_id], &orientation_[start_id],
                                                   constraint_ind, local_speed, init_speed,
                                                   option_.weight_ls_,option_.weight_vs_);
