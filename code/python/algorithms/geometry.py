@@ -27,7 +27,7 @@ def rotation_matrix_from_two_vectors(v1, v2):
     return np.identity(3) + math.sqrt(1 - theta * theta) * K + np.dot((1 - theta) * K * K, v1)
 
 
-@jit
+# @jit
 def quaternion_from_two_vectors(v1, v2):
     """
     Compute quaternion from two vectors
@@ -57,7 +57,7 @@ def align_3dvector_with_gravity(data, gravity, local_g_direction=np.array([0, 1,
 
     output = np.empty(data.shape, dtype=float)
     for i in range(data.shape[0]):
-        q = quaternion_from_two_vectors(local_g_direction, gravity[i])
+        q = quaternion_from_two_vectors(gravity[i], local_g_direction)
         output[i] = (q * quaternion.quaternion(1.0, *data[i]) * q.conj()).vec
 
     return output
@@ -104,15 +104,15 @@ def align_eular_rotation_with_gravity(data, gravity, local_g_direction=np.array(
 
     # be careful of the ambiguity of eular angle representation
     for i in range(data.shape[0]):
-        rotor = quaternion_from_two_vectors(local_g_direction, gravity[i])
+        rotor = quaternion_from_two_vectors(gravity[i], local_g_direction)
         q = rotor * quaternion.from_euler_angles(*data[i]) * rotor.conj()
         output[i] = quaternion.as_euler_angles(q)
 
-    return adjust_eular_angle(output)
+    return adjust_eular_angle(output, data)
 
 if __name__ == '__main__':
     import pandas
-    data_all = pandas.read_csv('../../../data/phab_body/cse1/processed/data.csv')
+    data_all = pandas.read_csv('../../../data/phab_body/test_gravity/processed/data.csv')
 
     gyro = data_all[['gyro_x', 'gyro_y', 'gyro_z']].values
 

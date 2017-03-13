@@ -58,10 +58,11 @@ def compute_direct_features(data, samples_points, window_size, sigma=-1):
     return features
 
 
-def compute_direct_feature_gravity(gyro, linacce, samples, window_size):
-    pass
-    # gyro_gravity =
-
+def compute_direct_feature_gravity(gyro, linacce, gravity, samples, window_size, sigma=-1):
+    gyro_gravity = geometry.align_eular_rotation_with_gravity(gyro, gravity)
+    linacce_gravity = geometry.align_3dvector_with_gravity(linacce, gravity)
+    return compute_direct_features(np.concatenate([gyro_gravity, linacce_gravity], axis=1), samples_points=samples,
+                                   window_size=window_size, sigma=sigma)
 
 def compute_speed(time_stamp, position, sample_points=None):
     """
@@ -107,7 +108,7 @@ def compute_local_speed_with_gravity(time_stamp, position, orientation, gravity,
     # rotate the local speed such at the gravity is along $local_gravity direction
     for i in range(local_speed.shape[0]):
         g = gravity[sample_points[i]]
-        rot_q = geometry.quaternion_from_two_vectors(local_gravity, g)
+        rot_q = geometry.quaternion_from_two_vectors(g, local_gravity)
         local_speed[i] = (rot_q * quaternion.quaternion(1.0, *local_speed[i]) * rot_q.conj()).vec
     return local_speed
 
@@ -187,7 +188,7 @@ def get_training_data(data_all, imu_columns, option, sample_points=None, extra_a
             data_used = low_pass_filter(data_used, extra_args['feature_smooth_alpha'])
         if 'feature_smooth_sigma' in extra_args:
             print('Smoothing the signal by gaussin filter: sigma = ', extra_args['feature_smooth_sigma'])
-            # gaussian_sigma = extra_args['feature_smooth_sigma']
+            gaussian_sigma = extra_args['feature_smooth_sigma']
             # data_used = gaussian_filter1d(data_used, extra_args['feature_smooth_sigma'], axis=0)
 
     if option.feature_ == 'direct':
@@ -196,6 +197,10 @@ def get_training_data(data_all, imu_columns, option, sample_points=None, extra_a
         print('Additional parameters: ', extra_args)
         features = compute_fourier_features(data_used, sample_points, option.window_size_, extra_args['frq_threshold'],
                                                   extra_args['discard_direct'])
+    elif option.feature_ == 'direct_gravity':
+        gravity = data_all[['grav_x', 'grav_y', 'grav_z']].values
+        features = compute_direct_feature_gravity(data_used[:, :3], data_used[:, -3:],
+                                                  gravity, sample_points, option.window_size_, gaussian_sigma)
     else:
         print('Feature type not supported: ' + option.feature_)
         raise ValueError
