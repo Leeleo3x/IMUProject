@@ -10,11 +10,14 @@
 #include <gflags/gflags.h>
 
 #include <utility/data_io.h>
+#include <utility/utility.h>
 
 #include "imu_localization.h"
 
 DEFINE_string(model_path, "../../../../models/model_0312_body_w200_s10", "Path to model");
+DEFINE_string(mapinfo_path, "default", "path to map info");
 DEFINE_int32(log_interval, 1000, "logging interval");
+DEFINE_bool(run_global, true, "Run global optimization at the end");
 DEFINE_bool(tango_ori, false, "Use ground truth orientation");
 
 using namespace std;
@@ -108,18 +111,64 @@ int main(int argc, char** argv){
     }
 
     trajectory.EndTrajectory();
-    printf("Running global optimization on the whole sequence...\n");
-    trajectory.RunOptimization(0, trajectory.GetNumFrames());
+	if(FLAGS_run_global) {
+		printf("Running global optimization on the whole sequence...\n");
+		trajectory.RunOptimization(0, trajectory.GetNumFrames());
+	}
 
     printf("All done. Number of points on trajectory: %d\n", trajectory.GetNumFrames());
     const float fps_all = (float)trajectory.GetNumFrames() / (((float)cv::getTickCount() - start_t) / (float)cv::getTickFrequency());
     printf("Overall framerate: %.3f\n", fps_all);
 
     sprintf(buffer, "%s/result_trajectory.ply", argv[1]);
-    // IMUProject::WriteToPly(std::string(buffer), positions_opt.data(), orientations_opt.data(), (int)positions_opt.size());
     IMUProject::WriteToPly(std::string(buffer), trajectory.GetPositions().data(),
-                           trajectory.GetOrientations().data(), trajectory.GetNumFrames(), true);
-    LOG(INFO) << "Optimized trajectory written to " << buffer;
+                           trajectory.GetOrientations().data(), trajectory.GetNumFrames(),
+                           true, Eigen::Vector3i(0, 0, 255), 0, 0, 0);
+
+	sprintf(buffer, "%s/tango_trajectory.ply", argv[1]);
+	IMUProject::WriteToPly(std::string(buffer), dataset.GetPosition().data(),
+	                       dataset.GetOrientation().data(), dataset.GetPosition().size(),
+	                       true, Eigen::Vector3i(255, 0, 0), 0, 0, 0);
+
+	LOG(INFO) << "Optimized trajectory written to " << buffer;
+
+	if(FLAGS_mapinfo_path == "default"){
+		sprintf(buffer, "%s/map.txt", argv[1]);
+	}else{
+		sprintf(buffer, "%s/%s", argv[1], FLAGS_mapinfo_path.c_str());
+	}
+	ifstream map_in(buffer);
+	if(map_in.is_open()){
+		LOG(INFO) << "Found map info file, creating overlay";
+		string line;
+		map_in >> line;
+		sprintf(buffer, "%s/%s", argv[1], line.c_str());
+
+		cv::Mat map_img = cv::imread(buffer);
+		CHECK(map_img.data) << "Can not open image file: " << buffer;
+
+		Eigen::Vector2d sp1, sp2;
+		Eigen::Vector3d op1(0, 0, 0), op2(0, 0, 0);
+		double scale_length;
+
+		map_in >> sp1[0] >> sp1[1] >> sp2[0] >> sp2[1];
+		map_in >> scale_length;
+		map_in >> op1[0] >> op1[1] >> op2[0] >> op2[1];
+
+		Eigen::Vector2d start_pix(op1[0], op1[1]);
+
+		const double pixel_length = scale_length / (sp2 - sp1).norm();
+
+		IMUProject::TrajectoryOverlay(pixel_length, start_pix, op2-op1, trajectory.GetPositions(),
+		                              Eigen::Vector3i(255, 0, 0), map_img);
+
+		IMUProject::TrajectoryOverlay(pixel_length, start_pix, op2-op1, dataset.GetPosition(),
+		                              Eigen::Vector3i(0, 0, 255), map_img);
+		sprintf(buffer, "%s/overlay.png", argv[1]);
+		cv::imwrite(buffer, map_img);
+	}
+
+
 
     return 0;
 }

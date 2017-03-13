@@ -68,12 +68,11 @@ namespace IMUProject{
 
 	void WriteToPly(const std::string& path, const Eigen::Vector3d* position,
 					const Eigen::Quaterniond* orientation, const int N, const bool only_xy,
-					const double axis_length, const int kpoints, const int interval){
+					const Eigen::Vector3i traj_color, const double axis_length, const int kpoints, const int interval){
 		using TriMesh = OpenMesh::TriMesh_ArrayKernelT<>;
 		TriMesh mesh;
         mesh.request_vertex_colors();
 
-	    constexpr int traj_color[3] = {0, 255, 255};
 	    constexpr int axis_color[3][3] = {{255, 0, 0}, {0, 255, 0}, {0, 0, 255}};
 
 	    // First add trajectory points
