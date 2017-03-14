@@ -46,6 +46,15 @@ namespace IMUProject {
 	                             const Eigen::Vector3d* linacce,
 								 const int N);
 
+	Eigen::Vector3d AdjustEulerAngle(const Eigen::Vector3d& input, const Eigen::Vector3d& target,
+	                                 const double max_v=M_PI / 2);
+
+
+	cv::Mat ComputeDirectFeatureGravity(const Eigen::Vector3d* gyro,
+	                                    const Eigen::Vector3d* linacce,
+	                                    const Eigen::Vector3d* gravity,
+	                                    const int N, const Eigen::Vector3d local_gravity=Eigen::Vector3d(0, 1, 0));
+
 
 
 } // namespace IMUProject

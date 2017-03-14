@@ -67,5 +67,60 @@ namespace IMUProject{
 		return feature;
 	}
 
+	Eigen::Vector3d AdjustEulerAngle(const Eigen::Vector3d& input,
+	                                 const Eigen::Vector3d& target, const double max_v){
+		Eigen::Vector3d output = input;
+		double sign = 1.0;
+		if(output[1] > max_v){
+			output[1] -= M_PI;
+			sign *= -1;
+		}else if(output[1] < -1 * max_v){
+			output[1] += M_PI;
+			sign *= -1;
+		}
+
+		if(output[1] * target[1] < 0){
+			output[1] *= -1;
+			sign *= -1;
+		}
+
+
+		for(auto j: {0, 2}){
+			output[j] *= sign;
+			if(output[j] > max_v){
+				output[j] = (output[j] - M_PI) * -1.0;
+			}else if(output[j] < -1 * max_v){
+				output[j] = (output[j] + M_PI) * -1.0;
+			}
+		}
+
+		return output;
+	}
+
+	cv::Mat ComputeDirectFeatureGravity(const Eigen::Vector3d* gyro,
+	                                    const Eigen::Vector3d* linacce,
+	                                    const Eigen::Vector3d* gravity,
+	                                    const int N, const Eigen::Vector3d local_gravity){
+		Mat feature(1, 6 * N, CV_32FC1, cv::Scalar::all(0));
+
+		for(auto i=0; i<N; ++i){
+			Eigen::Quaterniond rotor = Eigen::Quaterniond::FromTwoVectors(gravity[i], local_gravity);
+			Eigen::Vector3d aligned_linacce = rotor * linacce[i];
+			Eigen::Quaterniond gyro_quat = rotor * Eigen::AngleAxis<double>(gyro[i][0], Eigen::Vector3d::UnitX()) *
+			                               Eigen::AngleAxis<double>(gyro[i][1], Eigen::Vector3d::UnitY()) *
+			                               Eigen::AngleAxis<double>(gyro[i][2], Eigen::Vector3d::UnitZ());
+			Eigen::Vector3d aligned_gyro = gyro_quat.toRotationMatrix().eulerAngles(0, 1, 2);
+			AdjustEulerAngle(aligned_gyro, gyro[i]);
+
+			feature.at<float>(0, i * 6 + 0) = (float) aligned_gyro[0];
+			feature.at<float>(0, i * 6 + 1) = (float) aligned_gyro[1];
+			feature.at<float>(0, i * 6 + 2) = (float) aligned_gyro[2];
+			feature.at<float>(0, i * 6 + 3) = (float) aligned_linacce[0];
+			feature.at<float>(0, i * 6 + 4) = (float) aligned_linacce[1];
+			feature.at<float>(0, i * 6 + 5) = (float) aligned_linacce[2];
+		}
+		return feature;
+	}
+
 
 }

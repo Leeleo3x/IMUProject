@@ -4,7 +4,6 @@ import numpy as np
 from numba import jit
 import quaternion
 
-
 @jit
 def rotation_matrix_from_two_vectors(v1, v2):
     """
@@ -83,9 +82,10 @@ def adjust_eular_angle(source, target, max_v=math.pi/2):
 
         for j in [0, 2]:
             if output[i][j] > max_v:
-                output[i][j] = (output[i][j] - math.pi) * -1.0 * sign
+                output[i][j] = (output[i][j] - math.pi) * -1.0
             elif output[i][j] < -max_v:
-                output[i][j] = (output[i][j] + math.pi) * -1.0 * sign
+                output[i][j] = (output[i][j] + math.pi) * -1.0
+            output[i][j] *= sign
     return output
 
 
@@ -110,24 +110,35 @@ def align_eular_rotation_with_gravity(data, gravity, local_g_direction=np.array(
 
     return adjust_eular_angle(output, data)
 
+
 if __name__ == '__main__':
+
     import pandas
-    data_all = pandas.read_csv('../../../data/phab_body/test_gravity/processed/data.csv')
+    import quaternion
 
-    gyro = data_all[['gyro_x', 'gyro_y', 'gyro_z']].values
+    data_all = pandas.read_csv('../../../data/phab_body/cse1/processed/data.csv')
+    
+    gyro = data_all[['gyro_x', 'gyro_y', 'gyro_z']].values[1057:1058]
 
-    gyro_q_to_e = np.empty(gyro.shape, dtype=float)
+    gyro2 = np.empty(gyro.shape, dtype=float)
     for i in range(gyro.shape[0]):
-        q = quaternion.from_euler_angles(*gyro[i])
-        gyro_q_to_e[i] = quaternion.as_euler_angles(q)
+        gyro2[i] = quaternion.as_euler_angles(quaternion.from_euler_angles(*gyro[i]))
 
-    gyro_adjusted = adjust_eular_angle(gyro_q_to_e, gyro)
-    for i in range(gyro_adjusted.shape[0]):
-        if np.linalg.norm(gyro_adjusted[i] - gyro[i]) > 1e-5:
-            print('{}, ({:.6f}, {:.6f}, {:.6f}), ({:.6f}, {:.6f}, {:.6f}), ({:.6f}, {:.6f}, {:.6f})'.
-                  format(i, gyro[i][0], gyro_q_to_e[i][0], gyro_adjusted[i][0],
-                         gyro[i][1], gyro_q_to_e[i][1], gyro_adjusted[i][1],
-                         gyro[i][2], gyro_q_to_e[i][2], gyro_adjusted[i][2]))
-    print("Diff: ", np.linalg.norm(gyro_adjusted - gyro))
+    gyro2 = adjust_eular_angle(gyro2, gyro, math.pi * 0.7)
+    diff = 0
+
+    for i in range(0, gyro.shape[0]):
+        print('{:.6f}, {:.6f}, {:.6f} | {:.6f}, {:.6f}, {:.6f}'.format(
+        gyro[i][0], gyro[i][1], gyro[i][2], gyro2[i][0], gyro2[i][1], gyro2[i][2]))
+        cur_diff = np.linalg.norm(gyro2[i] - gyro[i])
+
+        if cur_diff > 1e-9:
+            print('diff')
+        diff += cur_diff
+    print('Diff: ', diff)
+
+
+
+
 
 

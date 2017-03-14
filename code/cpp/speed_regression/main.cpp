@@ -31,115 +31,59 @@ int main(int argc, char ** argv) {
 
 	char buffer[128] = {};
 
-	string list_path(argv[1]);
-	string root_dir = list_path.substr(0, list_path.find_last_of('/'));
-	cout << "Root directory: " << root_dir << endl;
+	IMUProject::IMUDataset dataset(argv[1]);
 
-	// Prepare training data
+	// test the conversion between euler angle and quaternion
+	std::vector<Eigen::Vector3d> gyro = dataset.GetGyro();
 
+	double diff = 0;
+	for(auto i=1057; i<1058; ++i){
+		Eigen::Quaterniond quat = Eigen::AngleAxis<double>(gyro[i][0], Eigen::Vector3d::UnitX()) *
+		                          Eigen::AngleAxis<double>(gyro[i][1], Eigen::Vector3d::UnitY()) *
+		                          Eigen::AngleAxis<double>(gyro[i][2], Eigen::Vector3d::UnitZ());
+		Eigen::Vector3d gyro2 = quat.toRotationMatrix().eulerAngles(0, 1, 2);
 
-	IMUProject::TrainingDataOption option(FLAGS_step, FLAGS_window);
+		Eigen::Quaterniond quat2 = Eigen::AngleAxis<double>(gyro2[0], Eigen::Vector3d::UnitX()) *
+		                           Eigen::AngleAxis<double>(gyro2[1], Eigen::Vector3d::UnitY()) *
+		                           Eigen::AngleAxis<double>(gyro2[2], Eigen::Vector3d::UnitZ());
 
-	cv::Mat feature_mat_all;
-	cv::Mat target_mat_all;
+		cout << "--------------------\n" << flush;
+		cout << (quat2.conjugate() * quat).toRotationMatrix() << endl << flush;
+		cout << "--------------------\n" << flush;
 
-	// Load all training data
+		Eigen::Vector3d gyro3 = IMUProject::AdjustEulerAngle(gyro2, gyro[i]);
 
-	ifstream list_in(argv[1]);
-	CHECK(list_in.is_open()) << "Can not open list file " << argv[1];
+		Eigen::Quaterniond quat3 = Eigen::AngleAxis<double>(gyro3[0], Eigen::Vector3d::UnitX()) *
+		                           Eigen::AngleAxis<double>(gyro3[1], Eigen::Vector3d::UnitY()) *
+		                           Eigen::AngleAxis<double>(gyro3[2], Eigen::Vector3d::UnitZ());
 
-	string folder;
-	while (list_in >> folder) {
-		if(folder.empty()){
-			continue;
+		cout << "--------------------\n" << flush;
+		cout << (quat3.conjugate() * quat).toRotationMatrix() << endl << flush;
+		cout << "--------------------\n" << flush;
+
+		Eigen::Vector3d gyro4(gyro3);
+		for(auto j=1; j<2; ++j){
+			gyro4[j] = (gyro4[j] - M_PI) * -1;
 		}
-		if (folder[0] == '#') {
-			continue;
+		Eigen::Quaterniond quat4 = Eigen::AngleAxis<double>(gyro4[0], Eigen::Vector3d::UnitX()) *
+		                           Eigen::AngleAxis<double>(gyro4[1], Eigen::Vector3d::UnitY()) *
+		                           Eigen::AngleAxis<double>(gyro4[2], Eigen::Vector3d::UnitZ());
+		cout << "--------------------\n" << flush;
+		cout << (quat4.conjugate() * quat).toRotationMatrix() << endl << flush;
+		cout << "--------------------\n" << flush;
+
+
+
+		printf("%d %.6f, %.6f, %.6f | %.6f, %.6f, %.6f | %.6f, %.6f, %.6f\n",
+		       i, gyro[i][0], gyro[i][1], gyro[i][2], gyro2[0], gyro2[1], gyro2[2], gyro3[0], gyro3[1], gyro3[2]);
+		double cur_diff = (gyro3 - gyro[i]).norm();
+		if(cur_diff > 1e-9){
+			cout << "Diff\n";
 		}
-		IMUProject::IMUDataset dataset(root_dir + "/" + folder);
-		const int N = (int) dataset.GetTimeStamp().size();
-		printf("%s loaded. Number of samples: %d\n", folder.c_str(), N);
-
-		vector<int> sample_points{};
-		for (int i = FLAGS_window; i < N; i += FLAGS_step) {
-			sample_points.push_back(i);
-		}
-
-		const std::vector<double> &time_stamp = dataset.GetTimeStamp();
-		const std::vector<Eigen::Vector3d> &gyro = dataset.GetGyro();
-		const std::vector<Eigen::Vector3d> &linacce = dataset.GetLinearAcceleration();
-
-		cv::Mat feature_mat((int) sample_points.size(), 6 * option.window_, CV_32FC1, cv::Scalar::all(0));
-		for (int i = 0; i < sample_points.size(); ++i) {
-			const int ind = sample_points[i];
-			CHECK_GE(ind - option.window_, 0);
-			CHECK_LT(ind, N);
-			IMUProject::ComputeDirectFeature(&gyro[ind - option.window_], &linacce[ind - option.window_], option.window_).copyTo(feature_mat.row(i));
-		}
-
-		cv::Mat target_mat = IMUProject::ComputeLocalSpeedTarget(dataset.GetTimeStamp(),
-		                                                         dataset.GetPosition(),
-		                                                         dataset.GetOrientation(), sample_points,
-		                                                         FLAGS_smooth_size);
-
-		if(!feature_mat_all.data){
-			feature_mat_all = feature_mat.clone();
-			target_mat_all = target_mat.clone();
-		}else{
-			cv::vconcat(feature_mat_all, feature_mat, feature_mat_all);
-			cv::vconcat(target_mat_all, target_mat, target_mat_all);
-		}
+		diff += cur_diff;
 	}
 
-	printf("Number of samples: %d, feature dimension: %d, target dimension: %d\n",
-	       feature_mat_all.rows, feature_mat_all.cols, target_mat_all.cols);
+	printf("diff: %.5f\n", diff);
 
-	std::vector<double> c_param{10.0, 1.0, 10.0};
-	std::vector<double> p_param{0.01, 0.001, 0.01};
-	cv::TermCriteria term_criteria(cv::TermCriteria::EPS | cv::TermCriteria::MAX_ITER, 5000, 1e-09);
-#pragma omp parallel for
-	for (int i = 0; i < target_mat_all.cols; ++i) {
-		cv::Ptr<cv::ml::TrainData> train_data = cv::ml::TrainData::create(feature_mat_all, cv::ml::ROW_SAMPLE,
-		                                                                  target_mat_all.col(i).clone());
-
-		// Configure the parameter grid
-		cv::ml::ParamGrid c_grid = cv::ml::SVM::getDefaultGrid(cv::ml::SVM::C);
-		c_grid.minVal = 0.01;
-		c_grid.maxVal = 100.0;
-		cv::ml::ParamGrid p_grid = cv::ml::SVM::getDefaultGrid(cv::ml::SVM::P);
-		p_grid.minVal = 0.001;
-		p_grid.maxVal = 10.0;
-
-		// disable the search for parameter gamma, nu, coef and degree
-		cv::ml::ParamGrid gamma_grid = cv::ml::SVM::getDefaultGrid(cv::ml::SVM::GAMMA);
-		gamma_grid.logStep = -1;
-		cv::ml::ParamGrid nu_grid = cv::ml::SVM::getDefaultGrid(cv::ml::SVM::NU);
-		nu_grid.logStep = -1;
-		cv::ml::ParamGrid coef_grid = cv::ml::SVM::getDefaultGrid(cv::ml::SVM::COEF);
-		coef_grid.logStep = -1;
-		cv::ml::ParamGrid degree_grid = cv::ml::SVM::getDefaultGrid(cv::ml::SVM::DEGREE);
-		degree_grid.logStep = -1;
-
-		cv::Ptr<cv::ml::SVM> regressor = cv::ml::SVM::create();
-		regressor->setType(cv::ml::SVM::RBF);
-		regressor->setP(p_param[i]);
-		regressor->setC(c_param[i]);
-		regressor->setGamma(1.0 / (double)feature_mat_all.cols);
-		regressor->setTermCriteria(term_criteria);
-
-		regressor->setType(cv::ml::SVM::EPS_SVR);
-		float start_t = (float) cv::getTickCount();
-		cout << "Training for channel " << i << endl;
-		// regressor->trainAuto(train_data, 3, c_grid, gamma_grid, p_grid, nu_grid, coef_grid, degree_grid);
-		regressor->train(train_data);
-		printf("Done. Number of support vectors: %d. Time usage %.2fs\n",
-		       regressor->getSupportVectors().rows,
-		       ((float) cv::getTickCount() - start_t) / (float) cv::getTickFrequency());
-		printf("Parameter: C: %.6f, p: %.6f\n", regressor->getC(), regressor->getP());
-
-		sprintf(buffer, "%s/model_direct_local_speed_w200_s10_%d.yml", FLAGS_output.c_str(), i);
-		regressor->save(std::string(buffer));
-		cout << "Model saved to " << buffer << endl;
-	}
 	return 0;
 }

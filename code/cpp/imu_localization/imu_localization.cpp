@@ -50,7 +50,7 @@ namespace IMUProject{
 			speed_.push_back(orientation * linacce * dt);
 			position_.push_back(speed_[num_frames_ - 1] * dt);
 		}else{
-			speed_.push_back(init_position_);
+			speed_.push_back(init_speed_);
 			position_.push_back(init_position_);
 		}
 	}
