@@ -163,6 +163,15 @@ if __name__ == '__main__':
 
         output_data.to_csv(output_dir + '/data.csv')
 
+         # write data in plain text file for C++
+        with open(output_dir + '/data_plain.txt', 'w') as f:
+            f.write('{} {}\n'.format(data_mat.shape[0], data_mat.shape[1]))
+            for i in range(data_mat.shape[0]):
+                for j in range(data_mat.shape[1]):
+                    f.write('{}\t'.format(data_mat[i][j]))
+                f.write('\n')
+
+
         if not args.no_trajectory:
             import quaternion
             print('Writing ply...')

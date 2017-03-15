@@ -97,9 +97,9 @@ if __name__ == '__main__':
         lines_imu += plt.plot(ts, speed_res[:, axes_glob[i]], 'b')
         lines_raw += plt.plot(ts[1:], speed_raw[:, axes_glob[i]], 'r')
         lines_tango += plt.plot(ts, speed_gt[:, axes_glob[i]], 'c')
-    plt.figlegend([lines_imu[-1], lines_raw[-1], lines_tango[-1]],
-                  {'Our method', 'Double integration', 'Tango'},
-                  loc='upper center', ncol=3, labelspacing=0.)
+    # plt.figlegend([lines_imu[-1], lines_raw[-1], lines_tango[-1]],
+    #               {'Our method', 'Double integration', 'Tango'},
+    #               loc='upper center', ncol=3, labelspacing=0.)
     fig_gs.savefig(output_path + '/fig_gs.png', bbox_inches='tight')
 
     ylabels = ['X Speed (m/s)', 'Y Speed (m/s)']
