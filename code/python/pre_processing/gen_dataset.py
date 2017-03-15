@@ -93,7 +93,7 @@ def write_file(path, data, header=''):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('list')
-    parser.add_argument('--skip', default=100)
+    parser.add_argument('--skip', default=400)
     parser.add_argument('--recompute', action='store_true')
     parser.add_argument('--no_trajectory', action='store_true')
 
@@ -123,7 +123,7 @@ if __name__ == '__main__':
             data_pandas = pandas.read_csv(data_root + '/processed/data.csv')
         else:
             print('------------------\nProcessing ' + data_root, ', type: ' + motion_type)
-            pose_data = np.genfromtxt(data_root+'/pose.txt')
+            pose_data = np.genfromtxt(data_root+'/pose.txt')[args.skip:]
             # swap tango's orientation from [x,y,z,w] to [w,x,y,z]
             pose_data[:, [-4, -3, -2, -1]] = pose_data[:, [-1, -4, -3, -2]]
 

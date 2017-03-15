@@ -14,11 +14,12 @@
 
 #include "imu_localization.h"
 
-DEFINE_string(model_path, "../../../../models/model_0314_gravity_w200_s20", "Path to model");
+DEFINE_string(model_path, "../../../../models/model_0315_full_w200_s20", "Path to model");
 DEFINE_string(mapinfo_path, "default", "path to map info");
 DEFINE_int32(log_interval, 1000, "logging interval");
 DEFINE_double(weight_vs, 1.0, "weight_vs");
 DEFINE_double(weight_ls, 1.0, "weight_ls");
+DEFINE_string(id, "full", "suffix");
 
 DEFINE_bool(run_global, true, "Run global optimization at the end");
 DEFINE_bool(tango_ori, false, "Use ground truth orientation");
@@ -127,10 +128,10 @@ int main(int argc, char** argv){
     const float fps_all = (float)trajectory.GetNumFrames() / (((float)cv::getTickCount() - start_t) / (float)cv::getTickFrequency());
     printf("Overall framerate: %.3f\n", fps_all);
 
-    sprintf(buffer, "%s/result_trajectory.ply", argv[1]);
+    sprintf(buffer, "%s/result_trajectory_%s.ply", argv[1], FLAGS_id.c_str());
     IMUProject::WriteToPly(std::string(buffer), dataset.GetTimeStamp().data(), trajectory.GetPositions().data(),
                            trajectory.GetOrientations().data(), trajectory.GetNumFrames(),
-                           true, Eigen::Vector3d(0, 0, 255), 0.8, 100, 300);
+                           true, Eigen::Vector3d(255, 255, 0), 0.8, 100, 300);
 
 	sprintf(buffer, "%s/tango_trajectory.ply", argv[1]);
 	IMUProject::WriteToPly(std::string(buffer), dataset.GetTimeStamp().data(), dataset.GetPosition().data(),
@@ -152,7 +153,7 @@ int main(int argc, char** argv){
 
     {
         // Write the trajectory and bias as txt
-        sprintf(buffer, "%s/result.csv", argv[1]);
+        sprintf(buffer, "%s/result_%s.csv", argv[1], FLAGS_id.c_str());
         ofstream traj_out(buffer);
         CHECK(traj_out.is_open());
         traj_out << ",time,pos_x,pos_y,pos_z,speed_x,speed_y,speed_z,bias_x,bias_y,bias_z" << endl;
@@ -166,7 +167,7 @@ int main(int argc, char** argv){
             traj_out << buffer;
         }
 
-        sprintf(buffer, "%s/regression.txt", argv[1]);
+        sprintf(buffer, "%s/regression_%s.txt", argv[1], FLAGS_id.c_str());
         ofstream reg_out(buffer);
         const std::vector<int>& cids = trajectory.GetConstraintInd();
         const std::vector<Eigen::Vector3d>& lss = trajectory.GetLocalSpeed();
@@ -207,7 +208,7 @@ int main(int argc, char** argv){
 
 		IMUProject::TrajectoryOverlay(pixel_length, start_pix, op2-op1, dataset.GetPosition(),
 		                              Eigen::Vector3d(0, 0, 255), map_img);
-		sprintf(buffer, "%s/overlay.png", argv[1]);
+		sprintf(buffer, "%s/overlay_%s.png", argv[1], FLAGS_id.c_str());
 		cv::imwrite(buffer, map_img);
 	}
 

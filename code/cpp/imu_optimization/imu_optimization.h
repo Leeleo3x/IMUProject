@@ -154,6 +154,7 @@ namespace IMUProject {
 //				printf("%d, %.6f, %.6f, %.6f\n", cid, local_speed_[cid][0], local_speed_[cid][1], local_speed_[cid][2]);
 				Eigen::Matrix<T, 3, 1> ls = R_GW_[ind].template cast<T>() * speed[ind];
 				residual[cid] = weight_ls_ * (ls[0] - (T)local_speed_[cid][0]);
+//                residual[cid] = weight_ls_ * ls[0];
 				residual[cid + KCONSTRAINT] = weight_vs_ * speed[ind][2];
 				residual[cid + 2 * KCONSTRAINT] = weight_ls_ * (ls[2] - (T)local_speed_[cid][2]);
 			}

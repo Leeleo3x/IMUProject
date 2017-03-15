@@ -16,20 +16,21 @@ from speed_regression import training_data as td
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('dir')
+    parser.add_argument('--id', default='full', type=str)
 
     filter_sigma = 20.0
 
     args = parser.parse_args()
-    output_path = args.dir + '/figure'
+    output_path = args.dir + '/figure_' + args.id
 
     if not os.path.exists(output_path):
         os.makedirs(output_path)
 
-    result = pandas.read_csv(args.dir + '/result.csv')
+    result = pandas.read_csv(args.dir + '/result_'+args.id+'.csv')
 
     data_all = pandas.read_csv(args.dir + '/processed/data.csv')
 
-    regression_result = np.genfromtxt(args.dir + '/regression.txt')
+    regression_result = np.genfromtxt(args.dir + '/regression_'+args.id+'.txt')
     constraint_ind = regression_result[:, 0].astype(int)
     local_speed = regression_result[:, 1:]
 
@@ -113,9 +114,9 @@ if __name__ == '__main__':
         plt.locator_params(nbins=5, axis='y')
         lines_imu += plt.plot(ts[constraint_ind], local_speed[:, axes_local[i]], 'b')
         lines_tango += plt.plot(ts[constraint_ind], ls_gt[:, axes_local[i]], 'r')
-    plt.figlegend([lines_imu[-1], lines_raw[-1], lines_tango[-1]],
-                  {'Our method', 'Tango (Ground truth)'},
-                  loc='upper center', ncol=2, labelspacing=0.)
+    # plt.figlegend([lines_imu[-1], lines_raw[-1], lines_tango[-1]],
+    #               {'Our method', 'Tango (Ground truth)'},
+    #               loc='upper center', ncol=2, labelspacing=0.)
     fig_ls.savefig(output_path + '/fig_ls.png', bbox_inches='tight')
 
     fig_bias = plt.figure('Bias', figsize=(12, 10))

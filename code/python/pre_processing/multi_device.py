@@ -34,7 +34,7 @@ def compute_time_offset(source, target, search_range=200):
     #     if diff < best_score:
     #         best_score = diff
     #         best_offset = offset
-    best_offset = -140
+    best_offset = -134
     time_offset = 0
     if best_offset > 0:
         time_offset = target[best_offset, 0] - source[0, 0]
@@ -114,8 +114,6 @@ if __name__ == '__main__':
         gravity_device[:, 0] += time_offset
         magnet_device[:, 0] += time_offset
         rv_device[:, 0] += time_offset
-        # reorder the quaternion representation from [x,y,z,w] to [w,x,y,z]
-        rv_device[:, [1, 2, 3, 4]] = rv_device[:, [4, 1, 2, 3]]
 
         # save synchronized raw data
         gen_dataset.write_file(device_dir + '/gyro_sync.txt', gyro_device)
@@ -145,17 +143,16 @@ if __name__ == '__main__':
         output_acce = gen_dataset.interpolate_3dvector_linear(acce_device, output_timestamp)
         output_linacce = gen_dataset.interpolate_3dvector_linear(linacce_device, output_timestamp)
         output_gravity = gen_dataset.interpolate_3dvector_linear(gravity_device, output_timestamp)
-        output_magnet = gen_dataset.interpolate_3dvector_linear(magnet_device, output_timestamp)
 
         output_rv = gen_dataset.interpolate_quaternion_linear(rv_device, output_timestamp)
 
         column_list = 'time,gyro_x,gyro_y,gyro_z,acce_x'.split(',') + \
-                      'acce_y,acce_z,linacce_x,linacce_y,linacce_z,grav_x,grav_y,grav_z,mag_x,mag_y,mag_z'.split(',') + \
+                      'acce_y,acce_z,linacce_x,linacce_y,linacce_z,grav_x,grav_y,grav_z'.split(',') + \
                       'pos_x,pos_y,pos_z,ori_w,ori_x,ori_y,ori_z,rv_w,rv_x,rv_y,rv_z'.split(',')
         data_mat = np.concatenate([output_timestamp[:, None],
                                    output_gyro[:, 1:], output_acce[:, 1:], output_linacce[:, 1:],
-                                   output_gravity[:, 1:], output_magnet[:, 1:],
-                                   pose_data[:, -7:-4], pose_data[:, -4:], output_rv[:, 1:]], axis=1)
+                                   output_gravity[:, 1:], pose_data[:, -7:-4], pose_data[:, -4:],
+                                   output_rv[:, 1:]], axis=1)
         output_data = pandas.DataFrame(data=data_mat, columns=column_list, dtype=float)
         print('Writing csv...')
         output_dir = args.dir + '/processed'
