@@ -7,6 +7,7 @@ import cv2
 import pre_processing.gen_dataset as gen_dataset
 from utility.write_trajectory_to_ply import write_ply_to_file
 from scipy.ndimage.filters import gaussian_filter1d
+from scipy.interpolate import interp1d
 
 nano_to_sec = 1e09
 
@@ -33,7 +34,7 @@ def compute_time_offset(source, target, search_range=200):
     #     if diff < best_score:
     #         best_score = diff
     #         best_offset = offset
-    best_offset = -55
+    best_offset = -140
     time_offset = 0
     if best_offset > 0:
         time_offset = target[best_offset, 0] - source[0, 0]
@@ -41,6 +42,7 @@ def compute_time_offset(source, target, search_range=200):
         time_offset = target[0, 0] - source[-best_offset, 0]
     print('Best offset: {}, time_offset: {}'.format(best_offset, time_offset / nano_to_sec))
     return time_offset
+
 
 if __name__ == '__main__':
     import argparse
@@ -59,8 +61,8 @@ if __name__ == '__main__':
     # read raw data from two devices
     print('Reading')
     gyro_device = np.genfromtxt(device_dir + '/gyro.txt')[args.margin:-args.margin]
-    gyro_tango = np.genfromtxt(args.dir + '/tango/gyro.txt')[args.margin:-args.margin]
-    acce_tango = np.genfromtxt(args.dir + '/tango/acce.txt')[args.margin:-args.margin]
+    gyro_tango = np.genfromtxt(args.dir + '/phab/gyro.txt')[args.margin:-args.margin]
+    acce_tango = np.genfromtxt(args.dir + '/phab/acce.txt')[args.margin:-args.margin]
 
     print('---------------\nUsing gyroscope')
     sync_source = np.copy(gyro_device)
@@ -102,7 +104,7 @@ if __name__ == '__main__':
         rv_device = np.genfromtxt(device_dir + '/orientation.txt')[args.margin:-args.margin]
         print('Rotation vector: {:.2f}Hz'.format(sample_rate(rv_device)))
 
-        pose_data = np.genfromtxt(args.dir + '/tango/pose.txt')[args.margin:-args.margin]
+        pose_data = np.genfromtxt(args.dir + '/phab/pose.txt')[args.margin:-args.margin]
         # reorder the quaternion representation
         pose_data[:, [-4, -3, -2, -1]] = pose_data[:, [-1, -4, -3, -2]]
 
