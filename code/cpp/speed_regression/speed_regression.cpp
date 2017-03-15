@@ -67,33 +67,28 @@ namespace IMUProject{
 		return feature;
 	}
 
-	Eigen::Vector3d AdjustEulerAngle(const Eigen::Vector3d& input,
-	                                 const Eigen::Vector3d& target, const double max_v){
+	Eigen::Vector3d AdjustEulerAngle(const Eigen::Vector3d& input){
+		// pitch has to be inside (-pi/2, pi/2), roll and yaw has to be inside (-pi, pi)
+
 		Eigen::Vector3d output = input;
-		double sign = 1.0;
-		if(output[1] > max_v){
-			output[1] -= M_PI;
-			sign *= -1;
-		}else if(output[1] < -1 * max_v){
-			output[1] += M_PI;
-			sign *= -1;
+		if(output[0] < -M_PI / 2){
+			output[0] += M_PI;
+			output[1] = (output[1] - M_PI) * -1;
+			output[2] += M_PI;
+		}else if(output[0] > M_PI / 2){
+			output[0] -= M_PI;
+			output[1] = (output[1] - M_PI) * -1;
+			output[2] -= M_PI;
 		}
 
-		if(output[1] * target[1] < 0){
-			output[1] *= -1;
-			sign *= -1;
-		}
-
-
-		for(auto j: {0, 2}){
-			output[j] *= sign;
-			if(output[j] > max_v){
-				output[j] = (output[j] - M_PI) * -1.0;
-			}else if(output[j] < -1 * max_v){
-				output[j] = (output[j] + M_PI) * -1.0;
+		for(auto j=1; j<3; ++j){
+			if(output[j] < M_PI){
+				output[j] += 2 * M_PI;
+			}
+			if(output[j] > M_PI){
+				output[j] -= 2 * M_PI;
 			}
 		}
-
 		return output;
 	}
 
@@ -109,8 +104,7 @@ namespace IMUProject{
 			Eigen::Quaterniond gyro_quat = rotor * Eigen::AngleAxis<double>(gyro[i][0], Eigen::Vector3d::UnitX()) *
 			                               Eigen::AngleAxis<double>(gyro[i][1], Eigen::Vector3d::UnitY()) *
 			                               Eigen::AngleAxis<double>(gyro[i][2], Eigen::Vector3d::UnitZ());
-			Eigen::Vector3d aligned_gyro = gyro_quat.toRotationMatrix().eulerAngles(0, 1, 2);
-			AdjustEulerAngle(aligned_gyro, gyro[i]);
+			Eigen::Vector3d aligned_gyro = AdjustEulerAngle(gyro_quat.toRotationMatrix().eulerAngles(0, 1, 2));
 
 			feature.at<float>(0, i * 6 + 0) = (float) aligned_gyro[0];
 			feature.at<float>(0, i * 6 + 1) = (float) aligned_gyro[1];

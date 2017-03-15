@@ -17,12 +17,14 @@ namespace IMUProject{
 	using Functor5000 = LocalSpeedFunctor<FunctorSize::kVar_5000_, FunctorSize::kCon_5000_>;
 	using FunctorLarge = LocalSpeedFunctor<FunctorSize::kVar_large_, FunctorSize::kCon_large_>;
 
+	const Eigen::Vector3d IMUTrajectory::local_gravity_dir_ = Eigen::Vector3d(0, 1, 0);
+
 	IMUTrajectory::IMUTrajectory(const Eigen::Vector3d& init_speed,
 	                             const Eigen::Vector3d& init_position,
 	                             const std::vector<cv::Ptr<cv::ml::SVM> >& regressors,
 	                             const double sigma,
                                  const IMULocalizationOption option):
-            init_speed_(init_speed), init_position_(init_position),
+            init_speed_(init_speed), init_position_(init_position), num_frames_(0),
             regressors_(regressors), last_constraint_ind_(option.reg_window_ - option.reg_interval_),
             option_(option), sigma_(sigma) {
 		ts_.reserve(kInitCapacity_);
@@ -36,13 +38,19 @@ namespace IMUProject{
 		opt_thread_ = std::move(std::thread(&IMUTrajectory::StartOptmizationThread, this));
     }
 
-	void IMUTrajectory::AddRecord(const double t, const Eigen::Vector3d& gyro,
-	                              const Eigen::Vector3d& linacce, const Eigen::Quaterniond& orientation){
+	void IMUTrajectory::AddRecord(const double t, const Eigen::Vector3d& gyro, const Eigen::Vector3d& linacce,
+								  const Eigen::Vector3d& gravity, const Eigen::Quaterniond& orientation){
 		num_frames_ += 1;
 		ts_.push_back(t);
 		linacce_.push_back(linacce);
 		orientation_.push_back(orientation);
 		gyro_.push_back(gyro);
+		gravity_.push_back(gravity);
+
+		Eigen::Quaterniond rotor_g = Eigen::Quaterniond::FromTwoVectors(gravity, local_gravity_dir_);
+		R_GW_.push_back(rotor_g * orientation.conjugate());
+		//R_GW_.push_back(orientation.conjugate());
+
 		//TODO: Try to remove this lock...
 		std::lock_guard<std::mutex> guard(mt_);
 		if(num_frames_ > 1){
@@ -72,10 +80,15 @@ namespace IMUProject{
             std::vector<Eigen::Vector3d> gyro_slice(gyro_.begin() + i - option_.reg_window_, gyro_.begin() + i);
             std::vector<Eigen::Vector3d> linacce_slice(linacce_.begin() + i - option_.reg_window_,
                                                        linacce_.begin() + i);
-            GaussianFilter(gyro_slice.data(), (int)gyro_slice.size(), sigma_);
+			std::vector<Eigen::Vector3d> gravity_slice(gravity_.begin()+i-option_.reg_window_,
+													   gravity_.begin()+i);
+			GaussianFilter(gyro_slice.data(), (int)gyro_slice.size(), sigma_);
             GaussianFilter(linacce_slice.data(), (int)linacce_slice.size(), sigma_);
 
-            cv::Mat feature = ComputeDirectFeature(gyro_slice.data(), linacce_slice.data(), (int)gyro_slice.size());
+            cv::Mat feature = ComputeDirectFeatureGravity(gyro_slice.data(), linacce_slice.data(), gravity_slice.data(),
+														  (int)gyro_slice.size());
+
+			// cv::Mat feature = ComputeDirectFeature(gyro_slice.data(), linacce_slice.data(), (int)gyro_slice.size());
 
             // TODO: remove the redundant Y axis
             const double ls_x = static_cast<double>(regressors_[0]->predict(feature));

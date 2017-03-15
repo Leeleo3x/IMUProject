@@ -36,6 +36,7 @@ namespace IMUProject {
 		TargetType target_;
 	};
 
+
 	cv::Mat ComputeLocalSpeedTarget(const std::vector<double>& time_stamp,
 	                                const std::vector<Eigen::Vector3d>& position,
 	                                const std::vector<Eigen::Quaterniond>& orientation,
@@ -46,8 +47,7 @@ namespace IMUProject {
 	                             const Eigen::Vector3d* linacce,
 								 const int N);
 
-	Eigen::Vector3d AdjustEulerAngle(const Eigen::Vector3d& input, const Eigen::Vector3d& target,
-	                                 const double max_v=M_PI / 2);
+	Eigen::Vector3d AdjustEulerAngle(const Eigen::Vector3d& input);
 
 
 	cv::Mat ComputeDirectFeatureGravity(const Eigen::Vector3d* gyro,

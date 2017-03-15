@@ -22,11 +22,11 @@ namespace IMUProject{
 
     struct IMULocalizationOption{
         int local_opt_interval_ = 400;
-	    int local_opt_window_ = 1000;
+        int local_opt_window_ = 1000;
 
-	    int global_opt_interval_ = 2000;
-        const double weight_ls_ = 1.0;
-        const double weight_vs_ = 1.0;
+        int global_opt_interval_ = 2000;
+        double weight_ls_ = 1.0;
+        double weight_vs_ = 1.0;
 
         static constexpr int reg_interval_ = 50;
         static constexpr int reg_window_ = 200;
@@ -65,15 +65,15 @@ namespace IMUProject{
             }
         }
 
-        void AddRecord(const double t, const Eigen::Vector3d& gyro,
-                      const Eigen::Vector3d& linacce, const Eigen::Quaterniond& orientation);
+        void AddRecord(const double t, const Eigen::Vector3d& gyro, const Eigen::Vector3d& linacce,
+                       const Eigen::Vector3d& gravity, const Eigen::Quaterniond& orientation);
 
         /// Run optimization
         /// \param start_id The start index of optimization window. Pass -1 to run global optimization
         /// \param N
-	    void RunOptimization(const int start_id, const int N);
+        void RunOptimization(const int start_id, const int N);
 
-	    void StartOptmizationThread();
+        void StartOptmizationThread();
 
         inline void ScheduleOptimization(const int start_id, const int N){
             std::lock_guard<std::mutex> guard(queue_lock_);
@@ -93,9 +93,10 @@ namespace IMUProject{
                                            std::vector<double>& bx, std::vector<double>& by, std::vector<double>& bz){
             CHECK_GE(constraint_ind_.size(), kCon);
 
-            FunctorType * functor = new FunctorType(&ts_[start_id], N, &linacce_[start_id], &orientation_[start_id],
-                                                  constraint_ind, local_speed, init_speed,
-                                                  option_.weight_ls_,option_.weight_vs_);
+            FunctorType * functor = new FunctorType(&ts_[start_id], N, &linacce_[start_id],
+                                                    &orientation_[start_id], &R_GW_[start_id],
+                                                    constraint_ind, local_speed, init_speed,
+                                                    option_.weight_ls_,option_.weight_vs_);
             bx.resize((size_t)kVar,0.0);
             by.resize((size_t)kVar,0.0);
             bz.resize((size_t)kVar,0.0);
@@ -124,17 +125,38 @@ namespace IMUProject{
             return position_.back();
         }
 
-        inline const std::vector<Eigen::Vector3d> GetPositions() const{
+        inline const std::vector<Eigen::Vector3d>& GetPositions() const{
             std::lock_guard<std::mutex> guard(mt_);
             return position_;
         }
 
-        inline const std::vector<Eigen::Quaterniond> GetOrientations() const{
+        inline const std::vector<Eigen::Vector3d>& GetSpeed() const{
+            std::lock_guard<std::mutex> guard(mt_);
+            return speed_;
+        }
+
+        inline const std::vector<Eigen::Quaterniond>& GetOrientations() const{
             std::lock_guard<std::mutex> guard(mt_);
             return orientation_;
         }
 
+        inline const std::vector<Eigen::Vector3d>& GetLinearAcceleration() const{
+            std::lock_guard<std::mutex> guard(mt_);
+            return linacce_;
+        }
+
+        inline const std::vector<int>& GetConstraintInd() const{
+            std::lock_guard<std::mutex> guard(mt_);
+            return constraint_ind_;
+        }
+
+        inline const std::vector<Eigen::Vector3d>& GetLocalSpeed() const{
+            std::lock_guard<std::mutex> guard(mt_);
+            return local_speed_;
+        }
+
         inline const int GetNumFrames() const{
+            std::lock_guard<std::mutex> guard(mt_);
             return num_frames_;
         }
 
@@ -156,24 +178,29 @@ namespace IMUProject{
 
         static constexpr int kInitCapacity_ = 10000;
 
+        static const Eigen::Vector3d local_gravity_dir_;
+
     private:
         std::vector<double> ts_;
         std::vector<Eigen::Vector3d> linacce_;
-	    std::vector<Eigen::Vector3d> gyro_;
+        std::vector<Eigen::Vector3d> gyro_;
+        std::vector<Eigen::Vector3d> gravity_;
         std::vector<Eigen::Quaterniond> orientation_;
+        std::vector<Eigen::Quaterniond> R_GW_;
+
         std::vector<Eigen::Vector3d> speed_;
         std::vector<Eigen::Vector3d> position_;
 
-	    std::vector<int> constraint_ind_;
-	    std::vector<Eigen::Vector3d> local_speed_;
+        std::vector<int> constraint_ind_;
+        std::vector<Eigen::Vector3d> local_speed_;
         int last_constraint_ind_;
 
-	    const std::vector<cv::Ptr<cv::ml::SVM> >& regressors_;
+        const std::vector<cv::Ptr<cv::ml::SVM> >& regressors_;
 
         Eigen::Vector3d init_speed_;
         Eigen::Vector3d init_position_;
 
-	    std::deque<std::pair<int, int> > task_queue_;
+        std::deque<std::pair<int, int> > task_queue_;
 
         int num_frames_;
 
@@ -182,13 +209,13 @@ namespace IMUProject{
         const IMULocalizationOption option_;
 
         mutable std::mutex mt_;
-	    mutable std::mutex queue_lock_;
+        mutable std::mutex queue_lock_;
         static constexpr int max_queue_task_ = 3;
 
-	    std::condition_variable cv_;
-	    std::atomic<bool> terminate_flag_;
+        std::condition_variable cv_;
+        std::atomic<bool> terminate_flag_;
         std::atomic<bool> can_add_;
-	    std::thread opt_thread_;
+        std::thread opt_thread_;
     };
 
 }//namespace IMUProject

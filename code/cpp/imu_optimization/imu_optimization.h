@@ -15,11 +15,6 @@
 
 namespace IMUProject {
 
-	struct Config {
-		static constexpr int kConstriantPoints = 100;
-		static constexpr int kSparsePoints = 200;
-		static constexpr int kOriSparsePoint = 100;
-	};
 
 
 	class SparseGrid{
@@ -75,15 +70,17 @@ namespace IMUProject {
 		LocalSpeedFunctor(const double* time_stamp, const int N,
 		                  const Eigen::Vector3d* linacce,
 		                  const Eigen::Quaterniond* orientation,
+                          const Eigen::Quaterniond* R_GW,
 		                  const int* constraint_ind,
 		                  const Eigen::Vector3d* local_speed,
 		                  const Eigen::Vector3d init_speed,
 						  const double weight_ls = 1.0, const double weight_vs = 1.0):
-				time_stamp_(time_stamp), linacce_(linacce), orientation_(orientation),
+				time_stamp_(time_stamp), linacce_(linacce), orientation_(orientation), R_GW_(R_GW),
 				constraint_ind_(constraint_ind), local_speed_(local_speed), init_speed_(init_speed),
 				weight_ls_(std::sqrt(weight_ls)), weight_vs_(std::sqrt(weight_vs)){
 
 			grid_.reset(new SparseGrid(time_stamp, N, KVARIABLE));
+
 		}
 
 		inline const SparseGrid* GetLinacceGrid() const{
@@ -152,7 +149,10 @@ namespace IMUProject {
 
 			for (int cid = 0; cid < KCONSTRAINT; ++cid) {
 				const int ind = constraint_ind_[cid];
-				Eigen::Matrix<T, 3, 1> ls = orientation_[ind].conjugate().template cast<T>() * speed[ind];
+				//printf("------------------------------------\n");
+//                printf("%.6f, %.6f, %.6f, %.6f\n", R_GW_[ind].w(), R_GW_[ind].x(), R_GW_[ind].y(), R_GW_[ind].z());
+//				printf("%d, %.6f, %.6f, %.6f\n", cid, local_speed_[cid][0], local_speed_[cid][1], local_speed_[cid][2]);
+				Eigen::Matrix<T, 3, 1> ls = R_GW_[ind].template cast<T>() * speed[ind];
 				residual[cid] = weight_ls_ * (ls[0] - (T)local_speed_[cid][0]);
 				residual[cid + KCONSTRAINT] = weight_vs_ * speed[ind][2];
 				residual[cid + 2 * KCONSTRAINT] = weight_ls_ * (ls[2] - (T)local_speed_[cid][2]);
@@ -166,6 +166,7 @@ namespace IMUProject {
 		const double* time_stamp_;
 		const Eigen::Vector3d* linacce_;
 		const Eigen::Quaterniond* orientation_;
+        const Eigen::Quaterniond* R_GW_;
 		const int* constraint_ind_;
 		const Eigen::Vector3d* local_speed_;
 

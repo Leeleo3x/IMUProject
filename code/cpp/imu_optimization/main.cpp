@@ -22,12 +22,19 @@ using namespace std;
 
 DEFINE_int32(max_iter, 500, "maximum iteration");
 DEFINE_int32(window, 200, "Window size");
-DEFINE_string(model_path, "../../../../models/model_0309_body_w200_s10", "Path to models");
+DEFINE_string(model_path, "../../../../models/model_0314_gravity_w200_s20", "Path to models");
 DEFINE_bool(gt, false, "Use ground truth");
 DEFINE_bool(rv, false, "Use rotation vector");
 DEFINE_double(feature_smooth_alpha, -1, "cut-off threshold for ");
 DEFINE_double(weight_ls, 1.0, "The weight of local speed residual");
 DEFINE_double(weight_vs, 1.0, "The weight of vertical speed residual");
+
+struct Config {
+	static constexpr int kConstriantPoints = 300;
+	static constexpr int kSparsePoints = 200;
+	static constexpr int kOriSparsePoint = 100;
+};
+
 
 int main(int argc, char** argv) {
     if (argc < 2) {
@@ -51,8 +58,10 @@ int main(int argc, char** argv) {
 	const std::vector<double>& ts = dataset.GetTimeStamp();
 	std::vector<Eigen::Vector3d> gyro = dataset.GetGyro();
 	std::vector<Eigen::Vector3d> linacce = dataset.GetLinearAcceleration();
+	const std::vector<Eigen::Vector3d>& gravity = dataset.GetGravity();
 
 	std::vector<Eigen::Quaterniond> orientation((size_t) kTotalCount);
+
 	if(FLAGS_rv){
 		const Eigen::Quaterniond& tango_init_ori = dataset.GetOrientation()[0];
 		const Eigen::Quaterniond& imu_init_ori = dataset.GetRotationVector()[0];
@@ -66,6 +75,13 @@ int main(int argc, char** argv) {
 													  dataset.GetOrientation().begin() + kTotalCount);
 	}
 
+    std::vector<Eigen::Quaterniond> R_GW((size_t) kTotalCount);
+    const Eigen::Vector3d local_g_dir(0, 1, 0);
+    for(auto i=0; i<kTotalCount; ++i){
+        Eigen::Quaterniond rotor = Eigen::Quaterniond::FromTwoVectors(gravity[i], local_g_dir);
+        R_GW[i] = rotor * orientation[i].conjugate();
+    }
+
 	const double feature_smooth_sigma = 2.0;
 	IMUProject::GaussianFilter(&gyro[0], (int)gyro.size(), feature_smooth_sigma);
 	IMUProject::GaussianFilter(&linacce[0], (int)linacce.size(), feature_smooth_sigma);
@@ -75,11 +91,11 @@ int main(int argc, char** argv) {
 	std::vector<Eigen::Vector3d> local_speed;
 
 	// regress local speed
-	constraint_ind.resize(IMUProject::Config::kConstriantPoints);
+	constraint_ind.resize(Config::kConstriantPoints);
 	local_speed.resize(constraint_ind.size(), Eigen::Vector3d(0, 0, 0));
 	constraint_ind[0] = FLAGS_window;
 	const int constraint_interval = (kTotalCount - FLAGS_window) /
-									(IMUProject::Config::kConstriantPoints - 1);
+									(Config::kConstriantPoints - 1);
 
 	for(int i=1; i<constraint_ind.size(); ++i){
 		constraint_ind[i] = constraint_ind[i-1] + constraint_interval;
@@ -116,16 +132,16 @@ int main(int argc, char** argv) {
 		for(int i=0; i<constraint_ind.size(); ++i){
 			const int sid = constraint_ind[i] - FLAGS_window;
 			const int eid = constraint_ind[i];
-			cv::Mat feature = IMUProject::ComputeDirectFeature(&gyro[sid], &linacce[sid], FLAGS_window);
+			cv::Mat feature = IMUProject::ComputeDirectFeatureGravity(&gyro[sid], &linacce[sid], &gravity[sid], FLAGS_window);
 			for(auto j: {0, 2}){
 				local_speed[i][j] = static_cast<double>(regressors[j]->predict(feature));
 			}
 		}
 	}
 
-	constexpr int kResiduals = IMUProject::Config::kConstriantPoints;
-	constexpr int kOriSparsePoint = IMUProject::Config::kOriSparsePoint;
-	constexpr int kSparsePoint = IMUProject::Config::kSparsePoints;
+	constexpr int kResiduals = Config::kConstriantPoints;
+	constexpr int kOriSparsePoint = Config::kOriSparsePoint;
+	constexpr int kSparsePoint = Config::kSparsePoints;
 
 	std::vector<Eigen::Vector3d> corrected_linacce = linacce;
 	std::vector<Eigen::Quaterniond> corrected_orientation = orientation;
@@ -147,7 +163,7 @@ int main(int argc, char** argv) {
 
 		using FunctorTypeLinacce = IMUProject::LocalSpeedFunctor<kSparsePoint, kResiduals>;
 
-		FunctorTypeLinacce *functor = new FunctorTypeLinacce(ts.data(), (int)ts.size(), linacce.data(), orientation.data(),
+		FunctorTypeLinacce *functor = new FunctorTypeLinacce(ts.data(), (int)ts.size(), linacce.data(), orientation.data(), R_GW.data(),
 															 constraint_ind.data(), local_speed.data(), Eigen::Vector3d(0, 0, 0), FLAGS_weight_ls, FLAGS_weight_vs);
 		problem_linacce.AddResidualBlock(
 				new ceres::AutoDiffCostFunction<FunctorTypeLinacce, 3 * kResiduals, kSparsePoint, kSparsePoint, kSparsePoint>(
@@ -185,6 +201,10 @@ int main(int argc, char** argv) {
 
 		functor->GetLinacceGrid()->correct_linacce_bias<double>(corrected_linacce.data(), bx.data(), by.data(),
 																bz.data());
+
+		for(auto i=0; i<bx.size(); ++i){
+			printf("%.3f, %.3f, %.3f\n", bx[i], by[i], bz[i]);
+		}
 	}
 
 	{

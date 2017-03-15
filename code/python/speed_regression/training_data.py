@@ -64,6 +64,7 @@ def compute_direct_feature_gravity(gyro, linacce, gravity, samples, window_size,
     return compute_direct_features(np.concatenate([gyro_gravity, linacce_gravity], axis=1), samples_points=samples,
                                    window_size=window_size, sigma=sigma)
 
+
 def compute_speed(time_stamp, position, sample_points=None):
     """
     Compute speed vector giving position and time_stamp

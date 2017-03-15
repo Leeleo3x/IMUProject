@@ -4,6 +4,14 @@ import numpy as np
 from numba import jit
 import quaternion
 
+
+def rotate_vector(input, orientation):
+    output = np.empty(input.shape, dtype=float)
+    for i in range(input.shape[0]):
+        q = quaternion.quaternion(*orientation[i])
+        output[i] = (q * quaternion.quaternion(1.0, *input[i]) * q.conj()).vec
+    return output
+
 @jit
 def rotation_matrix_from_two_vectors(v1, v2):
     """
@@ -63,29 +71,23 @@ def align_3dvector_with_gravity(data, gravity, local_g_direction=np.array([0, 1,
 
 
 @jit
-def adjust_eular_angle(source, target, max_v=math.pi/2):
-    # The eular axes might be flipped. Try convert to the original direction
-    # The heuristics used here are that 1. the values should be small. 2. the y direction should be same as input
-    assert source.shape == target.shape
+def adjust_eular_angle(source):
+    # convert the euler angle s.t. pitch is in (-pi/2, pi/2), roll and raw are in (-pi, pi)
     output = np.copy(source)
-    for i in range(source.shape[0]):
-        sign = 1.0
-        if output[i][1] > max_v:
-            output[i][1] -= math.pi
-            sign *= -1
-        elif output[i][1] < -max_v:
-            output[i][1] += math.pi
-            sign *= -1
-        if output[i][1] * target[i][1] < 0:
-            output[i][1] *= -1
-            sign *= -1
+    if output[0] < -math.pi / 2:
+        output[0] += math.pi
+        output[1] = (output[1] + math.pi) * -1
+        output[2] += math.pi
+    elif output[0] > math.pi / 2:
+        output -= math.pi
+        output[1] = (output[2] - math.pi) * -1
+        output[2] -= math.pi
 
-        for j in [0, 2]:
-            if output[i][j] > max_v:
-                output[i][j] = (output[i][j] - math.pi) * -1.0
-            elif output[i][j] < -max_v:
-                output[i][j] = (output[i][j] + math.pi) * -1.0
-            output[i][j] *= sign
+    for j in [1, 2]:
+        if output[j] < -math.pi:
+            output[j] += 2 * math.pi
+        if output[j] > math.pi:
+            output[j] -= 2 * math.pi
     return output
 
 
@@ -106,9 +108,9 @@ def align_eular_rotation_with_gravity(data, gravity, local_g_direction=np.array(
     for i in range(data.shape[0]):
         rotor = quaternion_from_two_vectors(gravity[i], local_g_direction)
         q = rotor * quaternion.from_euler_angles(*data[i]) * rotor.conj()
-        output[i] = quaternion.as_euler_angles(q)
+        output[i] = adjust_eular_angle(quaternion.as_euler_angles(q))
 
-    return adjust_eular_angle(output, data)
+    return output
 
 
 if __name__ == '__main__':
@@ -122,16 +124,14 @@ if __name__ == '__main__':
 
     gyro2 = np.empty(gyro.shape, dtype=float)
     for i in range(gyro.shape[0]):
-        gyro2[i] = quaternion.as_euler_angles(quaternion.from_euler_angles(*gyro[i]))
+        gyro2[i] = adjust_eular_angle(quaternion.as_euler_angles(quaternion.from_euler_angles(*gyro[i])))
 
-    gyro2 = adjust_eular_angle(gyro2, gyro, math.pi * 0.7)
     diff = 0
 
     for i in range(0, gyro.shape[0]):
         print('{:.6f}, {:.6f}, {:.6f} | {:.6f}, {:.6f}, {:.6f}'.format(
         gyro[i][0], gyro[i][1], gyro[i][2], gyro2[i][0], gyro2[i][1], gyro2[i][2]))
         cur_diff = np.linalg.norm(gyro2[i] - gyro[i])
-
         if cur_diff > 1e-9:
             print('diff')
         diff += cur_diff

@@ -26,7 +26,7 @@ namespace IMUProject{
 	void GaussianFilter(Eigen::Vector3d* data, const int N, const double sigma);
 
 	void TrajectoryOverlay(const double pixel_length, const Eigen::Vector2d& sp, const Eigen::Vector3d& map_ori,
-	                       const std::vector<Eigen::Vector3d>& positions, const Eigen::Vector3i& color, cv::Mat& map);
+	                       const std::vector<Eigen::Vector3d>& positions, const Eigen::Vector3d& color, cv::Mat& map);
 
 }//namespace IMUProject
 

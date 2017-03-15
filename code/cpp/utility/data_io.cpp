@@ -66,14 +66,22 @@ namespace IMUProject{
 //		}
     }
 
-	void WriteToPly(const std::string& path, const Eigen::Vector3d* position,
+	void WriteToPly(const std::string& path, const double* ts, const Eigen::Vector3d* position,
 					const Eigen::Quaterniond* orientation, const int N, const bool only_xy,
-					const Eigen::Vector3i traj_color, const double axis_length, const int kpoints, const int interval){
+					const Eigen::Vector3d traj_color, const double axis_length, const int kpoints, const int interval){
 		using TriMesh = OpenMesh::TriMesh_ArrayKernelT<>;
 		TriMesh mesh;
         mesh.request_vertex_colors();
 
-	    constexpr int axis_color[3][3] = {{255, 0, 0}, {0, 255, 0}, {0, 0, 255}};
+	    constexpr int axis_color[3][3] = {{0, 200, 0}, {0, 255, 0}, {0, 0, 255}};
+
+		// compute speed
+		std::vector<double> speed((size_t) N, 0.0);
+		for(auto i=1; i<N; ++i){
+			speed[i] = ((position[i] - position[i-1]) / (ts[i] - ts[i-1])).norm();
+		}
+
+		const double max_speed = *std::max_element(speed.begin(), speed.end());
 
 	    // First add trajectory points
 	    for (int i = 0; i < N; ++i) {
@@ -82,7 +90,8 @@ namespace IMUProject{
 				pt[2] = 0.0;
 			}
 		    TriMesh::VertexHandle vertex = mesh.add_vertex(TriMesh::Point(pt[0], pt[1], pt[2]));
-		    mesh.set_color(vertex, TriMesh::Color(traj_color[0], traj_color[1], traj_color[2]));
+			Eigen::Vector3d cur_color = traj_color;
+		    mesh.set_color(vertex, TriMesh::Color((int)cur_color[0], (int)cur_color[1], (int)cur_color[2]));
 	    }
 
         // Then add axis points
@@ -91,7 +100,7 @@ namespace IMUProject{
 		    for (int i = 0; i < N; i += interval) {
 			    Eigen::Matrix3d axis_dir = orientation[i].toRotationMatrix() * local_axis;
 			    for (int j = 0; j < kpoints; ++j) {
-				    for(int k=0; k<3; ++k){
+				    for(int k=0; k<1; ++k){
 						Eigen::Vector3d pos = position[i];
 						if(only_xy){
 							pos[2] = 0.0;
