@@ -137,7 +137,18 @@ int main(int argc, char** argv){
 	                       dataset.GetOrientation().data(), (int)dataset.GetPosition().size(),
 	                       true, Eigen::Vector3d(255, 0, 0), 0.8, 100, 300);
 
-	LOG(INFO) << "Optimized trajectory written to " << buffer;
+	{
+		// Write trajectory with double integration
+		vector<Eigen::Vector3d> raw_traj(dataset.GetTimeStamp().size(), dataset.GetPosition()[0]);
+		vector<Eigen::Vector3d> raw_speed(dataset.GetTimeStamp().size(), Eigen::Vector3d(0, 0, 0));
+		for(auto i=1; i < raw_traj.size(); ++i){
+			Eigen::Vector3d acce = orientation[i-1] * dataset.GetLinearAcceleration()[i-1];
+			raw_speed[i] = raw_speed[i-1] + acce * (ts[i] - ts[i-1]);
+			raw_traj[i] = raw_traj[i-1] + raw_speed[i-1] * (ts[i] - ts[i-1]);
+		}
+		sprintf(buffer, "%s/raw.ply", argv[1]);
+		IMUProject::WriteToPly(std::string(buffer), ts.data(), raw_traj.data(), orientation.data(), (int)raw_traj.size());
+	}
 
     {
         // Write the trajectory and bias as txt

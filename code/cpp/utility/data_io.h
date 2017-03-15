@@ -154,7 +154,7 @@ namespace IMUProject{
 	/// \param interval the interval of axis visualization, set to negative value to omit axis
     void WriteToPly(const std::string& path, const double* ts, const Eigen::Vector3d* position,
                     const Eigen::Quaterniond* orientation, const int N, const bool only_xy = false,
-                    const Eigen::Vector3d traj_color=Eigen::Vector3i(0, 255, 255),
+                    const Eigen::Vector3d traj_color=Eigen::Vector3d(0, 255, 255),
                     const double axis_length = 0.5, const int kpoints = 100, const int interval=200);
 
 } //namespace IMUProject

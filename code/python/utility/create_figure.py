@@ -9,6 +9,7 @@ import pandas
 import argparse
 import quaternion
 from scipy.ndimage.filters import gaussian_filter1d
+from sklearn.metrics import mean_squared_error
 
 from speed_regression import training_data as td
 
@@ -31,6 +32,15 @@ if __name__ == '__main__':
     regression_result = np.genfromtxt(args.dir + '/regression.txt')
     constraint_ind = regression_result[:, 0].astype(int)
     local_speed = regression_result[:, 1:]
+
+    option = td.TrainingDataOption(sample_step=20, window_size=200, feature='direct_gravity',
+                                   target='local_speed_gravity')
+    imu_columns = ['gyro_x', 'gyro_y', 'gyro_z', 'linacce_x', 'linacce_y', 'linacce_z']
+    feature, target = td.get_training_data(data_all, imu_columns, option, constraint_ind)
+
+    print('Regression error: {:.3f}, {:.3f}'.format(
+        mean_squared_error(target[:, 0], local_speed[:, 0]),
+        mean_squared_error(target[:, 2], local_speed[:, 2])))
 
     ts = result['time'].values
     ts -= ts[0]
@@ -66,12 +76,8 @@ if __name__ == '__main__':
     speed_raw = np.cumsum(directed_linacce[:-1] * (ts[1:, None] - ts[:-1, None]), axis=0)
     # speed_raw = np.concatenate([np.zeros(1, 3), speed_raw], axis=0)
 
-    legends = [['IMU-x', 'Tango-x'], ['IMU-y', 'Tango-y']]
-    legend_speed = [['IMU-x', 'Before-x', 'After-x'],
-                    ['IMU-z', 'Before-z', 'After-z']]
-    axis_name_global = ['Xw', 'Yw']
-    axis_name_grav = ['Xg', 'Zg']
-    axis_name_local = ['Xl', 'Yl', 'Zl']
+    font = {'family': 'serif', 'size': 24}
+    plt.rc('font', **font)
 
     axes_glob = [0, 1]
     axes_local = [0, 2]
@@ -80,31 +86,47 @@ if __name__ == '__main__':
     lines_raw = []
     lines_tango = []
 
-    fig_gs = plt.figure('Speed', figsize=(10, 8))
+    ylabels = ['X Speed (m/s)', 'Y Speed (m/s)']
+    fig_gs = plt.figure('Speed', figsize=(12, 10))
     for i in range(0, 2):
         plt.subplot(211 + i)
-        lines_imu += plt.plot(ts, speed_res[:, axes_glob[i]])
-        lines_raw += plt.plot(ts[1:], speed_raw[:, axes_glob[i]])
-        lines_tango += plt.plot(ts, speed_gt[:, axes_glob[i]])
+        if i == 0:
+            plt.xlabel('Time(s)')
+        plt.ylabel(ylabels[i])
+        plt.locator_params(nbins=5, axis='y')
+        lines_imu += plt.plot(ts, speed_res[:, axes_glob[i]], 'b')
+        lines_raw += plt.plot(ts[1:], speed_raw[:, axes_glob[i]], 'r')
+        lines_tango += plt.plot(ts, speed_gt[:, axes_glob[i]], 'c')
     plt.figlegend([lines_imu[-1], lines_raw[-1], lines_tango[-1]],
                   {'Our method', 'Double integration', 'Tango'},
-                  loc='lower center', ncol=3, labelspacing=0.)
-    fig_gs.savefig(output_path + '/fig_gs.png')
+                  loc='upper center', ncol=3, labelspacing=0.)
+    fig_gs.savefig(output_path + '/fig_gs.png', bbox_inches='tight')
 
-    fig_ls = plt.figure('Local speed', figsize=(10, 8))
+    ylabels = ['X Speed (m/s)', 'Y Speed (m/s)']
+    fig_ls = plt.figure('Local speed', figsize=(12, 10))
+
     for i in range(0, 2):
         plt.subplot(211+i)
-        lines_imu += plt.plot(ts[constraint_ind], local_speed[:, axes_local[i]])
-        lines_tango += plt.plot(ts[constraint_ind], ls_gt[:, axes_local[i]])
+        if i == 0:
+            plt.xlabel('Time(s)')
+        plt.ylabel(ylabels[i])
+        plt.locator_params(nbins=5, axis='y')
+        lines_imu += plt.plot(ts[constraint_ind], local_speed[:, axes_local[i]], 'b')
+        lines_tango += plt.plot(ts[constraint_ind], ls_gt[:, axes_local[i]], 'r')
     plt.figlegend([lines_imu[-1], lines_raw[-1], lines_tango[-1]],
                   {'Our method', 'Tango (Ground truth)'},
-                  loc='lower center', ncol=2, labelspacing=0.)
-    fig_ls.savefig(output_path + '/fig_ls.png')
+                  loc='upper center', ncol=2, labelspacing=0.)
+    fig_ls.savefig(output_path + '/fig_ls.png', bbox_inches='tight')
 
-    fig_bias = plt.figure('Bias', figsize=(10, 8))
+    fig_bias = plt.figure('Bias', figsize=(12, 10))
+    ylabels = ['X Bias (m/s2)', 'Y Bias (m/s2)', 'Z Bias (m/s2)']
     for i in range(0, 3):
         plt.subplot(311+i)
+        if i == 2:
+            plt.xlabel('Time (s)')
+        plt.ylabel(ylabels[i])
+        plt.locator_params(nbins=5, axis='y')
         plt.plot(ts, bias_res[:, i])
-        plt.legend(axis_name_local[i], loc='lower right')
-    fig_bias.savefig(output_path + '/fig_bias.png')
+    fig_bias.savefig(output_path + '/fig_bias.png', bbox_inches='tight')
+
     # plt.show()
