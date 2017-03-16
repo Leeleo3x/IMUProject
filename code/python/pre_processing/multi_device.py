@@ -53,7 +53,7 @@ if __name__ == '__main__':
     parser.add_argument('--margin', type=int, default=100)
     parser.add_argument('--no_trajectory', action='store_true')
     parser.add_argument('--device', type=str, default='iphone')
-    parser.add_argument('--sync', type=bool, default=False)
+    parser.add_argument('--sync', type=bool, default=True)
     args = parser.parse_args()
 
     device_dir = args.dir + '/' + args.device
