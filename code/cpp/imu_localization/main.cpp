@@ -131,7 +131,7 @@ int main(int argc, char** argv){
     sprintf(buffer, "%s/result_trajectory_%s.ply", argv[1], FLAGS_id.c_str());
     IMUProject::WriteToPly(std::string(buffer), dataset.GetTimeStamp().data(), trajectory.GetPositions().data(),
                            trajectory.GetOrientations().data(), trajectory.GetNumFrames(),
-                           true, Eigen::Vector3d(0, 102, 0), 0.8, 100, 300);
+                           true, Eigen::Vector3d(0, 0, 255), 0.8, 100, 300);
 
 	sprintf(buffer, "%s/tango_trajectory.ply", argv[1]);
 	IMUProject::WriteToPly(std::string(buffer), dataset.GetTimeStamp().data(), dataset.GetPosition().data(),
