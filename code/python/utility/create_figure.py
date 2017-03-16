@@ -67,6 +67,9 @@ if __name__ == '__main__':
     ls_gt = gaussian_filter1d(ls_gt, sigma=30.0, axis=0)
     ls_gt = ls_gt[constraint_ind]
 
+    ls_const = np.zeros([constraint_ind.shape[0], 3], dtype=float)
+    ls_const[:, 2] = -1.4
+
     speed_gt = gaussian_filter1d(speed_gt, sigma=filter_sigma, axis=0)
 
     linacce = data_all[['linacce_x', 'linacce_y', 'linacce_z']].values
@@ -86,6 +89,7 @@ if __name__ == '__main__':
     lines_imu = []
     lines_raw = []
     lines_tango = []
+    lines_const = []
 
     ylabels = ['X Speed (m/s)', 'Y Speed (m/s)']
     fig_gs = plt.figure('Speed', figsize=(12, 10))
@@ -104,7 +108,7 @@ if __name__ == '__main__':
     fig_gs.savefig(output_path + '/fig_gs.png', bbox_inches='tight')
 
     ylabels = ['X Speed (m/s)', 'Y Speed (m/s)']
-    fig_ls = plt.figure('Local speed', figsize=(12, 12))
+    fig_ls = plt.figure('Local speed', figsize=(12, 10))
 
     for i in range(0, 2):
         plt.subplot(211+i)
@@ -112,11 +116,12 @@ if __name__ == '__main__':
             plt.xlabel('Time(s)')
         plt.ylabel(ylabels[i])
         plt.locator_params(nbins=5, axis='y')
-        lines_imu += plt.plot(ts[constraint_ind], local_speed[:, axes_local[i]], color=(0, 102.0/255.0, 0))
+        lines_imu += plt.plot(ts[constraint_ind], local_speed[:, axes_local[i]], 'b')
         lines_tango += plt.plot(ts[constraint_ind], ls_gt[:, axes_local[i]], 'r')
-    plt.figlegend([lines_imu[-1], lines_tango[-1]],
-                  ['Predicted', 'Tango (Ground truth)'],
-                  loc='upper center', ncol=2, labelspacing=0.)
+        lines_const += plt.plot(ts[constraint_ind], ls_const[:, axes_local[i]], color=(0.5, 0, 0.5))
+    # plt.figlegend([lines_imu[-1], lines_const[-1], lines_tango[-1]],
+    #               ['Predicted', 'Const', 'Tango (Ground truth)'],
+    #               loc='upper center', ncol=3, labelspacing=0.)
     fig_ls.savefig(output_path + '/fig_ls.png', bbox_inches='tight')
 
     fig_bias = plt.figure('Bias', figsize=(12, 10))
