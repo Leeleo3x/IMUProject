@@ -12,6 +12,7 @@ from scipy.ndimage.filters import gaussian_filter1d
 from sklearn.metrics import mean_squared_error
 
 from speed_regression import training_data as td
+from algorithms import geometry
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -34,15 +35,6 @@ if __name__ == '__main__':
     constraint_ind = regression_result[:, 0].astype(int)
     local_speed = regression_result[:, 1:]
 
-    option = td.TrainingDataOption(sample_step=20, window_size=200, feature='direct_gravity',
-                                   target='local_speed_gravity')
-    imu_columns = ['gyro_x', 'gyro_y', 'gyro_z', 'linacce_x', 'linacce_y', 'linacce_z']
-    feature, target = td.get_training_data(data_all, imu_columns, option, constraint_ind)
-
-    print('Regression error: {:.3f}, {:.3f}'.format(
-        mean_squared_error(target[:, 0], local_speed[:, 0]),
-        mean_squared_error(target[:, 2], local_speed[:, 2])))
-
     ts = result['time'].values
     ts -= ts[0]
 
@@ -53,19 +45,22 @@ if __name__ == '__main__':
     speed_res = gaussian_filter1d(speed_res, sigma=filter_sigma, axis=0)
 
     position_gt = data_all[['pos_x', 'pos_y', 'pos_z']].values
+    orientation_gt = data_all[['ori_w', 'ori_x', 'ori_y', 'ori_z']].values
+    gravity = data_all[['grav_x', 'grav_y', 'grav_z']].values
 
     traj_length = sum(np.linalg.norm(position_gt[1:] - position_gt[:-1], axis=1))
     mean_offset = np.average(np.linalg.norm(position_gt - pos_res, axis=1))
     print('Trajectory length: {:.3f}m, {:.3f}s, mean offset: {:.3f}m ({:.3f})'.format(traj_length, ts[-1] - ts[0],
           mean_offset, mean_offset / traj_length))
 
-    orientation_gt = data_all[['ori_w', 'ori_x', 'ori_y', 'ori_z']].values
-    gravity = data_all[['grav_x', 'grav_y', 'grav_z']].values
-
     speed_gt = td.compute_speed(ts, position_gt)
     ls_gt = td.compute_local_speed_with_gravity(ts, position_gt, orientation_gt, gravity)
     ls_gt = gaussian_filter1d(ls_gt, sigma=30.0, axis=0)
     ls_gt = ls_gt[constraint_ind]
+
+    print('Regression error: {:.3f}, {:.3f}'.format(
+        mean_squared_error(ls_gt[:, 0], local_speed[:, 0]),
+        mean_squared_error(ls_gt[:, 2], local_speed[:, 2])))
 
     ls_const = np.zeros([constraint_ind.shape[0], 3], dtype=float)
     ls_const[:, 2] = -1.4
@@ -78,9 +73,20 @@ if __name__ == '__main__':
         q = quaternion.quaternion(*orientation_gt[i])
         directed_linacce[i] = (q * quaternion.quaternion(1.0, *linacce[i]) * q.conj()).vec
     speed_raw = np.cumsum(directed_linacce[:-1] * (ts[1:, None] - ts[:-1, None]), axis=0)
-    # speed_raw = np.concatenate([np.zeros(1, 3), speed_raw], axis=0)
+    speed_raw = np.concatenate([np.zeros([1, 3], dtype=float), speed_raw], axis=0)
 
-    font = {'family': 'serif', 'size': 24}
+    # compute speed in stabilized IMU frame
+    local_gravity_dir = np.array([0., 1., 0.])
+
+    ls_raw = np.empty([constraint_ind.shape[0], 3], dtype=float)
+    for i in range(constraint_ind.shape[0]):
+        ind = constraint_ind[i]
+        q = quaternion.quaternion(*orientation_gt[ind])
+        ls = (q.conj() * quaternion.quaternion(1.0, *speed_raw[ind]) * q).vec
+        gr = geometry.quaternion_from_two_vectors(gravity[ind], local_gravity_dir)
+        ls_raw[i] = (gr * quaternion.quaternion(1.0, *ls) * gr.conj()).vec
+
+    font = {'family': 'serif', 'size': 40}
     plt.rc('font', **font)
 
     axes_glob = [0, 1]
@@ -91,24 +97,25 @@ if __name__ == '__main__':
     lines_tango = []
     lines_const = []
 
-    ylabels = ['X Speed (m/s)', 'Y Speed (m/s)']
-    fig_gs = plt.figure('Speed', figsize=(12, 10))
-    for i in range(0, 2):
-        plt.subplot(211 + i)
-        if i == 0:
-            plt.xlabel('Time(s)')
-        plt.ylabel(ylabels[i])
-        plt.locator_params(nbins=5, axis='y')
-        lines_imu += plt.plot(ts, speed_res[:, axes_glob[i]], 'b')
-        lines_raw += plt.plot(ts[1:], speed_raw[:, axes_glob[i]], 'r')
-        lines_tango += plt.plot(ts, speed_gt[:, axes_glob[i]], 'c')
-    # plt.figlegend([lines_imu[-1], lines_raw[-1], lines_tango[-1]],
-    #               {'Our method', 'Double integration', 'Tango'},
-    #               loc='upper center', ncol=3, labelspacing=0.)
-    fig_gs.savefig(output_path + '/fig_gs.png', bbox_inches='tight')
+    # ylabels = ['X Speed (m/s)', 'Y Speed (m/s)']
+    # fig_gs = plt.figure('Speed', figsize=(12, 10))
+    # for i in range(0, 2):
+    #     plt.subplot(211 + i)
+    #     if i == 0:
+    #         plt.xlabel('Time(s)')
+    #     plt.ylabel(ylabels[i])
+    #     plt.locator_params(nbins=5, axis='y')
+    #     lines_imu += plt.plot(ts, speed_res[:, axes_glob[i]], 'b')
+    #     lines_raw += plt.plot(ts[1:], speed_raw[:, axes_glob[i]], 'r')
+    #     lines_tango += plt.plot(ts, speed_gt[:, axes_glob[i]], 'c')
+    # # plt.figlegend([lines_imu[-1], lines_raw[-1], lines_tango[-1]],
+    # #               {'Our method', 'Double integration', 'Tango'},
+    # #               loc='upper center', ncol=3, labelspacing=0.)
+    # fig_gs.savefig(output_path + '/fig_gs.png', bbox_inches='tight')
 
     ylabels = ['X Speed (m/s)', 'Y Speed (m/s)']
-    fig_ls = plt.figure('Local speed', figsize=(12, 10))
+    fig_ls = plt.figure('Local speed', figsize=(21, 21))
+    linewidth = 3.0
 
     for i in range(0, 2):
         plt.subplot(211+i)
@@ -116,23 +123,24 @@ if __name__ == '__main__':
             plt.xlabel('Time(s)')
         plt.ylabel(ylabels[i])
         plt.locator_params(nbins=5, axis='y')
-        lines_imu += plt.plot(ts[constraint_ind], local_speed[:, axes_local[i]], 'b')
-        lines_tango += plt.plot(ts[constraint_ind], ls_gt[:, axes_local[i]], 'r')
-        lines_const += plt.plot(ts[constraint_ind], ls_const[:, axes_local[i]], color=(0.5, 0, 0.5))
-    # plt.figlegend([lines_imu[-1], lines_const[-1], lines_tango[-1]],
-    #               ['Predicted', 'Const', 'Tango (Ground truth)'],
-    #               loc='upper center', ncol=3, labelspacing=0.)
+        lines_imu += plt.plot(ts[constraint_ind], local_speed[:, axes_local[i]], color=(0, 0, .5), lw=linewidth)
+        lines_tango += plt.plot(ts[constraint_ind], ls_gt[:, axes_local[i]], 'r', lw=linewidth)
+        lines_raw += plt.plot(ts[constraint_ind], ls_raw[:, axes_local[i]], color=(0., .5, .5), lw=linewidth)
+        lines_const += plt.plot(ts[constraint_ind], ls_const[:, axes_local[i]], color=(.5, .5, 0.), lw=linewidth)
+    plt.figlegend([lines_imu[-1], lines_raw[-1], lines_const[-1], lines_tango[-1]],
+                  ['Our method', 'Raw', 'Constant', 'Tango (Ground truth)'],
+                  loc='upper center', ncol=4, labelspacing=0.)
     fig_ls.savefig(output_path + '/fig_ls.png', bbox_inches='tight')
 
-    fig_bias = plt.figure('Bias', figsize=(12, 10))
-    ylabels = ['X Bias (m/s2)', 'Y Bias (m/s2)', 'Z Bias (m/s2)']
-    for i in range(0, 3):
-        plt.subplot(311+i)
-        if i == 2:
-            plt.xlabel('Time (s)')
-        plt.ylabel(ylabels[i])
-        plt.locator_params(nbins=5, axis='y')
-        plt.plot(ts, bias_res[:, i])
-    fig_bias.savefig(output_path + '/fig_bias.png', bbox_inches='tight')
+    # fig_bias = plt.figure('Bias', figsize=(12, 10))
+    # ylabels = ['X Bias (m/s2)', 'Y Bias (m/s2)', 'Z Bias (m/s2)']
+    # for i in range(0, 3):
+    #     plt.subplot(311+i)
+    #     if i == 2:
+    #         plt.xlabel('Time (s)')
+    #     plt.ylabel(ylabels[i])
+    #     plt.locator_params(nbins=5, axis='y')
+    #     plt.plot(ts, bias_res[:, i])
+    # fig_bias.savefig(output_path + '/fig_bias.png', bbox_inches='tight')
 
     # plt.show()
