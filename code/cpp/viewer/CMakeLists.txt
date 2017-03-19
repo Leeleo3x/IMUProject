@@ -14,6 +14,9 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 include_directories(${EIGEN_INCLUDE_DIRS})
 
-add_executable(VisualizeTrajectory visualize_trajectory.cpp renderable.h renderable.cpp)
+add_executable(VisualizeTrajectory visualize_trajectory.cpp
+        main_widget.cpp main_widget.h
+        renderable.h renderable.cpp)
+
 target_link_libraries(VisualizeTrajectory ${OpenCV_LIBS} ${GFLAGS_LIBRARY} ${GLOG_LIBRARY}
         Qt5::Core Qt5::Widgets Qt5::Gui)
