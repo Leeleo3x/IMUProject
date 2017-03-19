@@ -21,13 +21,23 @@ namespace IMUProject{
 
     class Renderable: protected QOpenGLFunctions{
     public:
+        inline void UpdateModelView(const QMatrix4x4& model_view){
+            model_view_ = model_view;
+        }
+        inline QMatrix4x4 GetModelView() const{
+            return model_view_;
+        }
         virtual void Render() = 0;
+    protected:
+        QMatrix4x4 model_view_;
     };
 
     class ViewFrustum: public Renderable{
     public:
         ViewFrustum(const double length=1.0, const bool with_axes=false);
         virtual void Render();
+    private:
+        QOpenGLBuffer vertex_buffer_;
     };
 
     class OfflineTrajectory: public Renderable{
