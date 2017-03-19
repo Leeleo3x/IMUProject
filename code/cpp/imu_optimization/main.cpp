@@ -22,7 +22,7 @@ using namespace std;
 
 DEFINE_int32(max_iter, 500, "maximum iteration");
 DEFINE_int32(window, 200, "Window size");
-DEFINE_string(model_path, "../../../../models/model_0314_gravity_w200_s20", "Path to models");
+DEFINE_string(model_path, "../../../../models/model_0315_full_w200_s20", "Path to models");
 DEFINE_bool(gt, false, "Use ground truth");
 DEFINE_bool(rv, false, "Use rotation vector");
 DEFINE_double(feature_smooth_alpha, -1, "cut-off threshold for ");
@@ -30,7 +30,7 @@ DEFINE_double(weight_ls, 1.0, "The weight of local speed residual");
 DEFINE_double(weight_vs, 1.0, "The weight of vertical speed residual");
 
 struct Config {
-	static constexpr int kConstriantPoints = 300;
+	static constexpr int kConstriantPoints = 200;
 	static constexpr int kSparsePoints = 200;
 	static constexpr int kOriSparsePoint = 100;
 };
@@ -46,7 +46,7 @@ int main(int argc, char** argv) {
     FLAGS_logtostderr = true;
     google::InitGoogleLogging(argv[0]);
 
-    char buffer[128] = {};
+    char buffer[256] = {};
 
     printf("Loading...\n");
     IMUProject::IMUDataset dataset(argv[1]);
@@ -75,12 +75,12 @@ int main(int argc, char** argv) {
 													  dataset.GetOrientation().begin() + kTotalCount);
 	}
 
-    std::vector<Eigen::Quaterniond> R_GW((size_t) kTotalCount);
-    const Eigen::Vector3d local_g_dir(0, 1, 0);
-    for(auto i=0; i<kTotalCount; ++i){
-        Eigen::Quaterniond rotor = Eigen::Quaterniond::FromTwoVectors(gravity[i], local_g_dir);
-        R_GW[i] = rotor * orientation[i].conjugate();
-    }
+	std::vector<Eigen::Quaterniond> R_GW((size_t) kTotalCount);
+	const Eigen::Vector3d local_g_dir(0, 1, 0);
+	for(auto i=0; i<kTotalCount; ++i){
+		Eigen::Quaterniond rotor = Eigen::Quaterniond::FromTwoVectors(gravity[i], local_g_dir);
+		R_GW[i] = rotor * orientation[i].conjugate();
+	}
 
 	const double feature_smooth_sigma = 2.0;
 	IMUProject::GaussianFilter(&gyro[0], (int)gyro.size(), feature_smooth_sigma);
@@ -202,8 +202,30 @@ int main(int argc, char** argv) {
 		functor->GetLinacceGrid()->correct_linacce_bias<double>(corrected_linacce.data(), bx.data(), by.data(),
 																bz.data());
 
+		// Write result to a text file for plotting
+		sprintf(buffer, "%s/sparse_grid_bias.txt", argv[1]);
+		ofstream bias_out(buffer);
+		CHECK(bias_out.is_open());
 		for(auto i=0; i<bx.size(); ++i){
-			printf("%.3f, %.3f, %.3f\n", bx[i], by[i], bz[i]);
+			sprintf(buffer, "%d %.6f %.6f %.6f\n", functor->GetLinacceGrid()->GetVariableIndAt(i),
+			       bx[i], by[i], bz[i]);
+			bias_out << buffer;
+		}
+
+		sprintf(buffer, "%s/sparse_grid_constraint.txt", argv[1]);
+		ofstream ls_out(buffer);
+		CHECK(ls_out.is_open());
+		for(auto i=0; i<constraint_ind.size(); ++i){
+			sprintf(buffer, "%d %.6f %.6f %.6f\n", constraint_ind[i], local_speed[i][0], local_speed[i][1], local_speed[i][2]);
+			ls_out << buffer;
+		}
+
+		sprintf(buffer, "%s/corrected_linacce.txt", argv[1]);
+		ofstream cs_out(buffer);
+		CHECK(cs_out.is_open());
+		for(auto i=0; i<corrected_linacce.size(); ++i){
+			sprintf(buffer, "%d %.6f %.6f %.6f\n", i, corrected_linacce[i][0], corrected_linacce[i][1], corrected_linacce[i][2]);
+			cs_out << buffer;
 		}
 	}
 
@@ -248,19 +270,20 @@ int main(int argc, char** argv) {
 	}
 //	functor->GetOrientationGrid()->correct_orientation(corrected_orientation.data(), rz.data());
 
+
 	std::vector<Eigen::Vector3d> directed_corrected_linacce = IMUProject::Rotate3DVector(corrected_linacce, corrected_orientation);
 	std::vector<Eigen::Vector3d> corrected_speed = IMUProject::Integration(ts, directed_corrected_linacce);
 	std::vector<Eigen::Vector3d> corrected_position = IMUProject::Integration(ts, corrected_speed, dataset.GetPosition()[0]);
 
 	sprintf(buffer, "%s/optimized_cpp_gaussian.ply", argv[1]);
-	IMUProject::WriteToPly(std::string(buffer), corrected_position.data(), orientation.data(), kTotalCount);
+	IMUProject::WriteToPly(std::string(buffer), ts.data(), corrected_position.data(), orientation.data(), kTotalCount);
 
 	std::vector<Eigen::Vector3d> directed_linacce = IMUProject::Rotate3DVector(linacce, orientation);
 	std::vector<Eigen::Vector3d> speed = IMUProject::Integration(ts, directed_linacce);
 	std::vector<Eigen::Vector3d> raw_position = IMUProject::Integration(ts, speed, dataset.GetPosition()[0]);
 
 	sprintf(buffer, "%s/raw.ply", argv[1]);
-	IMUProject::WriteToPly(std::string(buffer), raw_position.data(), orientation.data(), kTotalCount);
+	IMUProject::WriteToPly(std::string(buffer), ts.data(), raw_position.data(), orientation.data(), kTotalCount);
 
     return 0;
 }

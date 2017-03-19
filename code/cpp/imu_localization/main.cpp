@@ -19,7 +19,7 @@ DEFINE_string(mapinfo_path, "default", "path to map info");
 DEFINE_int32(log_interval, 1000, "logging interval");
 DEFINE_double(weight_vs, 1.0, "weight_vs");
 DEFINE_double(weight_ls, 1.0, "weight_ls");
-DEFINE_string(id, "full", "suffix");
+DEFINE_string(id, "const", "suffix");
 
 DEFINE_bool(run_global, true, "Run global optimization at the end");
 DEFINE_bool(tango_ori, false, "Use ground truth orientation");
@@ -131,7 +131,7 @@ int main(int argc, char** argv){
     sprintf(buffer, "%s/result_trajectory_%s.ply", argv[1], FLAGS_id.c_str());
     IMUProject::WriteToPly(std::string(buffer), dataset.GetTimeStamp().data(), trajectory.GetPositions().data(),
                            trajectory.GetOrientations().data(), trajectory.GetNumFrames(),
-                           true, Eigen::Vector3d(0, 128, 0), 0.8, 100, 300);
+                           true, Eigen::Vector3d(128, 128, 0), 0.8, 100, 300);
 
 	sprintf(buffer, "%s/tango_trajectory.ply", argv[1]);
 	IMUProject::WriteToPly(std::string(buffer), dataset.GetTimeStamp().data(), dataset.GetPosition().data(),

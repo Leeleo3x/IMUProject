@@ -63,7 +63,8 @@ if __name__ == '__main__':
         mean_squared_error(ls_gt[:, 2], local_speed[:, 2])))
 
     ls_const = np.zeros([constraint_ind.shape[0], 3], dtype=float)
-    ls_const[:, 2] = -1.4
+    ls_const[:, 2] = np.average(ls_gt[10:-10, 2], axis=0)
+    print('constrant speed:', ls_const[0, 2])
 
     speed_gt = gaussian_filter1d(speed_gt, sigma=filter_sigma, axis=0)
 
@@ -113,9 +114,9 @@ if __name__ == '__main__':
     # #               loc='upper center', ncol=3, labelspacing=0.)
     # fig_gs.savefig(output_path + '/fig_gs.png', bbox_inches='tight')
 
-    ylabels = ['X Speed (m/s)', 'Y Speed (m/s)']
-    fig_ls = plt.figure('Local speed', figsize=(21, 21))
-    linewidth = 3.0
+    ylabels = ['X Speed (m/s)', 'Z Speed (m/s)']
+    fig_ls = plt.figure('Local speed', figsize=(21, 15))
+    linewidth = 1.8
 
     for i in range(0, 2):
         plt.subplot(211+i)
@@ -125,11 +126,11 @@ if __name__ == '__main__':
         plt.locator_params(nbins=5, axis='y')
         lines_imu += plt.plot(ts[constraint_ind], local_speed[:, axes_local[i]], color=(0, 0, .5), lw=linewidth)
         lines_tango += plt.plot(ts[constraint_ind], ls_gt[:, axes_local[i]], 'r', lw=linewidth)
-        lines_raw += plt.plot(ts[constraint_ind], ls_raw[:, axes_local[i]], color=(0., .5, .5), lw=linewidth)
+        lines_raw += plt.plot(ts[constraint_ind], ls_raw[:, axes_local[i]], color=(0., .5, 0.5), lw=linewidth)
         lines_const += plt.plot(ts[constraint_ind], ls_const[:, axes_local[i]], color=(.5, .5, 0.), lw=linewidth)
-    plt.figlegend([lines_imu[-1], lines_raw[-1], lines_const[-1], lines_tango[-1]],
-                  ['Our method', 'Raw', 'Constant', 'Tango (Ground truth)'],
-                  loc='upper center', ncol=4, labelspacing=0.)
+    # plt.figlegend([lines_imu[-1], lines_tango[-1]],
+    #               ['Our method', 'Tango (Ground truth)'],
+    #               loc='upper center', ncol=2, labelspacing=0.)
     fig_ls.savefig(output_path + '/fig_ls.png', bbox_inches='tight')
 
     # fig_bias = plt.figure('Bias', figsize=(12, 10))
