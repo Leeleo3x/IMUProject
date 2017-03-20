@@ -16,7 +16,9 @@ include_directories(${EIGEN_INCLUDE_DIRS})
 
 add_executable(VisualizeTrajectory visualize_trajectory.cpp
         main_widget.cpp main_widget.h
-        renderable.h renderable.cpp)
+        renderable.h renderable.cpp
+        navigation.h navigation.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/resource/resource.qrc)
 
 target_link_libraries(VisualizeTrajectory ${OpenCV_LIBS} ${GFLAGS_LIBRARY} ${GLOG_LIBRARY}
         Qt5::Core Qt5::Widgets Qt5::Gui)

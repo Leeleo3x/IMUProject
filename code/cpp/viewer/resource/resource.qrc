@@ -1,0 +1,10 @@
+<!DOCTYPE RCC>
+<RCC version="1.0">
+    <qresource>
+        <file>images/iccv_texture.png</file>
+        <file>shaders/canvas_shader.vert</file>
+        <file>shaders/canvas_shader.frag</file>
+        <file>shaders/point_shader.vert</file>
+        <file>shaders/point_shader.frag</file>
+    </qresource>
+</RCC>

@@ -7,6 +7,8 @@
 
 #include "renderable.h"
 
+#include <memory>
+
 #include <QTimerEvent>
 #include <QOpenGLWidget>
 #include <opencv2/opencv.hpp>
@@ -19,23 +21,28 @@ namespace IMUProject {
         Q_OBJECT
     public:
         explicit MainWidget(const std::string& path, QWidget* parent = 0);
-        ~MainWidget();
+        ~MainWidget(){
+	        FreeResource();
+        }
 
     public slots:
-        void start();
-        void stop();
+        void Start();
+        void Stop();
 
     protected:
-        void initializedGL() Q_DECL_OVERRIDE;
+        void initializeGL() Q_DECL_OVERRIDE;
         void resizeGL(int w, int h) Q_DECL_OVERRIDE;
         void paintGL() Q_DECL_OVERRIDE;
 
         void timerEvent(QTimerEvent* event) Q_DECL_OVERRIDE;
 
     private:
-        void InitalizeShader();
+	    void InitShaders();
         void AllocateRecourse();
         void FreeResource();
+
+	    std::shared_ptr<Canvas> canvas_;
+	    std::shared_ptr<Navigation> navigation_;
     };
 
 }//namespace IMUProject
