@@ -31,7 +31,7 @@ int main(int argc, char** argv) {
 
 #ifndef QT_NO_OPENGL
 	QWidget main_window;
-	main_window.resize(1280, 720);
+	main_window.resize(800, 800);
 
 	IMUProject::MainWidget *main_widget = new IMUProject::MainWidget(std::string(argv[1]));
 	QHBoxLayout *layout = new QHBoxLayout();

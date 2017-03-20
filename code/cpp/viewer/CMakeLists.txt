@@ -20,5 +20,5 @@ add_executable(VisualizeTrajectory visualize_trajectory.cpp
         navigation.h navigation.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/resource/resource.qrc)
 
-target_link_libraries(VisualizeTrajectory ${OpenCV_LIBS} ${GFLAGS_LIBRARY} ${GLOG_LIBRARY}
+target_link_libraries(VisualizeTrajectory IMUUtility ${OpenCV_LIBS} ${GFLAGS_LIBRARY} ${GLOG_LIBRARY}
         Qt5::Core Qt5::Widgets Qt5::Gui)

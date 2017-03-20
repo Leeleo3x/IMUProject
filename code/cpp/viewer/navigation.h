@@ -24,6 +24,13 @@ namespace IMUProject {
 		void UpdateCamera(const Eigen::Vector3d& pos,
 		                  const Eigen::Quaterniond& orientation);
 
+		inline void SetModelView(QMatrix4x4 modelview){
+			modelview_ = modelview;
+		}
+
+		inline void SetProjection(QMatrix4x4 projection){
+			projection_ = projection;
+		}
 
 	private:
 		QMatrix4x4 projection_;
