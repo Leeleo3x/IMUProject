@@ -11,14 +11,16 @@
 
 #include <QTimerEvent>
 #include <QBasicTimer>
+#include <QKeyEvent>
 #include <QOpenGLWidget>
+
 #include <opencv2/opencv.hpp>
 
 #include <utility/data_io.h>
 
 namespace IMUProject {
 
-    class MainWidget: public QOpenGLWidget, protected QOpenGLFunctions{
+	class MainWidget: public QOpenGLWidget, protected QOpenGLFunctions{
         Q_OBJECT
     public:
         explicit MainWidget(const std::string& path,
@@ -37,6 +39,7 @@ namespace IMUProject {
         void initializeGL() Q_DECL_OVERRIDE;
         void resizeGL(int w, int h) Q_DECL_OVERRIDE;
         void paintGL() Q_DECL_OVERRIDE;
+	    void keyPressEvent(QKeyEvent *e) Q_DECL_OVERRIDE;
 
         void timerEvent(QTimerEvent* event) Q_DECL_OVERRIDE;
 
@@ -49,8 +52,10 @@ namespace IMUProject {
 
 	    std::shared_ptr<Canvas> canvas_;
         std::shared_ptr<OfflineTrajectory> gt_trajectory_;
+	    std::shared_ptr<ViewFrustum> view_frustum_;
 
         int render_count_;
+		CameraMode camera_mode_;
 
         QBasicTimer render_timer_;
 

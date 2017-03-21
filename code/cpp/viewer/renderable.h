@@ -17,6 +17,7 @@
 #include <QOpenGLShaderProgram>
 #include <QOpenGLContext>
 #include <QMatrix4x4>
+#include <QMatrix3x3>
 #include <QQuaternion>
 #include <QImage>
 #include <Eigen/Eigen>
@@ -39,7 +40,7 @@ namespace IMUProject{
     public:
         Canvas(const float width, const float height,
                const float grid_size = 1.0f,
-               const Eigen::Vector3f grid_color=Eigen::Vector3f(0.7, 0.7, 0.7),
+               const Eigen::Vector3f grid_color=Eigen::Vector3f(0.0, 0.0, 0.0),
                const cv::Mat* texture = nullptr);
 	    ~Canvas();
         virtual void Render(const Navigation& navigation);
@@ -75,14 +76,30 @@ namespace IMUProject{
 
     class ViewFrustum: public Renderable{
     public:
-        ViewFrustum(const double length=1.0, const bool with_axes=false);
+        ViewFrustum(const float length=1.0, const bool with_axes=true, const float default_height = 1.7);
         virtual void Render(const Navigation& navigation);
+	    inline void UpdateCameraPose(const Eigen::Vector3d& position,
+	                                 const Eigen::Quaterniond& orientation){
+		    position_ = QVector3D((float)position[0], (float)position[2] + default_height_,
+		                          -1.0f * (float)position[1]);
+		    orientation_ = QQuaternion((float)orientation.w(), (float)orientation.x(),
+		                               (float)orientation.y(), (float)orientation.z());
+	    }
 	    virtual void InitGL();
     private:
+	    QVector3D position_;
+	    QQuaternion orientation_;
+	    QQuaternion local_to_global_;
         std::vector<GLfloat> vertex_data_;
         std::vector<GLuint> index_data_;
+	    std::vector<GLfloat> color_data_;
         GLuint vertex_buffer_;
         GLuint index_buffer_;
+	    GLuint color_buffer_;
+
+	    const float default_height_;
+
+	    std::shared_ptr<QOpenGLShaderProgram> line_shader_;
 
     };
 

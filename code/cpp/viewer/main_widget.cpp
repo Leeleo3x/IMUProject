@@ -12,8 +12,9 @@ namespace IMUProject{
                            const int canvas_width,
                            const int canvas_height,
                            QWidget *parent): render_count_(0){
-		navigation_.reset(new Navigation());
+		setFocusPolicy(Qt::StrongFocus);
         canvas_.reset(new Canvas(canvas_width, canvas_height));
+		navigation_.reset(new Navigation(50.f, (float)width(), (float)height()));
 
         IMUDataset dataset(path);
         for(auto i=0; i<dataset.GetPosition().size(); i+=3){
@@ -25,11 +26,8 @@ namespace IMUProject{
         gt_trajectory_.reset(new OfflineTrajectory(gt_pos_, Eigen::Vector3f(1.0, 0.0, 0.0)));
         gt_trajectory_->SetRenderLength(0);
 
-        // Set a toy camera for debugging
-        QMatrix4x4 projection;
-        projection.setToIdentity();
-        projection.perspective(60.0f, 1.0f, 0.001f, 500.0f);
-        navigation_->SetProjection(projection);
+		view_frustum_.reset(new ViewFrustum(1.0));
+		camera_mode_ = BACK;
 	}
 
 	void MainWidget::initializeGL() {
@@ -37,10 +35,10 @@ namespace IMUProject{
 
 		canvas_->InitGL();
         gt_trajectory_->InitGL();
+		view_frustum_->InitGL();
 
 		glClearColor(1.f, 1.f, 1.f, 1.f);
 		glEnable(GL_DEPTH);
-		//glClearDepth(0.0);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 		AllocateRecourse();
@@ -57,24 +55,53 @@ namespace IMUProject{
 	void MainWidget::paintGL() {
 		canvas_->Render(*navigation_);
         gt_trajectory_->Render(*navigation_);
+		view_frustum_->Render(*navigation_);
         glFlush();
 	}
 
 	void MainWidget::timerEvent(QTimerEvent *event) {
-        render_count_++;
-        if(render_count_ == (int)gt_pos_.size()){
-            return;
+        if(render_count_ >= (int)gt_pos_.size()){
+	        render_count_ = 0;
         }
+		render_count_++;
         gt_trajectory_->SetRenderLength(render_count_);
-//        QMatrix4x4 modelview;
-//        modelview.setToIdentity();
-//        modelview.lookAt(QVector3D(0, 5.0f, 0.5f * canvas_->GetHeight()),
-//                         QVector3D((float)gt_pos_[render_count_][0], (float)gt_pos_[render_count_][2], -1*(float)gt_pos_[render_count_][1]),
-//                         QVector3D(0.0f, 1.0f, 0.0f));
-//        navigation_->SetModelView(modelview);
 
-        navigation_->UpdateCamera(gt_pos_[render_count_], gt_orientation_[render_count_]);
+		view_frustum_->UpdateCameraPose(gt_pos_[render_count_], gt_orientation_[render_count_]);
+
+		if(camera_mode_ == BACK){
+			navigation_->UpdateCameraBack(gt_pos_[render_count_], gt_orientation_[render_count_]);
+		}else if(camera_mode_ == CENTER){
+			navigation_->UpdateCameraCenter(gt_pos_[render_count_],
+			                                Eigen::Vector3d(0.0, 5.0f, -0.5 * (double)canvas_->GetHeight()));
+		}
+
         update();
+	}
+
+	void MainWidget::keyPressEvent(QKeyEvent *e) {
+		switch(e->key()){
+			case(Qt::Key_C):{
+				if(camera_mode_ == BACK){
+					camera_mode_ = CENTER;
+				}else{
+					camera_mode_ = BACK;
+				}
+				break;
+			}
+
+			case(Qt::Key_S):{
+				Start();
+				break;
+			}
+
+			case(Qt::Key_P):{
+				Stop();
+				break;
+			}
+
+			default:
+				break;
+		}
 	}
 
 	void MainWidget::Start() {
@@ -108,7 +135,7 @@ namespace IMUProject{
         const double larger_dim = std::max((double)canvas_width/2.0, (double)canvas_height/2.0);
         for(auto& pos: position){
             pos = (pos - centroid) / max_distance * larger_dim * 0.7;
-            pos[1] -= (double)canvas_height / 2.0;
+            pos[1] += (double)canvas_height / 2.0;
         }
     }
 }//namespace IMUProject

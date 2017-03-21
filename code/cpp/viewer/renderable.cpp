@@ -14,43 +14,54 @@ namespace IMUProject{
                    const float grid_size, const Eigen::Vector3f grid_color, const cv::Mat *texture)
 			:width_(width), height_(height), line_alpha_(0.5f){
 	    is_shader_init_ = false;
-	    vertex_data_ = {width/2.0f, 0.0f, height,
-	                    -width/2.0f, 0.0f, height,
-	                    -width/2.0f, 0.0f, 0.0f,
-	                    width/2.0f, 0.0f, 0.0f};
+	    vertex_data_ = {-width/2.0f, 0.0f, -height,
+	                    width/2.0f, 0.0f, -height,
+	                    width/2.0f, 0.0f, 0,
+	                    -width/2.0f, 0.0f, 0};
 	    index_data_ = {0, 1, 2, 2, 3, 0};
 	    texcoord_data_ = {0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0};
 
         // Add grid lines
         GLuint p_counter = 0;
-//        for(float x=-width/2.0f + grid_size; x <= width/2.0f - grid_size; x += grid_size){
-//            grid_vertex_data_.push_back(x);
-//            grid_vertex_data_.push_back(0.0f);
-//            grid_vertex_data_.push_back(height_);
-//            grid_vertex_data_.push_back(x);
-//            grid_vertex_data_.push_back(0.0f);
-//            grid_vertex_data_.push_back(0);
-//            grid_color_data_.push_back(grid_color[0]);
-//            grid_color_data_.push_back(grid_color[1]);
-//            grid_color_data_.push_back(grid_color[2]);
-//            grid_color_data_.push_back(line_alpha_);
-//            grid_index_data_.push_back(p_counter);
-//            grid_index_data_.push_back(p_counter+1);
-//            p_counter += (GLuint)2;
-//        }
-        for(float y=height - grid_size; y >= grid_size; y -= grid_size){
-            grid_vertex_data_.push_back(-width/2.0f);
+        for(float x=-width/2.0f + grid_size; x <= width/2.0f - grid_size; x += grid_size){
+            grid_vertex_data_.push_back(x);
             grid_vertex_data_.push_back(0.0f);
-            grid_vertex_data_.push_back(-y);
-            grid_vertex_data_.push_back(width/2.0f);
+            grid_vertex_data_.push_back(-height_);
+            grid_vertex_data_.push_back(x);
             grid_vertex_data_.push_back(0.0f);
-            grid_vertex_data_.push_back(-y);
+            grid_vertex_data_.push_back(0);
 
-            printf("(%.6f,%.6f,%.6f), (%.6f,%.6f,%.6f)\n", -width/2.0f, 0.0f, y, width/2.0f, 0.0f, y);
             grid_color_data_.push_back(grid_color[0]);
             grid_color_data_.push_back(grid_color[1]);
             grid_color_data_.push_back(grid_color[2]);
             grid_color_data_.push_back(line_alpha_);
+	        grid_color_data_.push_back(grid_color[0]);
+	        grid_color_data_.push_back(grid_color[1]);
+	        grid_color_data_.push_back(grid_color[2]);
+	        grid_color_data_.push_back(line_alpha_);
+
+
+	        grid_index_data_.push_back(p_counter);
+            grid_index_data_.push_back(p_counter+1);
+            p_counter += (GLuint)2;
+        }
+        for(float y=-height + grid_size; y < 0; y += grid_size){
+            grid_vertex_data_.push_back(width/2.0f);
+            grid_vertex_data_.push_back(0.0f);
+            grid_vertex_data_.push_back(y);
+            grid_vertex_data_.push_back(-width/2.0f);
+            grid_vertex_data_.push_back(0.0f);
+            grid_vertex_data_.push_back(y);
+
+	        //printf("(%.6f,%.6f,%.6f), (%.6f,%.6f,%.6f)\n", -width/2.0f, 0.0f, y, width/2.0f, 0.0f, y);
+            grid_color_data_.push_back(grid_color[0]);
+            grid_color_data_.push_back(grid_color[1]);
+            grid_color_data_.push_back(grid_color[2]);
+            grid_color_data_.push_back(line_alpha_);
+	        grid_color_data_.push_back(grid_color[0]);
+	        grid_color_data_.push_back(grid_color[1]);
+	        grid_color_data_.push_back(grid_color[2]);
+	        grid_color_data_.push_back(line_alpha_);
 
             grid_index_data_.push_back(p_counter);
             grid_index_data_.push_back(p_counter+1);
@@ -168,7 +179,7 @@ namespace IMUProject{
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
         CHECK(line_shader_->bind());
-        glLineWidth(1.5f);
+        glLineWidth(1.0f);
         line_shader_->setUniformValue("m_mat", navigation.GetModelViewMatrix());
         line_shader_->setUniformValue("p_mat", navigation.GetProjectionMatrix());
         glBindBuffer(GL_ARRAY_BUFFER, grid_vertex_buffer_);
@@ -183,15 +194,97 @@ namespace IMUProject{
 
 	///////////////////////////////////
 	// Implementation of ViewFrustum
-	ViewFrustum::ViewFrustum(const double length, const bool with_axes) {
+	ViewFrustum::ViewFrustum(const float length, const bool with_axes, const float default_height)
+			:default_height_(default_height){
+		vertex_data_ = {0.0f, 0.0f, 0.0f,
+		                -length/2.0f, length/2.0f, -length * 0.8f,
+		                length/2.0f, length/2.0f, -length * 0.8f,
+		                length/2.0f, -length/2.0f, -length * 0.8f,
+		                -length/2.0f, -length/2.0f, -length * 0.8f};
+		index_data_ = {0, 1, 0, 2, 0, 3, 0, 4,
+		               1, 2, 2, 3, 3, 4, 4, 1};
+		color_data_ = {0.0f, 0.0f, 0.0f, 1.0f,
+		               0.0f, 0.0f, 0.0f, 1.0f,
+		               0.0f, 0.0f, 0.0f, 1.0f,
+		               0.0f, 0.0f, 0.0f, 1.0f,
+		               0.0f, 0.0f, 0.0f, 1.0f};
+
+		if(with_axes){
+			vertex_data_.insert(vertex_data_.end(), {0.0f, 0.0f, 0.0f,
+			                                         length, 0.0f, 0.0f,
+			                                         0.0f, 0.0f, 0.0f,
+			                                         0.0f, length, 0.0f,
+			                                         0.0f, 0.0f, 0.0f,
+			                                         0.0f, 0.0f, length});
+			index_data_.insert(index_data_.end(), {5,6,7,8,9,10});
+			color_data_.insert(color_data_.end(), {1.0f, 0.0f, 0.0f, 1.0f,
+			                                       1.0f, 0.0f, 0.0f, 1.0f,
+			                                       0.0f, 1.0f, 0.0f, 1.0f,
+			                                       0.0f, 1.0f, 0.0f, 1.0f,
+			                                       0.0f, 0.0f, 1.0f, 1.0f,
+			                                       0.0f, 0.0f, 1.0f, 1.0f});
+		}
+
+		float mat3[9] = {1.0, 0.0, 0.0,
+		                 0.0, 0.0, 1.0,
+		                 0.0, -1.0f, 0.0};
+		QMatrix3x3 l_to_g(mat3);
+		local_to_global_ = QQuaternion::fromRotationMatrix(l_to_g);
 
 	}
 
 	void ViewFrustum::InitGL(){
+		initializeOpenGLFunctions();
 
+		line_shader_.reset(new QOpenGLShaderProgram());
+		CHECK(line_shader_->addShaderFromSourceFile(QOpenGLShader::Vertex, ":/shaders/line_shader.vert"));
+		CHECK(line_shader_->addShaderFromSourceFile(QOpenGLShader::Fragment, ":/shaders/line_shader.frag"));
+		CHECK(line_shader_->link()) << "ViewFrustum: can not link line shader";
+		CHECK(line_shader_->bind());
+		line_shader_->enableAttributeArray("pos");
+		line_shader_->enableAttributeArray("v_color");
+		line_shader_->release();
+
+		is_shader_init_ = true;
+
+		glGenBuffers(1, &vertex_buffer_);
+		glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer_);
+		glBufferData(GL_ARRAY_BUFFER, vertex_data_.size() * sizeof(GLfloat),
+		             vertex_data_.data(), GL_STATIC_DRAW);
+
+		glGenBuffers(1, &color_buffer_);
+		glBindBuffer(GL_ARRAY_BUFFER, color_buffer_);
+		glBufferData(GL_ARRAY_BUFFER, color_data_.size() * sizeof(GLfloat),
+		             color_data_.data(), GL_STATIC_DRAW);
+
+		glGenBuffers(1, &index_buffer_);
+		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, index_buffer_);
+		glBufferData(GL_ELEMENT_ARRAY_BUFFER, index_data_.size() * sizeof(GLuint),
+		             index_data_.data(), GL_STATIC_DRAW);
 	}
-    void ViewFrustum::Render(const Navigation& navigation) {
 
+    void ViewFrustum::Render(const Navigation& navigation) {
+	    CHECK(line_shader_->bind());
+
+	    QMatrix4x4 modelview;
+	    modelview.setToIdentity();
+	    modelview.translate(position_);
+	    modelview.rotate(local_to_global_);
+	    modelview.rotate(orientation_);
+	    modelview = navigation.GetModelViewMatrix() * modelview;
+
+	    line_shader_->setUniformValue("m_mat", modelview);
+	    line_shader_->setUniformValue("p_mat", navigation.GetProjectionMatrix());
+
+	    glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer_);
+	    line_shader_->setAttributeArray("pos", GL_FLOAT, 0, 3);
+	    glBindBuffer(GL_ARRAY_BUFFER, color_buffer_);
+	    line_shader_->setAttributeArray("v_color", GL_FLOAT, 0, 4);
+
+	    glLineWidth(2.0f);
+	    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, index_buffer_);
+	    glDrawElements(GL_LINES, (GLsizei)index_data_.size(), GL_UNSIGNED_INT, 0);
+	    line_shader_->release();
     }
 
 
