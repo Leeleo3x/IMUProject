@@ -26,7 +26,9 @@ namespace IMUProject{
         gt_trajectory_.reset(new OfflineTrajectory(gt_pos_, Eigen::Vector3f(1.0, 0.0, 0.0)));
         gt_trajectory_->SetRenderLength(0);
 
-		view_frustum_.reset(new ViewFrustum(1.0));
+        view_frustum_.reset(new ViewFrustum(1.0));
+
+        speed_panel_.reset(new OfflineSpeedPanel(gt_pos_, gt_orientation_, gt_orientation_[0]));
 		camera_mode_ = BACK;
 	}
 
@@ -37,9 +39,10 @@ namespace IMUProject{
         gt_trajectory_->InitGL();
 		view_frustum_->InitGL();
 
+        speed_panel_->InitGL();
+
 		glClearColor(1.f, 1.f, 1.f, 1.f);
-		glEnable(GL_DEPTH);
-		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+		glClear(GL_COLOR_BUFFER_BIT);
 
 		AllocateRecourse();
 
@@ -56,6 +59,11 @@ namespace IMUProject{
 		canvas_->Render(*navigation_);
         gt_trajectory_->Render(*navigation_);
 		view_frustum_->Render(*navigation_);
+
+        // Render the speed panel
+        glViewport(0, 0, 200, 200);
+        speed_panel_->Render(*navigation_);
+        glViewport(0, 0, width(), height());
         glFlush();
 	}
 
@@ -72,7 +80,7 @@ namespace IMUProject{
 			navigation_->UpdateCameraBack(gt_pos_[render_count_], gt_orientation_[render_count_]);
 		}else if(camera_mode_ == CENTER){
 			navigation_->UpdateCameraCenter(gt_pos_[render_count_],
-			                                Eigen::Vector3d(0.0, 5.0f, -0.5 * (double)canvas_->GetHeight()));
+			                                Eigen::Vector3d(0.0, 5.0f, 0.0f));
 		}
 
         update();
@@ -135,7 +143,6 @@ namespace IMUProject{
         const double larger_dim = std::max((double)canvas_width/2.0, (double)canvas_height/2.0);
         for(auto& pos: position){
             pos = (pos - centroid) / max_distance * larger_dim * 0.7;
-            pos[1] += (double)canvas_height / 2.0;
         }
     }
 }//namespace IMUProject

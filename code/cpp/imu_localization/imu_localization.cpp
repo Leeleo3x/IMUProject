@@ -95,8 +95,9 @@ namespace IMUProject{
             const double ls_z = static_cast<double>(regressors_[2]->predict(feature));
 
             constraint_ind_.push_back(i);
-            local_speed_.emplace_back(0, 0, -1.0);
-	        // local_speed_.emplace_back(ls_x, 0, ls_z);
+            //local_speed_.emplace_back(0, 0, -1.0);
+
+			local_speed_.emplace_back(ls_x, 0, ls_z);
         }
         last_constraint_ind_ = constraint_ind_.back();
 

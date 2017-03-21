@@ -17,6 +17,7 @@
 
 #ifndef QT_NO_OPENGL
 #include <QWidget>
+#include <QSurfaceFormat>
 #endif
 
 #include <utility/data_io.h>

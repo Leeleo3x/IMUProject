@@ -124,6 +124,49 @@ namespace IMUProject{
         std::shared_ptr<QOpenGLShaderProgram> line_shader_;
     };
 
+    class OfflineSpeedPanel: public Renderable{
+    public:
+        OfflineSpeedPanel(const std::vector<Eigen::Vector3d>& positions,
+                          const std::vector<Eigen::Quaterniond>& orientation,
+                          const Eigen::Quaterniond& init_dir, const float radius = 1.0f,
+                          const Eigen::Vector3f fcolor=Eigen::Vector3f(1.0f, 0.0f, 0.0f),
+                          const Eigen::Vector3f dcolor=Eigen::Vector3f(0.0f, 0.0f, 1.0f));
+
+        virtual void InitGL();
+        virtual void Render(const Navigation& navigation);
+
+        inline void UpdateDirection(const Eigen::Vector3d& forward_dir,
+                                 const Eigen::Vector3d& device_dir){
+            Eigen::Vector3d forward_vec = initial_dir_conj_ * forward_dir;
+            Eigen::Vector3d device_vec = initial_dir_conj_ * device_dir;
+            pointer_vertex_data_[0] = static_cast<float>(forward_vec[0] / max_speed_ * radius_);
+            pointer_vertex_data_[1] = static_cast<float>(forward_vec[1] / max_speed_ * radius_);
+            pointer_vertex_data_[3] = static_cast<float>(device_vec[0] / max_speed_ * radius_);
+            pointer_vertex_data_[4] = static_cast<float>(device_vec[1] / max_speed_ * radius_);
+        }
+    private:
+        const float radius_;
+        const Eigen::Vector3f fcolor_;
+        const Eigen::Vector3f dcolor_;
+
+        std::vector<GLfloat> panel_vertex_data_;
+        std::vector<GLfloat> panel_color_data_;
+        std::vector<GLuint> panel_index_data_;
+
+        GLuint panel_vertex_buffer_;
+        GLuint panel_color_buffer_;
+        GLuint panel_index_buffer_;
+
+        std::vector<GLfloat> pointer_vertex_data_;
+        std::vector<GLfloat> pointer_color_data_;
+
+        Eigen::Quaterniond initial_dir_conj_;
+
+        static constexpr double max_speed_ = 3.0;
+
+        std::shared_ptr<QOpenGLShaderProgram> line_shader_;
+    };
+
 
 } //namespace IMUProject
 

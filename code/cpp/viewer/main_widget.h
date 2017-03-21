@@ -53,6 +53,7 @@ namespace IMUProject {
 	    std::shared_ptr<Canvas> canvas_;
         std::shared_ptr<OfflineTrajectory> gt_trajectory_;
 	    std::shared_ptr<ViewFrustum> view_frustum_;
+        std::shared_ptr<OfflineSpeedPanel> speed_panel_;
 
         int render_count_;
 		CameraMode camera_mode_;
