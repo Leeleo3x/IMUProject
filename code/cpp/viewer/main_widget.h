@@ -47,6 +47,7 @@ namespace IMUProject {
         void AllocateRecourse();
         void FreeResource();
 
+		std::vector<double> ts_;
         std::vector<Eigen::Vector3d> gt_pos_;
         std::vector<Eigen::Quaterniond> gt_orientation_;
 
@@ -57,8 +58,10 @@ namespace IMUProject {
 
         int render_count_;
 		CameraMode camera_mode_;
-
         QBasicTimer render_timer_;
+
+		const int panel_border_margin_;
+		const int panel_size_;
 
 	    std::shared_ptr<Navigation> navigation_;
     };

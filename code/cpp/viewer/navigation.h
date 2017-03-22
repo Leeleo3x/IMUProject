@@ -12,7 +12,8 @@ namespace IMUProject {
 
 	enum CameraMode{
 		CENTER,
-		BACK
+		BACK,
+		TOP
 	};
 
 	class Navigation {

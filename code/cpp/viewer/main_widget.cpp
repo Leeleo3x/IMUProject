@@ -11,7 +11,8 @@ namespace IMUProject{
 	MainWidget::MainWidget(const std::string &path,
                            const int canvas_width,
                            const int canvas_height,
-                           QWidget *parent): render_count_(0){
+                           QWidget *parent): render_count_(0),
+	                                         panel_border_margin_(10), panel_size_(200){
 		setFocusPolicy(Qt::StrongFocus);
         canvas_.reset(new Canvas(canvas_width, canvas_height));
 		navigation_.reset(new Navigation(50.f, (float)width(), (float)height()));
@@ -20,6 +21,7 @@ namespace IMUProject{
         for(auto i=0; i<dataset.GetPosition().size(); i+=3){
             gt_pos_.push_back(dataset.GetPosition()[i]);
             gt_orientation_.push_back(dataset.GetOrientation()[i]);
+	        ts_.push_back(dataset.GetTimeStamp()[i]);
         }
         AdjustPositionToCanvas(gt_pos_, canvas_width, canvas_height);
 
@@ -38,7 +40,6 @@ namespace IMUProject{
 		canvas_->InitGL();
         gt_trajectory_->InitGL();
 		view_frustum_->InitGL();
-
         speed_panel_->InitGL();
 
 		glClearColor(1.f, 1.f, 1.f, 1.f);
@@ -61,7 +62,7 @@ namespace IMUProject{
 		view_frustum_->Render(*navigation_);
 
         // Render the speed panel
-        glViewport(0, 0, 200, 200);
+        glViewport(panel_border_margin_, panel_border_margin_, panel_size_, panel_size_);
         speed_panel_->Render(*navigation_);
         glViewport(0, 0, width(), height());
         glFlush();
@@ -74,7 +75,15 @@ namespace IMUProject{
 		render_count_++;
         gt_trajectory_->SetRenderLength(render_count_);
 
+		// update camera pose and heading
 		view_frustum_->UpdateCameraPose(gt_pos_[render_count_], gt_orientation_[render_count_]);
+		if(render_count_ > 0){
+			Eigen::Vector3d forward_dir = (gt_pos_[render_count_] - gt_pos_[render_count_ - 1])
+			                     / (ts_[render_count_] - ts_[render_count_-1]);
+			Eigen::Vector3d device_dir = gt_orientation_[render_count_] * Eigen::Vector3d(0, 0, -1);
+			device_dir *= forward_dir.norm() * 0.8;
+			speed_panel_->UpdateDirection(forward_dir, device_dir);
+		}
 
 		if(camera_mode_ == BACK){
 			navigation_->UpdateCameraBack(gt_pos_[render_count_], gt_orientation_[render_count_]);

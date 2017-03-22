@@ -366,39 +366,41 @@ namespace IMUProject{
                                          const std::vector<Eigen::Quaterniond>& orientation,
                                          const Eigen::Quaterniond& init_dir,
                                          const float radius, const Eigen::Vector3f fcolor, const Eigen::Vector3f dcolor)
-            :radius_(radius), fcolor_(fcolor), dcolor_(dcolor){
+            :radius_(radius), fcolor_(fcolor), dcolor_(dcolor), panel_alpha_(0.4f){
         CHECK_EQ(positions.size(), orientation.size());
-
-        Eigen::Matrix3d local_to_global;
-        local_to_global << 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, -1.0, 0.0;
-        initial_dir_conj_ = init_dir * local_to_global;
-        initial_dir_conj_ = initial_dir_conj_.conjugate();
 
         // first fill the data for drawing the circle
         const float circle_divide = 200;
-        panel_vertex_data_.reserve((int)circle_divide * 3);
-        panel_color_data_.reserve((int)circle_divide * 4);
+        panel_vertex_data_.reserve((int)circle_divide * 3 + 3);
+        panel_color_data_.reserve((int)circle_divide * 4 + 4);
         panel_index_data_.reserve((int)circle_divide + 1);
 
-        GLuint p_counter = 0;
+	    panel_vertex_data_ = {0.0f, 0.0f, 0.0f};
+	    panel_color_data_ = {0.0, 0.0, 0.0, panel_alpha_};
+	    panel_index_data_ = {0};
         for(float i=0; i<circle_divide; i += 1.0f){
             float angle = (float)M_PI * 2.0f / circle_divide * i;
             panel_vertex_data_.push_back(radius_ * std::cos(angle));
             panel_vertex_data_.push_back(radius_ * std::sin(angle));
             panel_vertex_data_.push_back(0.0f);
 
-            panel_color_data_.push_back(1.0f);
             panel_color_data_.push_back(0.0f);
             panel_color_data_.push_back(0.0f);
-            panel_color_data_.push_back(1.0f);
-
-            panel_index_data_.push_back(p_counter);
-            p_counter = p_counter + (GLuint)1;
+            panel_color_data_.push_back(0.0f);
+            panel_color_data_.push_back(panel_alpha_);
+	        panel_index_data_.push_back((GLuint)i + 1);
         }
+	    panel_index_data_.push_back(1);
 
-        pointer_vertex_data_ = {0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f};
+        pointer_vertex_data_ = {0.0f, 0.0f, 0.0f,
+                                0.0f, -radius_, 0.0f,
+                                0.0f, 0.0f, 0.0f,
+                                radius_, 0.0f, 0.0f};
         pointer_color_data_ = {fcolor_[0], fcolor_[1], fcolor_[2], 1.0f,
+                               fcolor_[0], fcolor_[1], fcolor_[2], 1.0f,
+                               dcolor_[0], dcolor_[1], dcolor_[2], 1.0f,
                                dcolor_[0], dcolor_[1], dcolor_[2], 1.0f};
+	    pointer_index_data_ = {0, 1, 2, 3};
     }
 
     void OfflineSpeedPanel::InitGL() {
@@ -430,28 +432,59 @@ namespace IMUProject{
         glBufferData(GL_ELEMENT_ARRAY_BUFFER, panel_index_data_.size() * sizeof(GLuint),
                      panel_index_data_.data(), GL_STATIC_DRAW);
 
+	    pointer_vertex_buffer_ = QOpenGLBuffer(QOpenGLBuffer::VertexBuffer);
+	    pointer_vertex_buffer_.create();
+	    pointer_vertex_buffer_.bind();
+	    pointer_vertex_buffer_.setUsagePattern(QOpenGLBuffer::DynamicDraw);
+	    pointer_vertex_buffer_.allocate(pointer_vertex_data_.data(),
+	                                    (int)pointer_vertex_data_.size() * sizeof(GLfloat));
+	    pointer_vertex_buffer_.release();
+
+
+	    glGenBuffers(1, &pointer_color_buffer_);
+	    glBindBuffer(GL_ARRAY_BUFFER, pointer_color_buffer_);
+	    glBufferData(GL_ARRAY_BUFFER, pointer_color_data_.size() * sizeof(GLfloat),
+	                 pointer_color_data_.data(), GL_STATIC_DRAW);
+
+	    glGenBuffers(1, &pointer_index_buffer_);
+	    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, pointer_index_buffer_);
+	    glBufferData(GL_ELEMENT_ARRAY_BUFFER, pointer_index_data_.size() * sizeof(GLuint),
+	                 pointer_index_data_.data(), GL_STATIC_DRAW);
+
     }
 
     void OfflineSpeedPanel::Render(const Navigation &navigation) {
         //set 2D render mode
-        QMatrix4x4 modelview;
-        modelview.setToIdentity();
-        QMatrix4x4 projection;
-        projection.ortho(QRectF(-radius_, -radius_, 2*radius_, 2*radius_));
+        QMatrix4x4 modelview, projection;
 
+	    glLineWidth(2.0f);
+
+	    glEnable(GL_BLEND);
+	    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC1_ALPHA);
         CHECK(line_shader_->bind());
+	    modelview.setToIdentity();
         line_shader_->setUniformValue("m_mat", modelview);
+	    projection.setToIdentity();
+	    projection.ortho(-radius_, radius_, radius_, -radius_, 0.0f, 1.0f);
         line_shader_->setUniformValue("p_mat", projection);
-
         glBindBuffer(GL_ARRAY_BUFFER, panel_vertex_buffer_);
         line_shader_->setAttributeArray("pos", GL_FLOAT, 0, 3);
         glBindBuffer(GL_ARRAY_BUFFER, panel_color_buffer_);
         line_shader_->setAttributeArray("v_color", GL_FLOAT, 0, 4);
 
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, panel_index_buffer_);
-        glDrawElements(GL_LINE_LOOP, (GLsizei)panel_index_data_.size(), GL_UNSIGNED_INT, 0);
+        glDrawElements(GL_TRIANGLE_FAN, (GLsizei)panel_index_data_.size(), GL_UNSIGNED_INT, 0);
+	    glDisable(GL_BLEND);
 
-        line_shader_->release();
+	    pointer_vertex_buffer_.bind();
+	    line_shader_->setAttributeArray("pos", GL_FLOAT, 0, 3);
+	    glBindBuffer(GL_ARRAY_BUFFER, pointer_color_buffer_);
+	    line_shader_->setAttributeArray("v_color", GL_FLOAT, 0, 4);
+
+	    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, pointer_index_buffer_);
+	    glDrawElements(GL_LINES, (GLsizei)pointer_index_data_.size(), GL_UNSIGNED_INT, 0);
+
+	    line_shader_->release();
     }
 
 }//namespace IMUProject

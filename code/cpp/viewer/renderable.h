@@ -21,6 +21,7 @@
 #include <QQuaternion>
 #include <QImage>
 #include <Eigen/Eigen>
+#include <glog/logging.h>
 
 namespace IMUProject{
 
@@ -137,12 +138,15 @@ namespace IMUProject{
 
         inline void UpdateDirection(const Eigen::Vector3d& forward_dir,
                                  const Eigen::Vector3d& device_dir){
-            Eigen::Vector3d forward_vec = initial_dir_conj_ * forward_dir;
-            Eigen::Vector3d device_vec = initial_dir_conj_ * device_dir;
-            pointer_vertex_data_[0] = static_cast<float>(forward_vec[0] / max_speed_ * radius_);
-            pointer_vertex_data_[1] = static_cast<float>(forward_vec[1] / max_speed_ * radius_);
-            pointer_vertex_data_[3] = static_cast<float>(device_vec[0] / max_speed_ * radius_);
-            pointer_vertex_data_[4] = static_cast<float>(device_vec[1] / max_speed_ * radius_);
+	        CHECK(pointer_vertex_buffer_.bind()) << "Can not bind pointer_vertex_buffer_";
+	        GLfloat* vertex_data = (GLfloat *)pointer_vertex_buffer_.map(QOpenGLBuffer::WriteOnly);
+	        CHECK(vertex_data) << "Can not map pointer_vertex_buffer_";
+            vertex_data[3] = static_cast<float>(forward_dir[0] / max_speed_ * radius_);
+            vertex_data[4] = static_cast<float>(-forward_dir[1] / max_speed_ * radius_);
+            vertex_data[9] = static_cast<float>(device_dir[0] / max_speed_ * radius_);
+            vertex_data[10] = static_cast<float>(-device_dir[1] / max_speed_ * radius_);
+	        pointer_vertex_buffer_.unmap();
+	        pointer_vertex_buffer_.release();
         }
     private:
         const float radius_;
@@ -159,10 +163,15 @@ namespace IMUProject{
 
         std::vector<GLfloat> pointer_vertex_data_;
         std::vector<GLfloat> pointer_color_data_;
+	    std::vector<GLuint> pointer_index_data_;
 
-        Eigen::Quaterniond initial_dir_conj_;
+	    QOpenGLBuffer pointer_vertex_buffer_;
+	    //GLuint pointer_vertex_buffer_;
+	    GLuint pointer_color_buffer_;
+	    GLuint pointer_index_buffer_;
 
-        static constexpr double max_speed_ = 3.0;
+        static constexpr double max_speed_ = 2.5;
+	    const float panel_alpha_;
 
         std::shared_ptr<QOpenGLShaderProgram> line_shader_;
     };
