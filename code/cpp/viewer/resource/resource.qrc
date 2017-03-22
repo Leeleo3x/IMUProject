@@ -2,6 +2,7 @@
 <RCC version="1.0">
     <qresource prefix="/">
         <file>images/iccv_texture.png</file>
+        <file>images/clock_texture.png</file>
         <file>shaders/canvas_shader.vert</file>
         <file>shaders/canvas_shader.frag</file>
         <file>shaders/line_shader.vert</file>

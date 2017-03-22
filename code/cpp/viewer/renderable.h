@@ -153,12 +153,15 @@ namespace IMUProject{
         const Eigen::Vector3f fcolor_;
         const Eigen::Vector3f dcolor_;
 
+	    std::shared_ptr<QOpenGLTexture> panel_texture_;
         std::vector<GLfloat> panel_vertex_data_;
         std::vector<GLfloat> panel_color_data_;
+	    std::vector<GLfloat> panel_texcoord_data_;
         std::vector<GLuint> panel_index_data_;
 
         GLuint panel_vertex_buffer_;
         GLuint panel_color_buffer_;
+	    GLuint panel_texcoord_buffer_;
         GLuint panel_index_buffer_;
 
         std::vector<GLfloat> pointer_vertex_data_;
@@ -173,6 +176,7 @@ namespace IMUProject{
         static constexpr double max_speed_ = 2.5;
 	    const float panel_alpha_;
 
+	    std::shared_ptr<QOpenGLShaderProgram> tex_shader_;
         std::shared_ptr<QOpenGLShaderProgram> line_shader_;
     };
 

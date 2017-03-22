@@ -376,13 +376,19 @@ namespace IMUProject{
         panel_index_data_.reserve((int)circle_divide + 1);
 
 	    panel_vertex_data_ = {0.0f, 0.0f, 0.0f};
+	    panel_texcoord_data_ = {0.5f, 0.5f};
 	    panel_color_data_ = {0.0, 0.0, 0.0, panel_alpha_};
 	    panel_index_data_ = {0};
         for(float i=0; i<circle_divide; i += 1.0f){
             float angle = (float)M_PI * 2.0f / circle_divide * i;
-            panel_vertex_data_.push_back(radius_ * std::cos(angle));
-            panel_vertex_data_.push_back(radius_ * std::sin(angle));
+	        const float x = radius_ * std::cos(angle);
+	        const float y = radius_ * std::sin(angle);
+            panel_vertex_data_.push_back(x);
+            panel_vertex_data_.push_back(y);
             panel_vertex_data_.push_back(0.0f);
+
+	        panel_texcoord_data_.push_back(x / radius_ / 2.0f + 0.5f);
+	        panel_texcoord_data_.push_back(y / radius_ / 2.0f + 0.5f);
 
             panel_color_data_.push_back(0.0f);
             panel_color_data_.push_back(0.0f);
@@ -415,7 +421,22 @@ namespace IMUProject{
         line_shader_->enableAttributeArray("v_color");
         line_shader_->release();
 
+	    tex_shader_.reset(new QOpenGLShaderProgram());
+	    CHECK(tex_shader_->addShaderFromSourceFile(QOpenGLShader::Vertex, ":/shaders/canvas_shader.vert"));
+	    CHECK(tex_shader_->addShaderFromSourceFile(QOpenGLShader::Fragment, ":/shaders/canvas_shader.frag"));
+	    CHECK(tex_shader_->link()) << "Canvas: can not link texture shader";
+	    CHECK(tex_shader_->bind()) << "Canvas: can not bind texture shader";
+
+	    tex_shader_->enableAttributeArray("pos");
+	    tex_shader_->enableAttributeArray("texcoord");
+	    tex_shader_->release();
+
         is_shader_init_ = true;
+
+	    glEnable(GL_TEXTURE_2D);
+	    panel_texture_.reset(new QOpenGLTexture(QImage("../../viewer/resource/images/clock_texture.png")));
+	    glBindTexture(GL_TEXTURE_2D, 0);
+	    glDisable(GL_TEXTURE_2D);
 
         glGenBuffers(1, &panel_vertex_buffer_);
         glBindBuffer(GL_ARRAY_BUFFER, panel_vertex_buffer_);
@@ -426,6 +447,11 @@ namespace IMUProject{
         glBindBuffer(GL_ARRAY_BUFFER, panel_color_buffer_);
         glBufferData(GL_ARRAY_BUFFER, panel_color_data_.size() * sizeof(GLfloat),
                      panel_color_data_.data(), GL_STATIC_DRAW);
+
+	    glGenBuffers(1, &panel_texcoord_buffer_);
+	    glBindBuffer(GL_ARRAY_BUFFER, panel_texcoord_buffer_);
+	    glBufferData(GL_ARRAY_BUFFER, panel_texcoord_data_.size() * sizeof(GLfloat),
+	                 panel_texcoord_data_.data(), GL_STATIC_DRAW);
 
         glGenBuffers(1, &panel_index_buffer_);
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, panel_index_buffer_);
@@ -458,32 +484,41 @@ namespace IMUProject{
         QMatrix4x4 modelview, projection;
 
 	    glLineWidth(2.0f);
-
 	    glEnable(GL_BLEND);
 	    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC1_ALPHA);
-        CHECK(line_shader_->bind());
+	    glEnable(GL_TEXTURE_2D);
+
+	    CHECK(tex_shader_->bind());
 	    modelview.setToIdentity();
-        line_shader_->setUniformValue("m_mat", modelview);
+        tex_shader_->setUniformValue("m_mat", modelview);
 	    projection.setToIdentity();
 	    projection.ortho(-radius_, radius_, radius_, -radius_, 0.0f, 1.0f);
-        line_shader_->setUniformValue("p_mat", projection);
+        tex_shader_->setUniformValue("p_mat", projection);
         glBindBuffer(GL_ARRAY_BUFFER, panel_vertex_buffer_);
-        line_shader_->setAttributeArray("pos", GL_FLOAT, 0, 3);
-        glBindBuffer(GL_ARRAY_BUFFER, panel_color_buffer_);
-        line_shader_->setAttributeArray("v_color", GL_FLOAT, 0, 4);
+        tex_shader_->setAttributeArray("pos", GL_FLOAT, 0, 3);
+        glBindBuffer(GL_ARRAY_BUFFER, panel_texcoord_buffer_);
+        tex_shader_->setAttributeArray("texcoord", GL_FLOAT, 0, 2);
+
+	    panel_texture_->bind();
+	    tex_shader_->setUniformValue("tex_sampler", 0);
 
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, panel_index_buffer_);
         glDrawElements(GL_TRIANGLE_FAN, (GLsizei)panel_index_data_.size(), GL_UNSIGNED_INT, 0);
+	    glDisable(GL_TEXTURE_2D);
 	    glDisable(GL_BLEND);
+	    panel_texture_->release();
+	    tex_shader_->release();
 
+	    CHECK(line_shader_->bind());
 	    pointer_vertex_buffer_.bind();
+	    line_shader_->setUniformValue("m_mat", modelview);
+	    line_shader_->setUniformValue("p_mat", projection);
 	    line_shader_->setAttributeArray("pos", GL_FLOAT, 0, 3);
 	    glBindBuffer(GL_ARRAY_BUFFER, pointer_color_buffer_);
 	    line_shader_->setAttributeArray("v_color", GL_FLOAT, 0, 4);
 
 	    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, pointer_index_buffer_);
 	    glDrawElements(GL_LINES, (GLsizei)pointer_index_data_.size(), GL_UNSIGNED_INT, 0);
-
 	    line_shader_->release();
     }
 
