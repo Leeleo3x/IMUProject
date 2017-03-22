@@ -17,6 +17,7 @@
 DEFINE_string(model_path, "../../../../models/model_0315_full_w200_s20", "Path to model");
 DEFINE_string(mapinfo_path, "default", "path to map info");
 DEFINE_int32(log_interval, 1000, "logging interval");
+DEFINE_string(color, "blue", "color");
 DEFINE_double(weight_vs, 1.0, "weight_vs");
 DEFINE_double(weight_ls, 1.0, "weight_ls");
 DEFINE_string(id, "full", "suffix");
@@ -128,10 +129,19 @@ int main(int argc, char** argv){
     const float fps_all = (float)trajectory.GetNumFrames() / (((float)cv::getTickCount() - start_t) / (float)cv::getTickFrequency());
     printf("Overall framerate: %.3f\n", fps_all);
 
+    Eigen::Vector3d traj_color(0, 0, 255);
+    if(FLAGS_color == "yellow"){
+        traj_color = Eigen::Vector3d(128, 128, 0);
+    }else if(FLAGS_color == "green"){
+        traj_color = Eigen::Vector3d(0, 128, 0);
+    }else if(FLAGS_color == "brown"){
+        traj_color = Eigen::Vector3d(0, 128, 128);
+    }
+
     sprintf(buffer, "%s/result_trajectory_%s.ply", argv[1], FLAGS_id.c_str());
     IMUProject::WriteToPly(std::string(buffer), dataset.GetTimeStamp().data(), trajectory.GetPositions().data(),
                            trajectory.GetOrientations().data(), trajectory.GetNumFrames(),
-                           true, Eigen::Vector3d(0, 0, 255), 0.8, 100, 300);
+                           true, traj_color, 0.8, 100, 300);
 
 	sprintf(buffer, "%s/tango_trajectory.ply", argv[1]);
 	IMUProject::WriteToPly(std::string(buffer), dataset.GetTimeStamp().data(), dataset.GetPosition().data(),

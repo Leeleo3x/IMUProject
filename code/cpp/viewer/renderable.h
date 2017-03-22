@@ -137,17 +137,22 @@ namespace IMUProject{
         virtual void Render(const Navigation& navigation);
 
         inline void UpdateDirection(const Eigen::Vector3d& forward_dir,
-                                 const Eigen::Vector3d& device_dir){
-	        CHECK(pointer_vertex_buffer_.bind()) << "Can not bind pointer_vertex_buffer_";
-	        GLfloat* vertex_data = (GLfloat *)pointer_vertex_buffer_.map(QOpenGLBuffer::WriteOnly);
-	        CHECK(vertex_data) << "Can not map pointer_vertex_buffer_";
-            vertex_data[3] = static_cast<float>(forward_dir[0] / max_speed_ * radius_);
-            vertex_data[4] = static_cast<float>(-forward_dir[1] / max_speed_ * radius_);
-            vertex_data[9] = static_cast<float>(device_dir[0] / max_speed_ * radius_);
-            vertex_data[10] = static_cast<float>(-device_dir[1] / max_speed_ * radius_);
-	        pointer_vertex_buffer_.unmap();
-	        pointer_vertex_buffer_.release();
-        }
+                                 const Eigen::Vector3d& device_dir) {
+			Eigen::Quaternionf device_rot = Eigen::Quaterniond::FromTwoVectors(forward_dir, device_dir).cast<float>();
+			Eigen::Quaternionf panel_rot = Eigen::Quaterniond::FromTwoVectors(forward_dir,
+																			  Eigen::Vector3d(0, 1, 0)).cast<float>();
+
+			panel_modelview_.setToIdentity();
+			//panel_modelview_.scale(1.0f, (float)forward_dir.norm() / max_speed_ * radius_, 1.0f);
+			panel_modelview_.rotate(QQuaternion(panel_rot.w(), panel_rot.x(), panel_rot.y(), panel_rot.z()));
+			panel_modelview_ = panel_view_matrix_ * panel_modelview_;
+
+			device_pointer_modelview_.setToIdentity();
+			//device_pointer_modelview_.scale(1.0f, static_cast<float>(forward_dir.norm() / max_speed_), 1.0f);
+			device_pointer_modelview_.rotate(
+					QQuaternion(device_rot.w(), device_rot.x(), device_rot.y(), device_rot.z()));
+			device_pointer_modelview_ = panel_view_matrix_ * device_pointer_modelview_;
+		}
     private:
         const float radius_;
         const Eigen::Vector3f fcolor_;
@@ -168,12 +173,27 @@ namespace IMUProject{
         std::vector<GLfloat> pointer_color_data_;
 	    std::vector<GLuint> pointer_index_data_;
 
-	    QOpenGLBuffer pointer_vertex_buffer_;
-	    //GLuint pointer_vertex_buffer_;
+		std::vector<GLfloat> device_vertex_data_;
+		std::vector<GLfloat> device_color_data_;
+		std::vector<GLuint> device_index_data_;
+
+		GLuint device_vertex_buffer_;
+		GLuint device_color_buffer_;
+		GLuint device_index_buffer_;
+
+		QMatrix4x4 panel_modelview_;
+        QMatrix4x4 device_pointer_modelview_;
+
+        QMatrix4x4 panel_view_matrix_;
+        QMatrix4x4 panel_projection_matrix_;
+
+	    //QOpenGLBuffer pointer_vertex_buffer_;
+	    GLuint pointer_vertex_buffer_;
 	    GLuint pointer_color_buffer_;
 	    GLuint pointer_index_buffer_;
 
         static constexpr double max_speed_ = 2.5;
+        const float z_pos_;
 	    const float panel_alpha_;
 
 	    std::shared_ptr<QOpenGLShaderProgram> tex_shader_;

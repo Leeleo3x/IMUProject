@@ -28,7 +28,6 @@ namespace IMUProject {
 							const int convas_height = 50,
 							QWidget* parent = 0);
         ~MainWidget(){
-	        FreeResource();
         }
 
     public slots:
@@ -44,9 +43,6 @@ namespace IMUProject {
         void timerEvent(QTimerEvent* event) Q_DECL_OVERRIDE;
 
     private:
-        void AllocateRecourse();
-        void FreeResource();
-
 		std::vector<double> ts_;
         std::vector<Eigen::Vector3d> gt_pos_;
         std::vector<Eigen::Quaterniond> gt_orientation_;
@@ -56,14 +52,17 @@ namespace IMUProject {
 	    std::shared_ptr<ViewFrustum> view_frustum_;
         std::shared_ptr<OfflineSpeedPanel> speed_panel_;
 
+        void UpdateCameraInfo(const int ind);
+
         int render_count_;
 		CameraMode camera_mode_;
         QBasicTimer render_timer_;
 
 		const int panel_border_margin_;
 		const int panel_size_;
-
 	    std::shared_ptr<Navigation> navigation_;
+
+		static constexpr int frame_interval_ = 5;
     };
 
 

@@ -167,9 +167,9 @@ namespace IMUProject{
 	    tex_shader_->setUniformValue("p_mat", navigation.GetProjectionMatrix());
 
 	    glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer_);
-	    tex_shader_->setAttributeArray("pos", GL_FLOAT, 0, 3);
+	    tex_shader_->setAttributeBuffer("pos", GL_FLOAT, 0, 3);
 	    glBindBuffer(GL_ARRAY_BUFFER, texcoord_buffer_);
-	    tex_shader_->setAttributeArray("texcoord", GL_FLOAT, 0, 2);
+	    tex_shader_->setAttributeBuffer("texcoord", GL_FLOAT, 0, 2);
 
 	    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, index_buffer_);
 	    glDrawElements(GL_TRIANGLES, (GLsizei)index_data_.size(), GL_UNSIGNED_INT, 0);
@@ -183,9 +183,9 @@ namespace IMUProject{
         line_shader_->setUniformValue("m_mat", navigation.GetModelViewMatrix());
         line_shader_->setUniformValue("p_mat", navigation.GetProjectionMatrix());
         glBindBuffer(GL_ARRAY_BUFFER, grid_vertex_buffer_);
-        line_shader_->setAttributeArray("pos", GL_FLOAT, 0, 3);
+        line_shader_->setAttributeBuffer("pos", GL_FLOAT, 0, 3);
         glBindBuffer(GL_ARRAY_BUFFER, grid_color_buffer_);
-        line_shader_->setAttributeArray("v_color", GL_FLOAT, 0, 4);
+        line_shader_->setAttributeBuffer("v_color", GL_FLOAT, 0, 4);
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, grid_index_buffer_);
         glDrawElements(GL_LINES, (GLsizei)grid_index_data_.size(), GL_UNSIGNED_INT, 0);
         line_shader_->release();
@@ -277,9 +277,9 @@ namespace IMUProject{
 	    line_shader_->setUniformValue("p_mat", navigation.GetProjectionMatrix());
 
 	    glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer_);
-	    line_shader_->setAttributeArray("pos", GL_FLOAT, 0, 3);
+	    line_shader_->setAttributeBuffer("pos", GL_FLOAT, 0, 3);
 	    glBindBuffer(GL_ARRAY_BUFFER, color_buffer_);
-	    line_shader_->setAttributeArray("v_color", GL_FLOAT, 0, 4);
+	    line_shader_->setAttributeBuffer("v_color", GL_FLOAT, 0, 4);
 
 	    glLineWidth(2.0f);
 	    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, index_buffer_);
@@ -350,10 +350,10 @@ namespace IMUProject{
 
         glLineWidth(2.0f);
         glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer_);
-        line_shader_->setAttributeArray("pos", GL_FLOAT, 0, 3);
+        line_shader_->setAttributeBuffer("pos", GL_FLOAT, 0, 3);
 
         glBindBuffer(GL_ARRAY_BUFFER, color_buffer_);
-        line_shader_->setAttributeArray("v_color", GL_FLOAT, 0, 4);
+        line_shader_->setAttributeBuffer("v_color", GL_FLOAT, 0, 4);
 
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, index_buffer_);
         glDrawElements(GL_LINE_STRIP, (GLsizei)render_length_, GL_UNSIGNED_INT, 0);
@@ -366,7 +366,7 @@ namespace IMUProject{
                                          const std::vector<Eigen::Quaterniond>& orientation,
                                          const Eigen::Quaterniond& init_dir,
                                          const float radius, const Eigen::Vector3f fcolor, const Eigen::Vector3f dcolor)
-            :radius_(radius), fcolor_(fcolor), dcolor_(dcolor), panel_alpha_(0.4f){
+            :radius_(radius), fcolor_(fcolor), dcolor_(dcolor), panel_alpha_(0.4f), z_pos_(-15.0f){
         CHECK_EQ(positions.size(), orientation.size());
 
         // first fill the data for drawing the circle
@@ -375,7 +375,7 @@ namespace IMUProject{
         panel_color_data_.reserve((int)circle_divide * 4 + 4);
         panel_index_data_.reserve((int)circle_divide + 1);
 
-	    panel_vertex_data_ = {0.0f, 0.0f, 0.0f};
+	    panel_vertex_data_ = {0.0f, 0.0f, z_pos_};
 	    panel_texcoord_data_ = {0.5f, 0.5f};
 	    panel_color_data_ = {0.0, 0.0, 0.0, panel_alpha_};
 	    panel_index_data_ = {0};
@@ -385,10 +385,10 @@ namespace IMUProject{
 	        const float y = radius_ * std::sin(angle);
             panel_vertex_data_.push_back(x);
             panel_vertex_data_.push_back(y);
-            panel_vertex_data_.push_back(0.0f);
+            panel_vertex_data_.push_back(z_pos_);
 
 	        panel_texcoord_data_.push_back(x / radius_ / 2.0f + 0.5f);
-	        panel_texcoord_data_.push_back(y / radius_ / 2.0f + 0.5f);
+	        panel_texcoord_data_.push_back(-y / radius_ / 2.0f + 0.5f);
 
             panel_color_data_.push_back(0.0f);
             panel_color_data_.push_back(0.0f);
@@ -398,15 +398,32 @@ namespace IMUProject{
         }
 	    panel_index_data_.push_back(1);
 
-        pointer_vertex_data_ = {0.0f, 0.0f, 0.0f,
-                                0.0f, -radius_, 0.0f,
-                                0.0f, 0.0f, 0.0f,
-                                radius_, 0.0f, 0.0f};
+        pointer_vertex_data_ = {0.0f, 0.0f, z_pos_,
+                                0.0f, radius_, z_pos_};
         pointer_color_data_ = {fcolor_[0], fcolor_[1], fcolor_[2], 1.0f,
                                fcolor_[0], fcolor_[1], fcolor_[2], 1.0f,
                                dcolor_[0], dcolor_[1], dcolor_[2], 1.0f,
-                               dcolor_[0], dcolor_[1], dcolor_[2], 1.0f};
-	    pointer_index_data_ = {0, 1, 2, 3};
+							   dcolor_[0], dcolor_[1], dcolor_[2], 1.0f,
+							   0.8f, 0.5f, 0.0f, 1.0f,
+							   0.8f, 0.5f, 0.0f, 1.0f};
+	    pointer_index_data_ = {0, 1};
+
+		device_vertex_data_ = {0.0f, 0.0f, z_pos_,
+							   -radius_ * 0.2f, radius_*0.3f, z_pos_,
+							   radius_ * 0.2f, radius_*0.3f, z_pos_};
+		device_color_data_ = {0.0f, 0.0f, 0.0f, panel_alpha_,
+							  0.0f, 0.0f, 0.0f, panel_alpha_,
+							  0.0f, 0.0f, 0.0f, panel_alpha_};
+		device_index_data_ = {0, 1, 2};
+
+		// Set default view matrices
+		panel_view_matrix_.setToIdentity();
+		panel_view_matrix_.lookAt(QVector3D(0.0f, -radius_/2.0f, z_pos_ + 1.0f), QVector3D(0.0f, radius_/2.0f, z_pos_), QVector3D(0.0f, 1.0f, 0.0f));
+		//panel_view_matrix_.lookAt(QVector3D(0.0f, 0.0f, 0.0f), QVector3D(0.0f, 0.0f, z_pos_), QVector3D(0.0f, 1.0f, 0.0f));
+
+		constexpr float fov = 100.0f;
+		panel_projection_matrix_.setToIdentity();
+		panel_projection_matrix_.perspective(fov, 1.0f, 0.0f, 20.0f);
     }
 
     void OfflineSpeedPanel::InitGL() {
@@ -434,7 +451,7 @@ namespace IMUProject{
         is_shader_init_ = true;
 
 	    glEnable(GL_TEXTURE_2D);
-	    panel_texture_.reset(new QOpenGLTexture(QImage("../../viewer/resource/images/clock_texture.png")));
+	    panel_texture_.reset(new QOpenGLTexture(QImage("../../viewer/resource/images/compass.png")));
 	    glBindTexture(GL_TEXTURE_2D, 0);
 	    glDisable(GL_TEXTURE_2D);
 
@@ -458,14 +475,10 @@ namespace IMUProject{
         glBufferData(GL_ELEMENT_ARRAY_BUFFER, panel_index_data_.size() * sizeof(GLuint),
                      panel_index_data_.data(), GL_STATIC_DRAW);
 
-	    pointer_vertex_buffer_ = QOpenGLBuffer(QOpenGLBuffer::VertexBuffer);
-	    pointer_vertex_buffer_.create();
-	    pointer_vertex_buffer_.bind();
-	    pointer_vertex_buffer_.setUsagePattern(QOpenGLBuffer::DynamicDraw);
-	    pointer_vertex_buffer_.allocate(pointer_vertex_data_.data(),
-	                                    (int)pointer_vertex_data_.size() * sizeof(GLfloat));
-	    pointer_vertex_buffer_.release();
-
+		glGenBuffers(1, &pointer_vertex_buffer_);
+		glBindBuffer(GL_ARRAY_BUFFER, pointer_vertex_buffer_);
+		glBufferData(GL_ARRAY_BUFFER, pointer_vertex_data_.size() * sizeof(GLfloat),
+					 pointer_vertex_data_.data(), GL_STATIC_DRAW);
 
 	    glGenBuffers(1, &pointer_color_buffer_);
 	    glBindBuffer(GL_ARRAY_BUFFER, pointer_color_buffer_);
@@ -477,27 +490,34 @@ namespace IMUProject{
 	    glBufferData(GL_ELEMENT_ARRAY_BUFFER, pointer_index_data_.size() * sizeof(GLuint),
 	                 pointer_index_data_.data(), GL_STATIC_DRAW);
 
+		glGenBuffers(1, &device_vertex_buffer_);
+		glBindBuffer(GL_ARRAY_BUFFER, device_vertex_buffer_);
+		glBufferData(GL_ARRAY_BUFFER, device_vertex_data_.size() * sizeof(GLfloat),
+					 device_vertex_data_.data(), GL_STATIC_DRAW);
+
+		glGenBuffers(1, &device_color_buffer_);
+		glBindBuffer(GL_ARRAY_BUFFER, device_color_buffer_);
+		glBufferData(GL_ARRAY_BUFFER, device_color_data_.size() * sizeof(GLfloat),
+					 device_color_data_.data(), GL_STATIC_DRAW);
+
+		glGenBuffers(1, &device_index_buffer_);
+		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, device_index_buffer_);
+		glBufferData(GL_ELEMENT_ARRAY_BUFFER, device_index_data_.size() * sizeof(GLuint),
+					 device_index_data_.data(), GL_STATIC_DRAW);
+
     }
 
     void OfflineSpeedPanel::Render(const Navigation &navigation) {
-        //set 2D render mode
-        QMatrix4x4 modelview, projection;
-
-	    glLineWidth(2.0f);
 	    glEnable(GL_BLEND);
-	    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC1_ALPHA);
+	    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 	    glEnable(GL_TEXTURE_2D);
-
 	    CHECK(tex_shader_->bind());
-	    modelview.setToIdentity();
-        tex_shader_->setUniformValue("m_mat", modelview);
-	    projection.setToIdentity();
-	    projection.ortho(-radius_, radius_, radius_, -radius_, 0.0f, 1.0f);
-        tex_shader_->setUniformValue("p_mat", projection);
+        tex_shader_->setUniformValue("m_mat", panel_modelview_);
+        tex_shader_->setUniformValue("p_mat", panel_projection_matrix_);
         glBindBuffer(GL_ARRAY_BUFFER, panel_vertex_buffer_);
-        tex_shader_->setAttributeArray("pos", GL_FLOAT, 0, 3);
+        tex_shader_->setAttributeBuffer("pos", GL_FLOAT, 0, 3);
         glBindBuffer(GL_ARRAY_BUFFER, panel_texcoord_buffer_);
-        tex_shader_->setAttributeArray("texcoord", GL_FLOAT, 0, 2);
+        tex_shader_->setAttributeBuffer("texcoord", GL_FLOAT, 0, 2);
 
 	    panel_texture_->bind();
 	    tex_shader_->setUniformValue("tex_sampler", 0);
@@ -510,16 +530,35 @@ namespace IMUProject{
 	    tex_shader_->release();
 
 	    CHECK(line_shader_->bind());
-	    pointer_vertex_buffer_.bind();
-	    line_shader_->setUniformValue("m_mat", modelview);
-	    line_shader_->setUniformValue("p_mat", projection);
-	    line_shader_->setAttributeArray("pos", GL_FLOAT, 0, 3);
-	    glBindBuffer(GL_ARRAY_BUFFER, pointer_color_buffer_);
-	    line_shader_->setAttributeArray("v_color", GL_FLOAT, 0, 4);
+		line_shader_->setUniformValue("m_mat", panel_modelview_);
+		line_shader_->setUniformValue("p_mat", panel_projection_matrix_);
+		glBindBuffer(GL_ARRAY_BUFFER, pointer_vertex_buffer_);
+		line_shader_->setAttributeBuffer("pos", GL_FLOAT, 0, 3);
+		glBindBuffer(GL_ARRAY_BUFFER, pointer_color_buffer_);
+		line_shader_->setAttributeBuffer("v_color", GL_FLOAT, 16 * sizeof(GLfloat), 4);
+		glLineWidth(3.0f);
+		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, pointer_index_buffer_);
+		glDrawElements(GL_LINES, (GLsizei)pointer_index_data_.size(), GL_UNSIGNED_INT, 0);
 
-	    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, pointer_index_buffer_);
+		glLineWidth(5.0f);
+		line_shader_->setUniformValue("m_mat", panel_view_matrix_);
+	    glBindBuffer(GL_ARRAY_BUFFER, pointer_color_buffer_);
+	    line_shader_->setAttributeBuffer("v_color", GL_FLOAT, 0, 4);
 	    glDrawElements(GL_LINES, (GLsizei)pointer_index_data_.size(), GL_UNSIGNED_INT, 0);
-	    line_shader_->release();
+
+		line_shader_->setUniformValue("m_mat", device_pointer_modelview_);
+	    glBindBuffer(GL_ARRAY_BUFFER, pointer_color_buffer_);
+	    line_shader_->setAttributeBuffer("v_color", GL_FLOAT, 8 * sizeof(GLfloat), 4);
+	    glDrawElements(GL_LINES, (GLsizei)pointer_index_data_.size(), GL_UNSIGNED_INT, 0);
+
+		glBindBuffer(GL_ARRAY_BUFFER, device_vertex_buffer_);
+		line_shader_->setAttributeBuffer("pos", GL_FLOAT, 0, 3);
+		glBindBuffer(GL_ARRAY_BUFFER, device_color_buffer_);
+		line_shader_->setAttributeBuffer("v_color", GL_FLOAT, 0, 4);
+		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, device_index_buffer_);
+		glDrawElements(GL_TRIANGLES, (GLsizei)device_index_data_.size(), GL_UNSIGNED_INT, 0);
+		line_shader_->release();
+
     }
 
 }//namespace IMUProject
