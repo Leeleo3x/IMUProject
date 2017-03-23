@@ -89,7 +89,7 @@ namespace IMUProject{
 			ori = imu_to_tango * ori;
 		}
 
-		sprintf(buffer, "%s/result_gt_ori.csv", path.c_str());
+		sprintf(buffer, "%s/result_full.csv", path.c_str());
 		string line;
 		ifstream full_in(buffer);
 		if(full_in.is_open()){
