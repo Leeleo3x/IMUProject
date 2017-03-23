@@ -30,10 +30,6 @@ namespace IMUProject {
         ~MainWidget(){
         }
 
-    public slots:
-        void Start();
-        void Stop();
-
     protected:
         void initializeGL() Q_DECL_OVERRIDE;
         void resizeGL(int w, int h) Q_DECL_OVERRIDE;
@@ -59,8 +55,9 @@ namespace IMUProject {
 		const Eigen::Vector3f tango_traj_color;
 		const Eigen::Vector3f const_traj_color;
 
+        bool is_rendering_;
+
         int render_count_;
-		CameraMode camera_mode_;
         QBasicTimer render_timer_;
 
 		const int panel_border_margin_;

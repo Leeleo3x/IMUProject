@@ -15,14 +15,13 @@ namespace IMUProject{
 	                                         full_traj_color(0.0f, 0.0f, 1.0f),
 	                                         const_traj_color(0.5f, 0.5f, 0.0f),
 	                                         tango_traj_color(1.0f, 0.0f, 0.0f),
-	                                         panel_border_margin_(10), panel_size_(300){
+	                                         panel_border_margin_(10), panel_size_(300), is_rendering_(false){
 		setFocusPolicy(Qt::StrongFocus);
         canvas_.reset(new Canvas(canvas_width, canvas_height));
 		navigation_.reset(new Navigation(50.f, (float)width(), (float)height()));
         speed_panel_.reset(new OfflineSpeedPanel());
 
 		InitializeTrajectories(path);
-		camera_mode_ = BACK;
 	}
 
 	void MainWidget::InitializeTrajectories(const std::string& path) {
@@ -120,6 +119,8 @@ namespace IMUProject{
 		}
 
 		add_trajectory(gt_position, gt_orientation, tango_traj_color, 0.5f);
+
+        // Sanity checks
 		CHECK_EQ(view_frustum_.size(), trajectories_.size());
 		CHECK_EQ(view_frustum_.size(), positions_.size());
 		CHECK_EQ(view_frustum_.size(), orientations_.size());
@@ -144,6 +145,8 @@ namespace IMUProject{
 		glClearColor(1.f, 1.f, 1.f, 1.f);
 		glClear(GL_COLOR_BUFFER_BIT);
 		glViewport(0, 0, width(), height());
+
+        render_timer_.start(frame_interval_ * 5, this);
 	}
 
 	void MainWidget::resizeGL(int w, int h) {
@@ -158,7 +161,6 @@ namespace IMUProject{
 			view_frustum_[i]->Render(*navigation_);
 		}
 
-
         // Render the speed panel
         glViewport(panel_border_margin_, panel_border_margin_, width() / 4, width() / 4);
         speed_panel_->Render(*navigation_);
@@ -168,13 +170,10 @@ namespace IMUProject{
 
     void MainWidget::UpdateCameraInfo(const int ind){
 	    constexpr int ref_traj = 0;
-
 	    for(auto i=0; i<view_frustum_.size(); ++i) {
 		    trajectories_[i]->SetRenderLength(ind);
 		    view_frustum_[i]->UpdateCameraPose(positions_[i][ind], orientations_[i][ind]);
 	    }
-        // update camera pose and heading
-
         if(ind > 0){
             Eigen::Vector3d forward_dir = (positions_[ref_traj][ind] - positions_[ref_traj][ind - 1])
                                           / (ts_[ind] - ts_[ind-1]);
@@ -186,12 +185,7 @@ namespace IMUProject{
             speed_panel_->UpdateDirection(Eigen::Vector3d(0, 1, 0), Eigen::Vector3d(0, 1, 0));
         }
 
-        if(camera_mode_ == BACK){
-            navigation_->UpdateCameraBack(positions_[ref_traj][ind], orientations_[ref_traj][ind]);
-        }else if(camera_mode_ == CENTER){
-            navigation_->UpdateCameraCenter(positions_[ref_traj][ind],
-                                            Eigen::Vector3d(0.0, 5.0f, 0.0f));
-        }
+        navigation_->UpdateNavitation(positions_[ref_traj][ind], orientations_[ref_traj][ind]);
     }
 
 	void MainWidget::timerEvent(QTimerEvent *event) {
@@ -199,49 +193,39 @@ namespace IMUProject{
 	        render_count_ = 0;
         }
         UpdateCameraInfo(render_count_);
-		render_count_++;
         update();
+        if(is_rendering_) {
+            render_count_++;
+        }
 	}
 
 	void MainWidget::keyPressEvent(QKeyEvent *e) {
 		switch(e->key()){
-			case(Qt::Key_C):{
-				if(camera_mode_ == BACK){
-					camera_mode_ = CENTER;
-				}else{
-					camera_mode_ = BACK;
-				}
+            case(Qt::Key_1):{
+                navigation_->SetCameraMode(CENTER);
                 UpdateCameraInfo(render_count_);
                 update();
-				break;
-			}
-
+                break;
+            }
+            case(Qt::Key_2):{
+                navigation_->SetCameraMode(BACK);
+                UpdateCameraInfo(render_count_);
+                update();
+                break;
+            }
+            case(Qt::Key_3):{
+                navigation_->SetCameraMode(TOP);
+                UpdateCameraInfo(render_count_);
+                update();
+                break;
+            }
 			case(Qt::Key_S):{
-				Start();
+                is_rendering_ = !is_rendering_;
 				break;
 			}
-
-			case(Qt::Key_P):{
-				Stop();
-				break;
-			}
-
 			default:
 				break;
 		}
-	}
-
-    void MainWidget::Start() {
-        if(render_timer_.isActive()){
-            render_timer_.stop();
-        }
-        render_timer_.start(frame_interval_ * 5, this);
-	}
-
-	void MainWidget::Stop(){
-        if(render_timer_.isActive()){
-            render_timer_.stop();
-        }
 	}
 
 }//namespace IMUProject
