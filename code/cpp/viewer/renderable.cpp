@@ -362,13 +362,8 @@ namespace IMUProject{
     }
 
 
-    OfflineSpeedPanel::OfflineSpeedPanel(const std::vector<Eigen::Vector3d>& positions,
-                                         const std::vector<Eigen::Quaterniond>& orientation,
-                                         const Eigen::Quaterniond& init_dir,
-                                         const float radius, const Eigen::Vector3f fcolor, const Eigen::Vector3f dcolor)
+    OfflineSpeedPanel::OfflineSpeedPanel(const float radius, const Eigen::Vector3f fcolor, const Eigen::Vector3f dcolor)
             :radius_(radius), fcolor_(fcolor), dcolor_(dcolor), panel_alpha_(0.4f), z_pos_(-15.0f){
-        CHECK_EQ(positions.size(), orientation.size());
-
         // first fill the data for drawing the circle
         const float circle_divide = 200;
         panel_vertex_data_.reserve((int)circle_divide * 3 + 3);
@@ -411,9 +406,9 @@ namespace IMUProject{
 		device_vertex_data_ = {0.0f, 0.0f, z_pos_,
 							   -radius_ * 0.2f, radius_*0.3f, z_pos_,
 							   radius_ * 0.2f, radius_*0.3f, z_pos_};
-		device_color_data_ = {0.0f, 0.0f, 0.0f, panel_alpha_,
-							  0.0f, 0.0f, 0.0f, panel_alpha_,
-							  0.0f, 0.0f, 0.0f, panel_alpha_};
+		device_color_data_ = {0.0f, 0.0f, 0.0f, 1.0f,
+							  0.0f, 0.0f, 0.0f, 1.0f,
+							  0.0f, 0.0f, 0.0f, 1.0f};
 		device_index_data_ = {0, 1, 2};
 
 		// Set default view matrices

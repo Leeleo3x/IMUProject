@@ -12,34 +12,131 @@ namespace IMUProject{
                            const int canvas_width,
                            const int canvas_height,
                            QWidget *parent): render_count_(0),
+	                                         full_traj_color(0.0f, 0.0f, 1.0f),
+	                                         const_traj_color(0.5f, 0.5f, 0.0f),
+	                                         tango_traj_color(1.0f, 0.0f, 0.0f),
 	                                         panel_border_margin_(10), panel_size_(300){
 		setFocusPolicy(Qt::StrongFocus);
         canvas_.reset(new Canvas(canvas_width, canvas_height));
 		navigation_.reset(new Navigation(50.f, (float)width(), (float)height()));
+        speed_panel_.reset(new OfflineSpeedPanel());
 
-        IMUDataset dataset(path);
-        for(auto i=0; i<dataset.GetPosition().size(); i+=frame_interval_){
-            gt_pos_.push_back(dataset.GetPosition()[i]);
-            gt_orientation_.push_back(dataset.GetOrientation()[i]);
-	        ts_.push_back(dataset.GetTimeStamp()[i]);
-        }
-        AdjustPositionToCanvas(gt_pos_, canvas_width, canvas_height);
-
-        gt_trajectory_.reset(new OfflineTrajectory(gt_pos_, Eigen::Vector3f(1.0, 0.0, 0.0)));
-        gt_trajectory_->SetRenderLength(0);
-
-        view_frustum_.reset(new ViewFrustum(1.0));
-
-        speed_panel_.reset(new OfflineSpeedPanel(gt_pos_, gt_orientation_, gt_orientation_[0]));
+		InitializeTrajectories(path);
 		camera_mode_ = BACK;
+	}
+
+	void MainWidget::InitializeTrajectories(const std::string& path) {
+		double max_distance = -1.0;
+		const double fill_ratio = 0.5;
+		double ratio = -1;
+		char buffer[128] = {};
+
+		auto add_trajectory = [&](std::vector<Eigen::Vector3d>& traj, const std::vector<Eigen::Quaterniond>& orientation,
+		                          const Eigen::Vector3f color, const float frustum_size){
+			CHECK_GT(traj.size(), 0);
+			Eigen::Vector4d bbox(-1, -1, -1, -1);
+			for(auto i=0; i<traj.size(); ++i){
+				if(bbox[0] < 0 || traj[i][0] < bbox[0]){
+					bbox[0] = traj[i][0];
+				}
+				if(bbox[1] < 0 || traj[i][0] > bbox[0]){
+					bbox[1] = traj[i][0];
+				}
+				if(bbox[2] < 0 || traj[i][1] < bbox[2]){
+					bbox[2] = traj[i][1];
+				}
+				if(bbox[3] < 0 || traj[i][1] > bbox[3]){
+					bbox[3] = traj[i][1];
+				}
+			}
+			Eigen::Vector3d centroid((bbox[0] + bbox[1])/2, (bbox[2]+bbox[3]) / 2, 1.0);
+			double traj_max_distance = -1.0;
+			for(auto i=0; i<traj.size(); ++i){
+				double dis = (traj[i] - centroid).norm();
+				traj_max_distance = std::max(traj_max_distance, dis);
+			}
+			if(max_distance < 0) {
+				max_distance = traj_max_distance;
+				ratio = (double) std::min(canvas_->GetWidth()/2, canvas_->GetHeight()/2) / max_distance * fill_ratio;
+			}
+
+			for(auto& pos: traj){
+				pos = (pos - centroid) * ratio;
+			}
+			trajectories_.emplace_back(new OfflineTrajectory(traj, color));
+			view_frustum_.emplace_back(new ViewFrustum(frustum_size, true));
+			positions_.push_back(traj);
+			orientations_.push_back(orientation);
+		};
+
+		IMUDataset dataset(path);
+		std::vector<Eigen::Quaterniond> gt_orientation;
+		std::vector<Eigen::Quaterniond> imu_orientation;
+		std::vector<Eigen::Vector3d> gt_position;
+		ts_.clear();
+		for(auto i=0; i<dataset.GetTimeStamp().size(); i+=frame_interval_){
+			ts_.push_back(dataset.GetTimeStamp()[i]);
+			gt_orientation.push_back(dataset.GetOrientation()[i]);
+			gt_position.push_back(dataset.GetPosition()[i]);
+			imu_orientation.push_back(dataset.GetRotationVector()[i]);
+		}
+
+		Eigen::Quaterniond imu_to_tango = gt_orientation[0] * imu_orientation[0].conjugate();
+		for(auto &ori: imu_orientation){
+			ori = imu_to_tango * ori;
+		}
+
+		sprintf(buffer, "%s/result_gt_ori.csv", path.c_str());
+		string line;
+		ifstream full_in(buffer);
+		if(full_in.is_open()){
+			std::vector<Eigen::Vector3d> traj;
+			std::getline(full_in, line);
+			int count = 0;
+			while(std::getline(full_in, line)) {
+				std::vector<double> values = ParseCommaSeparatedLine(line);
+				if(count %  frame_interval_ == 0) {
+					traj.emplace_back(values[2], values[3], values[4]);
+				}
+				count++;
+			}
+			add_trajectory(traj, imu_orientation, full_traj_color, 1.0f);
+		}
+
+		sprintf(buffer, "%s/result_const.csv", path.c_str());
+		ifstream const_in(buffer);
+		if(const_in.is_open()){
+			std::vector<Eigen::Vector3d> traj;
+			std::getline(const_in, line);
+			int count = 0;
+			while(std::getline(const_in, line)) {
+				std::vector<double> values = ParseCommaSeparatedLine(line);
+				if(count %  frame_interval_ == 0) {
+					traj.emplace_back(values[2], values[3], values[4]);
+				}
+				count++;
+			}
+			add_trajectory(traj, imu_orientation, const_traj_color, 0.5f);
+		}
+
+		add_trajectory(gt_position, gt_orientation, tango_traj_color, 0.5f);
+		CHECK_EQ(view_frustum_.size(), trajectories_.size());
+		CHECK_EQ(view_frustum_.size(), positions_.size());
+		CHECK_EQ(view_frustum_.size(), orientations_.size());
+		for(auto i=0; i<view_frustum_.size(); ++i){
+			CHECK_EQ(positions_[i].size(), ts_.size());
+			CHECK_EQ(orientations_[i].size(), ts_.size());
+		}
 	}
 
 	void MainWidget::initializeGL() {
 		initializeOpenGLFunctions();
 
 		canvas_->InitGL();
-        gt_trajectory_->InitGL();
-		view_frustum_->InitGL();
+		for(auto i=0; i<view_frustum_.size(); ++i){
+			trajectories_[i]->InitGL();
+			view_frustum_[i]->InitGL();
+		}
         speed_panel_->InitGL();
 
         UpdateCameraInfo(0);
@@ -55,8 +152,12 @@ namespace IMUProject{
 
 	void MainWidget::paintGL() {
 		canvas_->Render(*navigation_);
-        gt_trajectory_->Render(*navigation_);
-		view_frustum_->Render(*navigation_);
+
+		for(auto i=0; i<view_frustum_.size(); ++i){
+			trajectories_[i]->Render(*navigation_);
+			view_frustum_[i]->Render(*navigation_);
+		}
+
 
         // Render the speed panel
         glViewport(panel_border_margin_, panel_border_margin_, width() / 4, width() / 4);
@@ -66,15 +167,19 @@ namespace IMUProject{
 	}
 
     void MainWidget::UpdateCameraInfo(const int ind){
-        gt_trajectory_->SetRenderLength(ind);
+	    constexpr int ref_traj = 0;
 
+	    for(auto i=0; i<view_frustum_.size(); ++i) {
+		    trajectories_[i]->SetRenderLength(ind);
+		    view_frustum_[i]->UpdateCameraPose(positions_[i][ind], orientations_[i][ind]);
+	    }
         // update camera pose and heading
-        view_frustum_->UpdateCameraPose(gt_pos_[ind], gt_orientation_[ind]);
+
         if(ind > 0){
-            Eigen::Vector3d forward_dir = (gt_pos_[ind] - gt_pos_[ind - 1])
+            Eigen::Vector3d forward_dir = (positions_[ref_traj][ind] - positions_[ref_traj][ind - 1])
                                           / (ts_[ind] - ts_[ind-1]);
             forward_dir[2] = 0.0;
-            Eigen::Vector3d device_dir = gt_orientation_[ind] * Eigen::Vector3d(0, 0, -1);
+            Eigen::Vector3d device_dir = orientations_[ref_traj][ind] * Eigen::Vector3d(0, 0, -1);
             device_dir[2] = 0.0;
             speed_panel_->UpdateDirection(forward_dir, device_dir);
         }else{
@@ -82,15 +187,15 @@ namespace IMUProject{
         }
 
         if(camera_mode_ == BACK){
-            navigation_->UpdateCameraBack(gt_pos_[ind], gt_orientation_[ind]);
+            navigation_->UpdateCameraBack(positions_[ref_traj][ind], orientations_[ref_traj][ind]);
         }else if(camera_mode_ == CENTER){
-            navigation_->UpdateCameraCenter(gt_pos_[ind],
+            navigation_->UpdateCameraCenter(positions_[ref_traj][ind],
                                             Eigen::Vector3d(0.0, 5.0f, 0.0f));
         }
     }
 
 	void MainWidget::timerEvent(QTimerEvent *event) {
-        if(render_count_ >= (int)gt_pos_.size()){
+        if(render_count_ >= (int)ts_.size()){
 	        render_count_ = 0;
         }
         UpdateCameraInfo(render_count_);
@@ -139,21 +244,4 @@ namespace IMUProject{
         }
 	}
 
-    void AdjustPositionToCanvas(std::vector<Eigen::Vector3d>& position,
-                                const int canvas_width, const int canvas_height){
-        CHECK_GT(position.size(), 0);
-        Eigen::Vector3d centroid = std::accumulate(position.begin(), position.end(), Eigen::Vector3d(0, 0, 0))
-                                   / (double)position.size();
-        double max_distance = -1;
-        for(const auto& pos: position){
-            const double d = (pos-centroid).norm();
-            if(d > max_distance){
-                max_distance = d;
-            }
-        }
-        const double larger_dim = std::max((double)canvas_width/2.0, (double)canvas_height/2.0);
-        for(auto& pos: position){
-            pos = (pos - centroid) / max_distance * larger_dim * 0.7;
-        }
-    }
 }//namespace IMUProject

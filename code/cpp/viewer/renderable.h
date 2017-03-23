@@ -127,9 +127,7 @@ namespace IMUProject{
 
     class OfflineSpeedPanel: public Renderable{
     public:
-        OfflineSpeedPanel(const std::vector<Eigen::Vector3d>& positions,
-                          const std::vector<Eigen::Quaterniond>& orientation,
-                          const Eigen::Quaterniond& init_dir, const float radius = 1.0f,
+        OfflineSpeedPanel(const float radius = 1.0f,
                           const Eigen::Vector3f fcolor=Eigen::Vector3f(1.0f, 0.0f, 0.0f),
                           const Eigen::Vector3f dcolor=Eigen::Vector3f(0.0f, 0.0f, 1.0f));
 

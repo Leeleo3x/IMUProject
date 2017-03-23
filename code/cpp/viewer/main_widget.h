@@ -43,16 +43,21 @@ namespace IMUProject {
         void timerEvent(QTimerEvent* event) Q_DECL_OVERRIDE;
 
     private:
+		void InitializeTrajectories(const std::string& path);
+		void UpdateCameraInfo(const int ind);
+
 		std::vector<double> ts_;
-        std::vector<Eigen::Vector3d> gt_pos_;
-        std::vector<Eigen::Quaterniond> gt_orientation_;
+		std::vector<std::vector<Eigen::Vector3d> > positions_;
+        std::vector<std::vector<Eigen::Quaterniond> > orientations_;
 
 	    std::shared_ptr<Canvas> canvas_;
-        std::shared_ptr<OfflineTrajectory> gt_trajectory_;
-	    std::shared_ptr<ViewFrustum> view_frustum_;
+        std::vector<std::shared_ptr<OfflineTrajectory> > trajectories_;
+	    std::vector<std::shared_ptr<ViewFrustum> > view_frustum_;
         std::shared_ptr<OfflineSpeedPanel> speed_panel_;
 
-        void UpdateCameraInfo(const int ind);
+		const Eigen::Vector3f full_traj_color;
+		const Eigen::Vector3f tango_traj_color;
+		const Eigen::Vector3f const_traj_color;
 
         int render_count_;
 		CameraMode camera_mode_;
@@ -65,9 +70,6 @@ namespace IMUProject {
 		static constexpr int frame_interval_ = 5;
     };
 
-
-    void AdjustPositionToCanvas(std::vector<Eigen::Vector3d>& position,
-                                const int canvas_width, const int canvas_height);
 
 }//namespace IMUProject
 

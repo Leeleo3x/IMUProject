@@ -157,5 +157,7 @@ namespace IMUProject{
                     const Eigen::Vector3d traj_color=Eigen::Vector3d(0, 255, 255),
                     const double axis_length = 0.5, const int kpoints = 100, const int interval=200);
 
+	std::vector<double> ParseCommaSeparatedLine(const std::string& input);
+
 } //namespace IMUProject
 #endif //PROJECT_IMU_DATASET_H

@@ -12,6 +12,7 @@ using namespace std;
 using namespace cv;
 using namespace IMUProject;
 
+using namespace std;
 int main(int argc, char** argv){
     if(argc < 2){
         std::cerr << "Usage: ./IMUUtility_cli <path-to-data>" << std::endl;
@@ -21,14 +22,13 @@ int main(int argc, char** argv){
     FLAGS_logtostderr = true;
     google::InitGoogleLogging(argv[0]);
 
-    char buffer[128] = {};
-    IMUProject::IMUDataset dataset(argv[1]);
-    cout << "Number of samples:" << dataset.GetPosition().size() << endl;
+    std::string test_string = "0,6806.688065023,0.006109,-0.007963,0.004010,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000";
+	std::vector<double> parsed = IMUProject::ParseCommaSeparatedLine(test_string);
+	cout << "Parsed line: " << endl;
+	for(const auto v: parsed){
+		cout << v << ' ';
+	}
+	cout << endl;
 
-    printf("Writing the trajectory\n");
-    sprintf(buffer, "%s/test.ply", argv[1]);
-
-    WriteToPly(std::string(buffer), dataset.GetPosition().data(), dataset.GetOrientation().data(),
-               (int)dataset.GetOrientation().size());
     return 0;
 }
