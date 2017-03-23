@@ -574,18 +574,18 @@ namespace IMUProject{
 
     /////////////////////////////////////////
     // Implementation of legend
-    LegendRenderer::LegendRenderer(const int width, const int height, const std::string& texture_path)
-            :width_((float)width), height_((float)height), z_pos_(-1.0f), texture_path_(QString::fromStdString(texture_path)){
+    LegendRenderer::LegendRenderer(const int width, const int height, const QImage &texture_img)
+            :width_((float)width), height_((float)height), z_pos_(-1.0f), texture_img_(texture_img){
 
         modelview_.setToIdentity();
         projection_.setToIdentity();
         projection_.ortho(-0.5f * width_, 0.5f * width_, -0.5f * height_, 0.5f * height_,
                           0.0f, 5.0f);
 
-        vertex_data_ = {-0.5f * width_, -0.5f * height_, z_pos_,
-                        0.5f * width_, -0.5f * height_, z_pos_,
+        vertex_data_ = {-0.5f * width_, 0.5f * height_, z_pos_,
                         0.5f * width_, 0.5f * height_, z_pos_,
-                        -0.5f * width_, 0.5f * height_, z_pos_};
+                        0.5f * width_, -0.5f * height_, z_pos_,
+                        -0.5f * width_, -0.5f * height_, z_pos_};
         texcoord_data_ = {0.0f, 0.0f,
                           1.0f, 0.0f,
                           1.0f, 1.0f,
@@ -606,7 +606,7 @@ namespace IMUProject{
         tex_shader_->release();
 
         glEnable(GL_TEXTURE_2D);
-        texture_.reset(new QOpenGLTexture(QImage(texture_path_)));
+        texture_.reset(new QOpenGLTexture(QImage(texture_img_)));
         glBindTexture(GL_TEXTURE_2D, 0);
         glDisable(GL_TEXTURE_2D);
 

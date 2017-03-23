@@ -21,6 +21,10 @@ namespace IMUProject{
 		navigation_.reset(new Navigation(50.f, (float)width(), (float)height()));
         speed_panel_.reset(new OfflineSpeedPanel());
 
+		QImage traj_legend_image("../../viewer/resource/images/traj_legend.png");
+		legend_areas_.emplace_back(width() / 2, 0.0, traj_legend_image.width(), traj_legend_image.height());
+		legends_.emplace_back(new LegendRenderer(traj_legend_image.width(), traj_legend_image.height(), traj_legend_image));
+
 		InitializeTrajectories(path);
 	}
 
@@ -139,6 +143,9 @@ namespace IMUProject{
 			view_frustum_[i]->InitGL();
 		}
         speed_panel_->InitGL();
+		for(auto& v: legends_){
+			v->InitGL();
+		}
 
         UpdateCameraInfo(0);
 
@@ -155,7 +162,6 @@ namespace IMUProject{
 
 	void MainWidget::paintGL() {
 		canvas_->Render(*navigation_);
-
 		for(auto i=0; i<view_frustum_.size(); ++i){
 			trajectories_[i]->Render(*navigation_);
 			view_frustum_[i]->Render(*navigation_);
@@ -164,8 +170,15 @@ namespace IMUProject{
         // Render the speed panel
         glViewport(panel_border_margin_, panel_border_margin_, width() / 4, width() / 4);
         speed_panel_->Render(*navigation_);
-        glViewport(0, 0, width(), height());
-        glFlush();
+
+		for(int i=0; i<legends_.size(); ++i){
+			glViewport(legend_areas_[i].x(), legend_areas_[i].y(), legend_areas_[i].width(),
+			           legend_areas_[i].height());
+			legends_[i]->Render(*navigation_);
+		}
+
+		glViewport(0, 0, width(), height());
+		glFlush();
 	}
 
     void MainWidget::UpdateCameraInfo(const int ind){

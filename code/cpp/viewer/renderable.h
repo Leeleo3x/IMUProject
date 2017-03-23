@@ -204,7 +204,7 @@ namespace IMUProject{
 
     class LegendRenderer: public Renderable{
     public:
-        LegendRenderer(const int width, const int height, const std::string& texture_path);
+        LegendRenderer(const int width, const int height, const QImage& texture_img);
         virtual void InitGL();
         virtual void Render(const Navigation& navigation);
 
@@ -217,7 +217,7 @@ namespace IMUProject{
         std::vector<GLfloat> texcoord_data_;
         std::vector<GLuint> index_data_;
 
-        const QString texture_path_;
+        QImage texture_img_;
 
         GLuint vertex_buffer_;
         GLuint texcoord_buffer_;

@@ -52,6 +52,7 @@ namespace IMUProject {
         std::shared_ptr<OfflineSpeedPanel> speed_panel_;
 
         std::vector<std::shared_ptr<LegendRenderer> > legends_;
+		std::vector<QRect> legend_areas_;
 
 		const Eigen::Vector3f full_traj_color;
 		const Eigen::Vector3f tango_traj_color;
