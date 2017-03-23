@@ -393,15 +393,25 @@ namespace IMUProject{
         }
 	    panel_index_data_.push_back(1);
 
+        constexpr float arrow_edge = 0.1f;
+        constexpr float arrow_ratio = 0.7;
         pointer_vertex_data_ = {0.0f, 0.0f, z_pos_,
-                                0.0f, radius_, z_pos_};
+                                0.0f, radius_, z_pos_,
+                                -1*arrow_edge*arrow_ratio, radius_-arrow_edge, z_pos_,
+                                arrow_edge*arrow_ratio, radius_-arrow_edge, z_pos_};
         pointer_color_data_ = {fcolor_[0], fcolor_[1], fcolor_[2], 1.0f,
+                               fcolor_[0], fcolor_[1], fcolor_[2], 1.0f,
+                               fcolor_[0], fcolor_[1], fcolor_[2], 1.0f,
                                fcolor_[0], fcolor_[1], fcolor_[2], 1.0f,
                                dcolor_[0], dcolor_[1], dcolor_[2], 1.0f,
 							   dcolor_[0], dcolor_[1], dcolor_[2], 1.0f,
+                               dcolor_[0], dcolor_[1], dcolor_[2], 1.0f,
+                               dcolor_[0], dcolor_[1], dcolor_[2], 1.0f,
 							   0.8f, 0.5f, 0.0f, 1.0f,
-							   0.8f, 0.5f, 0.0f, 1.0f};
-	    pointer_index_data_ = {0, 1};
+							   0.8f, 0.5f, 0.0f, 1.0f,
+                               0.8f, 0.5f, 0.0f, 1.0f,
+                               0.8f, 0.5f, 0.0f, 1.0f};
+	    pointer_index_data_ = {0, 1, 1, 2, 1, 3};
 
 		device_vertex_data_ = {0.0f, 0.0f, z_pos_,
 							   -radius_ * 0.2f, radius_*0.3f, z_pos_,
@@ -413,12 +423,13 @@ namespace IMUProject{
 
 		// Set default view matrices
 		panel_view_matrix_.setToIdentity();
-		panel_view_matrix_.lookAt(QVector3D(0.0f, -radius_/2.0f, z_pos_ + 1.0f), QVector3D(0.0f, radius_/2.0f, z_pos_), QVector3D(0.0f, 1.0f, 0.0f));
-		//panel_view_matrix_.lookAt(QVector3D(0.0f, 0.0f, 0.0f), QVector3D(0.0f, 0.0f, z_pos_), QVector3D(0.0f, 1.0f, 0.0f));
+		//panel_view_matrix_.lookAt(QVector3D(0.0f, -radius_/2.0f, z_pos_ + 1.0f), QVector3D(0.0f, radius_/2.0f, z_pos_), QVector3D(0.0f, 1.0f, 0.0f));
+		panel_view_matrix_.lookAt(QVector3D(0.0f, 0.0f, z_pos_ + 0.1f), QVector3D(0.0f, 0.0f, z_pos_), QVector3D(0.0f, 1.0f, 0.0f));
 
 		constexpr float fov = 100.0f;
 		panel_projection_matrix_.setToIdentity();
-		panel_projection_matrix_.perspective(fov, 1.0f, 0.0f, 20.0f);
+		//panel_projection_matrix_.perspective(fov, 1.0f, 0.0f, 20.0f);
+        panel_projection_matrix_.ortho(-radius_, radius_, -radius_, radius_, 0.0f, 10.0f);
     }
 
     void OfflineSpeedPanel::InitGL() {
@@ -524,36 +535,119 @@ namespace IMUProject{
 	    panel_texture_->release();
 	    tex_shader_->release();
 
+        // Render pointers
 	    CHECK(line_shader_->bind());
+        glLineWidth(5.0f);
+        //Initial heading
 		line_shader_->setUniformValue("m_mat", panel_modelview_);
 		line_shader_->setUniformValue("p_mat", panel_projection_matrix_);
 		glBindBuffer(GL_ARRAY_BUFFER, pointer_vertex_buffer_);
 		line_shader_->setAttributeBuffer("pos", GL_FLOAT, 0, 3);
 		glBindBuffer(GL_ARRAY_BUFFER, pointer_color_buffer_);
-		line_shader_->setAttributeBuffer("v_color", GL_FLOAT, 16 * sizeof(GLfloat), 4);
-		glLineWidth(3.0f);
+		line_shader_->setAttributeBuffer("v_color", GL_FLOAT, 8 * 4 * sizeof(GLfloat), 4);
 		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, pointer_index_buffer_);
 		glDrawElements(GL_LINES, (GLsizei)pointer_index_data_.size(), GL_UNSIGNED_INT, 0);
 
-		glLineWidth(5.0f);
+        // forward heading
 		line_shader_->setUniformValue("m_mat", panel_view_matrix_);
 	    glBindBuffer(GL_ARRAY_BUFFER, pointer_color_buffer_);
 	    line_shader_->setAttributeBuffer("v_color", GL_FLOAT, 0, 4);
 	    glDrawElements(GL_LINES, (GLsizei)pointer_index_data_.size(), GL_UNSIGNED_INT, 0);
 
+        // device heading
 		line_shader_->setUniformValue("m_mat", device_pointer_modelview_);
 	    glBindBuffer(GL_ARRAY_BUFFER, pointer_color_buffer_);
-	    line_shader_->setAttributeBuffer("v_color", GL_FLOAT, 8 * sizeof(GLfloat), 4);
+	    line_shader_->setAttributeBuffer("v_color", GL_FLOAT, 4 * 4 * sizeof(GLfloat), 4);
 	    glDrawElements(GL_LINES, (GLsizei)pointer_index_data_.size(), GL_UNSIGNED_INT, 0);
 
-		glBindBuffer(GL_ARRAY_BUFFER, device_vertex_buffer_);
-		line_shader_->setAttributeBuffer("pos", GL_FLOAT, 0, 3);
-		glBindBuffer(GL_ARRAY_BUFFER, device_color_buffer_);
-		line_shader_->setAttributeBuffer("v_color", GL_FLOAT, 0, 4);
-		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, device_index_buffer_);
-		glDrawElements(GL_TRIANGLES, (GLsizei)device_index_data_.size(), GL_UNSIGNED_INT, 0);
+        // Render device icon
+//		glBindBuffer(GL_ARRAY_BUFFER, device_vertex_buffer_);
+//		line_shader_->setAttributeBuffer("pos", GL_FLOAT, 0, 3);
+//		glBindBuffer(GL_ARRAY_BUFFER, device_color_buffer_);
+//		line_shader_->setAttributeBuffer("v_color", GL_FLOAT, 0, 4);
+//		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, device_index_buffer_);
+//		glDrawElements(GL_TRIANGLES, (GLsizei)device_index_data_.size(), GL_UNSIGNED_INT, 0);
 		line_shader_->release();
 
+    }
+
+
+    /////////////////////////////////////////
+    // Implementation of legend
+    LegendRenderer::LegendRenderer(const int width, const int height, const std::string& texture_path)
+            :width_((float)width), height_((float)height), z_pos_(-1.0f), texture_path_(QString::fromStdString(texture_path)){
+
+        modelview_.setToIdentity();
+        projection_.setToIdentity();
+        projection_.ortho(-0.5f * width_, 0.5f * width_, -0.5f * height_, 0.5f * height_,
+                          0.0f, 5.0f);
+
+        vertex_data_ = {-0.5f * width_, -0.5f * height_, z_pos_,
+                        0.5f * width_, -0.5f * height_, z_pos_,
+                        0.5f * width_, 0.5f * height_, z_pos_,
+                        -0.5f * width_, 0.5f * height_, z_pos_};
+        texcoord_data_ = {0.0f, 0.0f,
+                          1.0f, 0.0f,
+                          1.0f, 1.0f,
+                          0.0f, 1.0f};
+        index_data_ = {0, 1, 2, 2, 3, 0};
+    }
+    void LegendRenderer::InitGL(){
+        initializeOpenGLFunctions();
+
+        tex_shader_.reset(new QOpenGLShaderProgram());
+        CHECK(tex_shader_->addShaderFromSourceFile(QOpenGLShader::Vertex, ":/shaders/canvas_shader.vert"));
+        CHECK(tex_shader_->addShaderFromSourceFile(QOpenGLShader::Fragment, ":/shaders/canvas_shader.frag"));
+        CHECK(tex_shader_->link()) << "Canvas: can not link texture shader";
+        CHECK(tex_shader_->bind()) << "Canvas: can not bind texture shader";
+
+        tex_shader_->enableAttributeArray("pos");
+        tex_shader_->enableAttributeArray("texcoord");
+        tex_shader_->release();
+
+        glEnable(GL_TEXTURE_2D);
+        texture_.reset(new QOpenGLTexture(QImage(texture_path_)));
+        glBindTexture(GL_TEXTURE_2D, 0);
+        glDisable(GL_TEXTURE_2D);
+
+        glGenBuffers(1, &vertex_buffer_);
+        glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer_);
+        glBufferData(GL_ARRAY_BUFFER, vertex_data_.size() * sizeof(GLfloat),
+                     vertex_data_.data(), GL_STATIC_DRAW);
+
+        glGenBuffers(1, &texcoord_buffer_);
+        glBindBuffer(GL_ARRAY_BUFFER, texcoord_buffer_);
+        glBufferData(GL_ARRAY_BUFFER, texcoord_data_.size() * sizeof(GLfloat),
+                     texcoord_data_.data(), GL_STATIC_DRAW);
+
+        glGenBuffers(1, &index_buffer_);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, index_buffer_);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, index_data_.size() * sizeof(GLuint),
+                     index_data_.data(), GL_STATIC_DRAW);
+    }
+    void LegendRenderer::Render(const Navigation& navigation){
+        CHECK(tex_shader_->bind());
+        glEnable(GL_TEXTURE_2D);
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+        tex_shader_->setUniformValue("p_mat", projection_);
+        tex_shader_->setUniformValue("m_mat", modelview_);
+        texture_->bind();
+        tex_shader_->setUniformValue("tex_sampler", 0);
+
+        glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer_);
+        tex_shader_->setAttributeBuffer("pos", GL_FLOAT, 0, 3);
+        glBindBuffer(GL_ARRAY_BUFFER, texcoord_buffer_);
+        tex_shader_->setAttributeBuffer("texcoord", GL_FLOAT, 0, 2);
+
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, index_buffer_);
+        glDrawElements(GL_TRIANGLES, (GLsizei)index_data_.size(), GL_UNSIGNED_INT, 0);
+
+        glDisable(GL_TEXTURE_2D);
+        glDisable(GL_BLEND);
+        texture_->release();
+        tex_shader_->release();
     }
 
 }//namespace IMUProject

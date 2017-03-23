@@ -51,6 +51,8 @@ namespace IMUProject {
 	    std::vector<std::shared_ptr<ViewFrustum> > view_frustum_;
         std::shared_ptr<OfflineSpeedPanel> speed_panel_;
 
+        std::vector<std::shared_ptr<LegendRenderer> > legends_;
+
 		const Eigen::Vector3f full_traj_color;
 		const Eigen::Vector3f tango_traj_color;
 		const Eigen::Vector3f const_traj_color;

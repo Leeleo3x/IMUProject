@@ -136,6 +136,10 @@ namespace IMUProject{
 
         inline void UpdateDirection(const Eigen::Vector3d& forward_dir,
                                  const Eigen::Vector3d& device_dir) {
+            constexpr double min_distance = 0.01;
+            if(forward_dir.norm() < min_distance){
+                return;
+            }
 			Eigen::Quaternionf device_rot = Eigen::Quaterniond::FromTwoVectors(forward_dir, device_dir).cast<float>();
 			Eigen::Quaternionf panel_rot = Eigen::Quaterniond::FromTwoVectors(forward_dir,
 																			  Eigen::Vector3d(0, 1, 0)).cast<float>();
@@ -198,6 +202,33 @@ namespace IMUProject{
         std::shared_ptr<QOpenGLShaderProgram> line_shader_;
     };
 
+    class LegendRenderer: public Renderable{
+    public:
+        LegendRenderer(const int width, const int height, const std::string& texture_path);
+        virtual void InitGL();
+        virtual void Render(const Navigation& navigation);
+
+    private:
+        const float width_;
+        const float height_;
+        const float z_pos_;
+
+        std::vector<GLfloat> vertex_data_;
+        std::vector<GLfloat> texcoord_data_;
+        std::vector<GLuint> index_data_;
+
+        const QString texture_path_;
+
+        GLuint vertex_buffer_;
+        GLuint texcoord_buffer_;
+        GLuint index_buffer_;
+
+        QMatrix4x4 modelview_;
+        QMatrix4x4 projection_;
+
+        std::shared_ptr<QOpenGLTexture> texture_;
+        std::shared_ptr<QOpenGLShaderProgram> tex_shader_;
+    };
 
 } //namespace IMUProject
 

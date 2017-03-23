@@ -19,7 +19,10 @@ namespace IMUProject {
 	};
 
 	inline float GetTransitionRatio(const int counter, const int total){
-		return (float)counter / (float)total;
+		const float x = (float)counter;
+		const float N = (float)total;
+		const float v = (x - 0.5f * N) / N * (float)M_PI;
+		return 0.5f * (1.0f + std::sin(v));
 	}
 
 	class Navigation {
@@ -31,7 +34,7 @@ namespace IMUProject {
 				   const float center_height=10.0f,
 				   const float back_height=5.0f,
 				   const float top_height=50.0f,
-				   const int transition_frames=20):
+				   const int transition_frames=30):
 				fov_(fov), width_(width), height_(height), trajectory_height_(trajectory_height),
 				center_height_(center_height), top_height_(top_height), back_height_(back_height),
 				transition_frames_(transition_frames), render_mode_(CENTER), src_mode_(CENTER){
