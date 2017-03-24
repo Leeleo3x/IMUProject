@@ -14,6 +14,7 @@ namespace IMUProject {
 		CENTER,
 		BACK,
 		TOP,
+		PERSPECTIVE,
 		TRANSITION,
 		NUM_MODE
 	};
@@ -28,24 +29,24 @@ namespace IMUProject {
 	class Navigation {
 	public:
 		Navigation(const float fov,
-		           const float width,
-		           const float height,
+				   const float aspect_ratio,
+				   const float canvas_width,
+				   const float canvas_height,
+				   CameraMode start_mode = PERSPECTIVE,
 				   const float trajectory_height = 1.7f,
 				   const float center_height=10.0f,
+				   const float perspective_height = 15.0f,
 				   const float back_height=5.0f,
 				   const float top_height=50.0f,
 				   const int transition_frames=30):
-				fov_(fov), width_(width), height_(height), trajectory_height_(trajectory_height),
-				center_height_(center_height), top_height_(top_height), back_height_(back_height),
-				transition_frames_(transition_frames), render_mode_(CENTER), src_mode_(CENTER){
-			QMatrix4x4 projection;
-			projection.setToIdentity();
-			projection.perspective(fov_, width_ / height_, 0.001f, 300.0f);
-			SetProjection(projection);
-
+				fov_(fov), aspect_ratio_(aspect_ratio), canvas_width_(canvas_width), canvas_height_(canvas_height),
+				trajectory_height_(trajectory_height), center_height_(center_height), top_height_(top_height),
+				perspective_height_(perspective_height), back_height_(back_height),
+				transition_frames_(transition_frames), render_mode_(start_mode), src_mode_(start_mode){
 			camera_centers_.resize(NUM_MODE);
 			center_points_.resize(NUM_MODE);
 			up_dirs_.resize(NUM_MODE);
+			fovs_.resize(NUM_MODE);
 		}
 
 		inline QMatrix4x4 GetProjectionMatrix() const{
@@ -83,17 +84,21 @@ namespace IMUProject {
 		}
 	private:
 		const float fov_;
-		const float width_;
-		const float height_;
+		const float aspect_ratio_;
 		const float trajectory_height_;
+
+		const float canvas_width_;
+		const float canvas_height_;
 
 		const float center_height_;
 		const float back_height_;
+		const float perspective_height_;
 		const float top_height_;
 
 		std::vector<QVector3D> camera_centers_;
 		std::vector<QVector3D> center_points_;
 		std::vector<QVector3D> up_dirs_;
+		std::vector<float> fovs_;
 
 		CameraMode render_mode_;
 

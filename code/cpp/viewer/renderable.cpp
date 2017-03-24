@@ -394,11 +394,13 @@ namespace IMUProject{
 	    panel_index_data_.push_back(1);
 
         constexpr float arrow_edge = 0.1f;
+        const float arrow_length = 0.8f * radius_;
+
         constexpr float arrow_ratio = 0.7;
         pointer_vertex_data_ = {0.0f, 0.0f, z_pos_,
-                                0.0f, radius_, z_pos_,
-                                -1*arrow_edge*arrow_ratio, radius_-arrow_edge, z_pos_,
-                                arrow_edge*arrow_ratio, radius_-arrow_edge, z_pos_};
+                                0.0f, arrow_length, z_pos_,
+                                -1*arrow_edge*arrow_ratio, arrow_length-arrow_edge, z_pos_,
+                                arrow_edge*arrow_ratio, arrow_length-arrow_edge, z_pos_};
         pointer_color_data_ = {fcolor_[0], fcolor_[1], fcolor_[2], 1.0f,
                                fcolor_[0], fcolor_[1], fcolor_[2], 1.0f,
                                fcolor_[0], fcolor_[1], fcolor_[2], 1.0f,

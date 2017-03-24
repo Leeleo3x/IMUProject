@@ -13,12 +13,12 @@ namespace IMUProject{
                            const int canvas_height,
                            QWidget *parent): render_count_(0),
 	                                         full_traj_color(0.0f, 0.0f, 1.0f),
-	                                         const_traj_color(0.8f, 0.8f, 0.0f),
+	                                         const_traj_color(0.6f, 0.6f, 0.0f),
 	                                         tango_traj_color(1.0f, 0.0f, 0.0f),
 	                                         panel_border_margin_(10), panel_size_(300), is_rendering_(false){
 		setFocusPolicy(Qt::StrongFocus);
         canvas_.reset(new Canvas(canvas_width, canvas_height));
-		navigation_.reset(new Navigation(50.f, (float)width(), (float)height()));
+		navigation_.reset(new Navigation(50.f, (float)width() / (float)height(), (float)canvas_width, (float)canvas_height));
         speed_panel_.reset(new OfflineSpeedPanel());
 
 //		QImage traj_legend_image("../../viewer/resource/images/traj_legend.png");
@@ -30,7 +30,7 @@ namespace IMUProject{
 
 	void MainWidget::InitializeTrajectories(const std::string& path) {
 		double max_distance = -1.0;
-		const double fill_ratio = 0.5;
+		const double fill_ratio = 0.8;
 		double ratio = -1;
 		char buffer[128] = {};
 		Eigen::Vector4d bbox(-1, -1, -1, -1);
@@ -40,29 +40,31 @@ namespace IMUProject{
 		                          const Eigen::Vector3f color, const float frustum_size){
 			CHECK_GT(traj.size(), 0);
 			if(max_distance < 0) {
-				for (auto i = 0; i < traj.size(); ++i) {
-					if (bbox[0] < 0 || traj[i][0] < bbox[0]) {
-						bbox[0] = traj[i][0];
-					}
-					if (bbox[1] < 0 || traj[i][0] > bbox[0]) {
-						bbox[1] = traj[i][0];
-					}
-					if (bbox[2] < 0 || traj[i][1] < bbox[2]) {
-						bbox[2] = traj[i][1];
-					}
-					if (bbox[3] < 0 || traj[i][1] > bbox[3]) {
-						bbox[3] = traj[i][1];
-					}
-				}
+//				for (auto i = 0; i < traj.size(); ++i) {
+//					if (bbox[0] < 0 || traj[i][0] < bbox[0]) {
+//						bbox[0] = traj[i][0];
+//					}
+//					if (bbox[1] < 0 || traj[i][0] > bbox[0]) {
+//						bbox[1] = traj[i][0];
+//					}
+//					if (bbox[2] < 0 || traj[i][1] < bbox[2]) {
+//						bbox[2] = traj[i][1];
+//					}
+//					if (bbox[3] < 0 || traj[i][1] > bbox[3]) {
+//						bbox[3] = traj[i][1];
+//					}
+//				}
+//                centroid = Eigen::Vector3d((bbox[0] + bbox[1]) / 2, (bbox[2] + bbox[3]) / 2, 1.0);
+                centroid = std::accumulate(traj.begin(), traj.end(), Eigen::Vector3d(0, 0, 0)) / (double)traj.size();
 				double traj_max_distance = -1.0;
 				for (auto i = 0; i < traj.size(); ++i) {
 					double dis = (traj[i] - centroid).norm();
 					traj_max_distance = std::max(traj_max_distance, dis);
 				}
-				centroid = Eigen::Vector3d((bbox[0] + bbox[1]) / 2, (bbox[2] + bbox[3]) / 2, 1.0);
 				max_distance = traj_max_distance;
 				ratio = (double) std::min(canvas_->GetWidth() / 2, canvas_->GetHeight() / 2) / max_distance *
 				        fill_ratio;
+//                ratio = 1.0;
 			}
 
 			for(auto& pos: traj){
@@ -164,13 +166,13 @@ namespace IMUProject{
 
 	void MainWidget::paintGL() {
 		canvas_->Render(*navigation_);
-		for(auto i=0; i<view_frustum_.size(); ++i){
+		for(auto i=0; i<1; ++i){
 			trajectories_[i]->Render(*navigation_);
 			view_frustum_[i]->Render(*navigation_);
 		}
 
         // Render the speed panel
-        glViewport(panel_border_margin_, panel_border_margin_, width() / 4, width() / 4);
+        glViewport(panel_border_margin_, panel_border_margin_, width() / 6, width() / 6);
         speed_panel_->Render(*navigation_);
 
 //		for(int i=0; i<legends_.size(); ++i){
@@ -204,8 +206,8 @@ namespace IMUProject{
     }
 
 	void MainWidget::timerEvent(QTimerEvent *event) {
-        if(render_count_ >= (int)ts_.size()){
-	        render_count_ = 0;
+        if(render_count_ >= (int)ts_.size() - 1){
+            is_rendering_ = false;
         }
         UpdateCameraInfo(render_count_);
         update();
@@ -217,18 +219,24 @@ namespace IMUProject{
 	void MainWidget::keyPressEvent(QKeyEvent *e) {
 		switch(e->key()){
             case(Qt::Key_1):{
-                navigation_->SetCameraMode(CENTER);
+                navigation_->SetCameraMode(PERSPECTIVE);
                 UpdateCameraInfo(render_count_);
                 update();
                 break;
             }
             case(Qt::Key_2):{
-                navigation_->SetCameraMode(BACK);
+                navigation_->SetCameraMode(CENTER);
                 UpdateCameraInfo(render_count_);
                 update();
                 break;
             }
             case(Qt::Key_3):{
+                navigation_->SetCameraMode(BACK);
+                UpdateCameraInfo(render_count_);
+                update();
+                break;
+            }
+            case(Qt::Key_4):{
                 navigation_->SetCameraMode(TOP);
                 UpdateCameraInfo(render_count_);
                 update();
@@ -238,6 +246,10 @@ namespace IMUProject{
                 is_rendering_ = !is_rendering_;
 				break;
 			}
+            case(Qt::Key_R):{
+                render_count_ = 0;
+                is_rendering_ = true;
+            }
 			default:
 				break;
 		}
