@@ -13,7 +13,7 @@ namespace IMUProject{
                            const int canvas_height,
                            QWidget *parent): render_count_(0),
 	                                         full_traj_color(0.0f, 0.0f, 1.0f),
-	                                         const_traj_color(0.5f, 0.5f, 0.0f),
+	                                         const_traj_color(0.8f, 0.8f, 0.0f),
 	                                         tango_traj_color(1.0f, 0.0f, 0.0f),
 	                                         panel_border_margin_(10), panel_size_(300), is_rendering_(false){
 		setFocusPolicy(Qt::StrongFocus);
@@ -21,9 +21,9 @@ namespace IMUProject{
 		navigation_.reset(new Navigation(50.f, (float)width(), (float)height()));
         speed_panel_.reset(new OfflineSpeedPanel());
 
-		QImage traj_legend_image("../../viewer/resource/images/traj_legend.png");
-		legend_areas_.emplace_back(width() / 2, 0.0, traj_legend_image.width(), traj_legend_image.height());
-		legends_.emplace_back(new LegendRenderer(traj_legend_image.width(), traj_legend_image.height(), traj_legend_image));
+//		QImage traj_legend_image("../../viewer/resource/images/traj_legend.png");
+//		legend_areas_.emplace_back(width() / 2, 0.0, traj_legend_image.width(), traj_legend_image.height());
+//		legends_.emplace_back(new LegendRenderer(traj_legend_image.width(), traj_legend_image.height(), traj_legend_image));
 
 		InitializeTrajectories(path);
 	}
@@ -33,34 +33,36 @@ namespace IMUProject{
 		const double fill_ratio = 0.5;
 		double ratio = -1;
 		char buffer[128] = {};
+		Eigen::Vector4d bbox(-1, -1, -1, -1);
+		Eigen::Vector3d centroid(-1, -1, -1);
 
 		auto add_trajectory = [&](std::vector<Eigen::Vector3d>& traj, const std::vector<Eigen::Quaterniond>& orientation,
 		                          const Eigen::Vector3f color, const float frustum_size){
 			CHECK_GT(traj.size(), 0);
-			Eigen::Vector4d bbox(-1, -1, -1, -1);
-			for(auto i=0; i<traj.size(); ++i){
-				if(bbox[0] < 0 || traj[i][0] < bbox[0]){
-					bbox[0] = traj[i][0];
-				}
-				if(bbox[1] < 0 || traj[i][0] > bbox[0]){
-					bbox[1] = traj[i][0];
-				}
-				if(bbox[2] < 0 || traj[i][1] < bbox[2]){
-					bbox[2] = traj[i][1];
-				}
-				if(bbox[3] < 0 || traj[i][1] > bbox[3]){
-					bbox[3] = traj[i][1];
-				}
-			}
-			Eigen::Vector3d centroid((bbox[0] + bbox[1])/2, (bbox[2]+bbox[3]) / 2, 1.0);
-			double traj_max_distance = -1.0;
-			for(auto i=0; i<traj.size(); ++i){
-				double dis = (traj[i] - centroid).norm();
-				traj_max_distance = std::max(traj_max_distance, dis);
-			}
 			if(max_distance < 0) {
+				for (auto i = 0; i < traj.size(); ++i) {
+					if (bbox[0] < 0 || traj[i][0] < bbox[0]) {
+						bbox[0] = traj[i][0];
+					}
+					if (bbox[1] < 0 || traj[i][0] > bbox[0]) {
+						bbox[1] = traj[i][0];
+					}
+					if (bbox[2] < 0 || traj[i][1] < bbox[2]) {
+						bbox[2] = traj[i][1];
+					}
+					if (bbox[3] < 0 || traj[i][1] > bbox[3]) {
+						bbox[3] = traj[i][1];
+					}
+				}
+				double traj_max_distance = -1.0;
+				for (auto i = 0; i < traj.size(); ++i) {
+					double dis = (traj[i] - centroid).norm();
+					traj_max_distance = std::max(traj_max_distance, dis);
+				}
+				centroid = Eigen::Vector3d((bbox[0] + bbox[1]) / 2, (bbox[2] + bbox[3]) / 2, 1.0);
 				max_distance = traj_max_distance;
-				ratio = (double) std::min(canvas_->GetWidth()/2, canvas_->GetHeight()/2) / max_distance * fill_ratio;
+				ratio = (double) std::min(canvas_->GetWidth() / 2, canvas_->GetHeight() / 2) / max_distance *
+				        fill_ratio;
 			}
 
 			for(auto& pos: traj){
@@ -143,9 +145,9 @@ namespace IMUProject{
 			view_frustum_[i]->InitGL();
 		}
         speed_panel_->InitGL();
-		for(auto& v: legends_){
-			v->InitGL();
-		}
+//		for(auto& v: legends_){
+//			v->InitGL();
+//		}
 
         UpdateCameraInfo(0);
 
@@ -171,11 +173,11 @@ namespace IMUProject{
         glViewport(panel_border_margin_, panel_border_margin_, width() / 4, width() / 4);
         speed_panel_->Render(*navigation_);
 
-		for(int i=0; i<legends_.size(); ++i){
-			glViewport(legend_areas_[i].x(), legend_areas_[i].y(), legend_areas_[i].width(),
-			           legend_areas_[i].height());
-			legends_[i]->Render(*navigation_);
-		}
+//		for(int i=0; i<legends_.size(); ++i){
+//			glViewport(legend_areas_[i].x(), legend_areas_[i].y(), legend_areas_[i].width(),
+//			           legend_areas_[i].height());
+//			legends_[i]->Render(*navigation_);
+//		}
 
 		glViewport(0, 0, width(), height());
 		glFlush();

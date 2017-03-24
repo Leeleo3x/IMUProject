@@ -128,8 +128,8 @@ namespace IMUProject{
     class OfflineSpeedPanel: public Renderable{
     public:
         OfflineSpeedPanel(const float radius = 1.0f,
-                          const Eigen::Vector3f fcolor=Eigen::Vector3f(1.0f, 0.0f, 0.0f),
-                          const Eigen::Vector3f dcolor=Eigen::Vector3f(0.0f, 0.0f, 1.0f));
+                          const Eigen::Vector3f fcolor=Eigen::Vector3f(0.7f, 0.0f, 1.0f),
+                          const Eigen::Vector3f dcolor=Eigen::Vector3f(0.0f, 0.8f, 1.0f));
 
         virtual void InitGL();
         virtual void Render(const Navigation& navigation);
