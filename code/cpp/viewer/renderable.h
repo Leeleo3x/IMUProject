@@ -127,38 +127,42 @@ namespace IMUProject{
 
     class OfflineSpeedPanel: public Renderable{
     public:
-        OfflineSpeedPanel(const float radius = 1.0f,
-                          const Eigen::Vector3f fcolor=Eigen::Vector3f(0.7f, 0.0f, 1.0f),
-                          const Eigen::Vector3f dcolor=Eigen::Vector3f(0.0f, 0.8f, 1.0f));
+        OfflineSpeedPanel(const int kTraj,
+                          const std::vector<Eigen::Vector3f>& colors,
+                          const float radius = 1.0f,
+						  const float max_speed = 1.5f,
+						  const QVector3D initial_dir=QVector3D(0.0f, 1.0f, 0.0f));
 
         virtual void InitGL();
         virtual void Render(const Navigation& navigation);
 
-        inline void UpdateDirection(const Eigen::Vector3d& forward_dir,
-                                 const Eigen::Vector3d& device_dir) {
-            constexpr double min_distance = 0.01;
-            if(forward_dir.norm() < min_distance){
-                return;
-            }
-			Eigen::Quaternionf device_rot = Eigen::Quaterniond::FromTwoVectors(forward_dir, device_dir).cast<float>();
-			Eigen::Quaternionf panel_rot = Eigen::Quaterniond::FromTwoVectors(forward_dir,
-																			  Eigen::Vector3d(0, 1, 0)).cast<float>();
+        inline void UpdateDirections(const std::vector<Eigen::Vector3d>& speeds){
+			CHECK_EQ(speeds.size(), kTraj_);
+			for(auto i=0; i<kTraj_; ++i){
+				Eigen::Vector3f s_f = speeds[i].cast<float>();
+				QQuaternion q = QQuaternion::rotationTo(initial_dir_, QVector3D(s_f[0], s_f[1], s_f[2]));
+				const float mag = s_f.norm();
+				// apply a low pass filter
+				speed_mags_[i] = filter_alpha_ * speed_mags_[i] + (1.0f - filter_alpha_) * mag;
+				const float scale = speed_mags_[i] / max_speed_;
+				//printf("speed mag: %.6f, scale: %.6f\n", speeds[i].norm(), scale);
+				pointer_modelviews_[i].setToIdentity();
+				pointer_modelviews_[i].scale(scale, scale, 1.0f);
+				pointer_modelviews_[i].rotate(q);
+				pointer_modelviews_[i] = panel_view_matrix_ * pointer_modelviews_[i];
+			}
+        }
 
-			panel_modelview_.setToIdentity();
-			//panel_modelview_.scale(1.0f, (float)forward_dir.norm() / max_speed_ * radius_, 1.0f);
-			panel_modelview_.rotate(QQuaternion(panel_rot.w(), panel_rot.x(), panel_rot.y(), panel_rot.z()));
-			panel_modelview_ = panel_view_matrix_ * panel_modelview_;
-
-			device_pointer_modelview_.setToIdentity();
-			//device_pointer_modelview_.scale(1.0f, static_cast<float>(forward_dir.norm() / max_speed_), 1.0f);
-			device_pointer_modelview_.rotate(
-					QQuaternion(device_rot.w(), device_rot.x(), device_rot.y(), device_rot.z()));
-			device_pointer_modelview_ = panel_view_matrix_ * device_pointer_modelview_;
+		inline void ResetFilters(){
+			for(auto& v: speed_mags_){
+				v = 0.0;
+			}
 		}
     private:
         const float radius_;
-        const Eigen::Vector3f fcolor_;
-        const Eigen::Vector3f dcolor_;
+		const int kTraj_;
+		const QVector3D initial_dir_;
+		const float filter_alpha_;
 
 	    std::shared_ptr<QOpenGLTexture> panel_texture_;
         std::vector<GLfloat> panel_vertex_data_;
@@ -175,16 +179,8 @@ namespace IMUProject{
         std::vector<GLfloat> pointer_color_data_;
 	    std::vector<GLuint> pointer_index_data_;
 
-		std::vector<GLfloat> device_vertex_data_;
-		std::vector<GLfloat> device_color_data_;
-		std::vector<GLuint> device_index_data_;
-
-		GLuint device_vertex_buffer_;
-		GLuint device_color_buffer_;
-		GLuint device_index_buffer_;
-
-		QMatrix4x4 panel_modelview_;
-        QMatrix4x4 device_pointer_modelview_;
+        std::vector<QMatrix4x4> pointer_modelviews_;
+		std::vector<float> speed_mags_;
 
         QMatrix4x4 panel_view_matrix_;
         QMatrix4x4 panel_projection_matrix_;
@@ -194,7 +190,7 @@ namespace IMUProject{
 	    GLuint pointer_color_buffer_;
 	    GLuint pointer_index_buffer_;
 
-        static constexpr double max_speed_ = 2.5;
+        const float max_speed_;
         const float z_pos_;
 	    const float panel_alpha_;
 

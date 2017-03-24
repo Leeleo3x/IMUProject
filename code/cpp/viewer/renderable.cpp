@@ -361,77 +361,77 @@ namespace IMUProject{
         line_shader_->release();
     }
 
-
-    OfflineSpeedPanel::OfflineSpeedPanel(const float radius, const Eigen::Vector3f fcolor, const Eigen::Vector3f dcolor)
-            :radius_(radius), fcolor_(fcolor), dcolor_(dcolor), panel_alpha_(0.4f), z_pos_(-15.0f){
-        // first fill the data for drawing the circle
+    OfflineSpeedPanel::OfflineSpeedPanel(const int kTraj,
+                                         const std::vector<Eigen::Vector3f>& colors,
+                                         const float radius,
+                                         const float max_speed,
+                                         const QVector3D initial_dir)
+            :kTraj_(kTraj), initial_dir_(initial_dir), filter_alpha_(0.8f), radius_(radius),
+             max_speed_(max_speed), panel_alpha_(0.5f), z_pos_(-15.0f){
+        CHECK_EQ(colors.size(), kTraj);
         const float circle_divide = 200;
         panel_vertex_data_.reserve((int)circle_divide * 3 + 3);
         panel_color_data_.reserve((int)circle_divide * 4 + 4);
         panel_index_data_.reserve((int)circle_divide + 1);
 
-	    panel_vertex_data_ = {0.0f, 0.0f, z_pos_};
-	    panel_texcoord_data_ = {0.5f, 0.5f};
-	    panel_color_data_ = {0.0, 0.0, 0.0, panel_alpha_};
-	    panel_index_data_ = {0};
+        panel_vertex_data_ = {0.0f, 0.0f, z_pos_};
+        panel_texcoord_data_ = {0.5f, 0.5f};
+        panel_color_data_ = {0.0, 0.0, 0.0, panel_alpha_};
+        panel_index_data_ = {0};
         for(float i=0; i<circle_divide; i += 1.0f){
             float angle = (float)M_PI * 2.0f / circle_divide * i;
-	        const float x = radius_ * std::cos(angle);
-	        const float y = radius_ * std::sin(angle);
+            const float x = radius_ * std::cos(angle);
+            const float y = radius_ * std::sin(angle);
             panel_vertex_data_.push_back(x);
             panel_vertex_data_.push_back(y);
             panel_vertex_data_.push_back(z_pos_);
 
-	        panel_texcoord_data_.push_back(x / radius_ / 2.0f + 0.5f);
-	        panel_texcoord_data_.push_back(-y / radius_ / 2.0f + 0.5f);
+            panel_texcoord_data_.push_back(x / radius_ / 2.0f + 0.5f);
+            panel_texcoord_data_.push_back(-y / radius_ / 2.0f + 0.5f);
 
             panel_color_data_.push_back(0.0f);
             panel_color_data_.push_back(0.0f);
             panel_color_data_.push_back(0.0f);
             panel_color_data_.push_back(panel_alpha_);
-	        panel_index_data_.push_back((GLuint)i + 1);
+            panel_index_data_.push_back((GLuint)i + 1);
         }
-	    panel_index_data_.push_back(1);
+        panel_index_data_.push_back(1);
 
         constexpr float arrow_edge = 0.1f;
         const float arrow_length = 0.8f * radius_;
+
+        speed_mags_.resize((size_t)kTraj_, 0.0f);
 
         constexpr float arrow_ratio = 0.7;
         pointer_vertex_data_ = {0.0f, 0.0f, z_pos_,
                                 0.0f, arrow_length, z_pos_,
                                 -1*arrow_edge*arrow_ratio, arrow_length-arrow_edge, z_pos_,
                                 arrow_edge*arrow_ratio, arrow_length-arrow_edge, z_pos_};
-        pointer_color_data_ = {fcolor_[0], fcolor_[1], fcolor_[2], 1.0f,
-                               fcolor_[0], fcolor_[1], fcolor_[2], 1.0f,
-                               fcolor_[0], fcolor_[1], fcolor_[2], 1.0f,
-                               fcolor_[0], fcolor_[1], fcolor_[2], 1.0f,
-                               dcolor_[0], dcolor_[1], dcolor_[2], 1.0f,
-							   dcolor_[0], dcolor_[1], dcolor_[2], 1.0f,
-                               dcolor_[0], dcolor_[1], dcolor_[2], 1.0f,
-                               dcolor_[0], dcolor_[1], dcolor_[2], 1.0f,
-							   0.8f, 0.5f, 0.0f, 1.0f,
-							   0.8f, 0.5f, 0.0f, 1.0f,
-                               0.8f, 0.5f, 0.0f, 1.0f,
-                               0.8f, 0.5f, 0.0f, 1.0f};
-	    pointer_index_data_ = {0, 1, 1, 2, 1, 3};
 
-		device_vertex_data_ = {0.0f, 0.0f, z_pos_,
-							   -radius_ * 0.2f, radius_*0.3f, z_pos_,
-							   radius_ * 0.2f, radius_*0.3f, z_pos_};
-		device_color_data_ = {0.0f, 0.0f, 0.0f, 1.0f,
-							  0.0f, 0.0f, 0.0f, 1.0f,
-							  0.0f, 0.0f, 0.0f, 1.0f};
-		device_index_data_ = {0, 1, 2};
+        for(auto i=0; i<colors.size(); ++i){
+            for(auto j=0; j < pointer_vertex_data_.size() / 3; ++j){
+                pointer_color_data_.push_back(colors[i][0]);
+                pointer_color_data_.push_back(colors[i][1]);
+                pointer_color_data_.push_back(colors[i][2]);
+                pointer_color_data_.push_back(1.0f);
+            }
+        }
 
-		// Set default view matrices
-		panel_view_matrix_.setToIdentity();
-		//panel_view_matrix_.lookAt(QVector3D(0.0f, -radius_/2.0f, z_pos_ + 1.0f), QVector3D(0.0f, radius_/2.0f, z_pos_), QVector3D(0.0f, 1.0f, 0.0f));
-		panel_view_matrix_.lookAt(QVector3D(0.0f, 0.0f, z_pos_ + 0.1f), QVector3D(0.0f, 0.0f, z_pos_), QVector3D(0.0f, 1.0f, 0.0f));
+        pointer_index_data_ = {0, 1, 1, 2, 1, 3};
 
-		constexpr float fov = 100.0f;
-		panel_projection_matrix_.setToIdentity();
-		//panel_projection_matrix_.perspective(fov, 1.0f, 0.0f, 20.0f);
+        panel_view_matrix_.setToIdentity();
+        //panel_view_matrix_.lookAt(QVector3D(0.0f, -radius_/2.0f, z_pos_ + 1.0f), QVector3D(0.0f, radius_/2.0f, z_pos_), QVector3D(0.0f, 1.0f, 0.0f));
+        panel_view_matrix_.lookAt(QVector3D(0.0f, 0.0f, z_pos_ + 0.1f), QVector3D(0.0f, 0.0f, z_pos_), QVector3D(0.0f, 1.0f, 0.0f));
+
+        //constexpr float fov = 100.0f;
+        panel_projection_matrix_.setToIdentity();
+        //panel_projection_matrix_.perspective(fov, 1.0f, 0.0f, 20.0f);
         panel_projection_matrix_.ortho(-radius_, radius_, -radius_, radius_, 0.0f, 10.0f);
+
+        pointer_modelviews_.resize((size_t)kTraj);
+        for(auto& mv: pointer_modelviews_){
+            mv = panel_view_matrix_;
+        }
     }
 
     void OfflineSpeedPanel::InitGL() {
@@ -498,20 +498,20 @@ namespace IMUProject{
 	    glBufferData(GL_ELEMENT_ARRAY_BUFFER, pointer_index_data_.size() * sizeof(GLuint),
 	                 pointer_index_data_.data(), GL_STATIC_DRAW);
 
-		glGenBuffers(1, &device_vertex_buffer_);
-		glBindBuffer(GL_ARRAY_BUFFER, device_vertex_buffer_);
-		glBufferData(GL_ARRAY_BUFFER, device_vertex_data_.size() * sizeof(GLfloat),
-					 device_vertex_data_.data(), GL_STATIC_DRAW);
-
-		glGenBuffers(1, &device_color_buffer_);
-		glBindBuffer(GL_ARRAY_BUFFER, device_color_buffer_);
-		glBufferData(GL_ARRAY_BUFFER, device_color_data_.size() * sizeof(GLfloat),
-					 device_color_data_.data(), GL_STATIC_DRAW);
-
-		glGenBuffers(1, &device_index_buffer_);
-		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, device_index_buffer_);
-		glBufferData(GL_ELEMENT_ARRAY_BUFFER, device_index_data_.size() * sizeof(GLuint),
-					 device_index_data_.data(), GL_STATIC_DRAW);
+//		glGenBuffers(1, &device_vertex_buffer_);
+//		glBindBuffer(GL_ARRAY_BUFFER, device_vertex_buffer_);
+//		glBufferData(GL_ARRAY_BUFFER, device_vertex_data_.size() * sizeof(GLfloat),
+//					 device_vertex_data_.data(), GL_STATIC_DRAW);
+//
+//		glGenBuffers(1, &device_color_buffer_);
+//		glBindBuffer(GL_ARRAY_BUFFER, device_color_buffer_);
+//		glBufferData(GL_ARRAY_BUFFER, device_color_data_.size() * sizeof(GLfloat),
+//					 device_color_data_.data(), GL_STATIC_DRAW);
+//
+//		glGenBuffers(1, &device_index_buffer_);
+//		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, device_index_buffer_);
+//		glBufferData(GL_ELEMENT_ARRAY_BUFFER, device_index_data_.size() * sizeof(GLuint),
+//					 device_index_data_.data(), GL_STATIC_DRAW);
 
     }
 
@@ -520,7 +520,7 @@ namespace IMUProject{
 	    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 	    glEnable(GL_TEXTURE_2D);
 	    CHECK(tex_shader_->bind());
-        tex_shader_->setUniformValue("m_mat", panel_modelview_);
+        tex_shader_->setUniformValue("m_mat", panel_view_matrix_);
         tex_shader_->setUniformValue("p_mat", panel_projection_matrix_);
         glBindBuffer(GL_ARRAY_BUFFER, panel_vertex_buffer_);
         tex_shader_->setAttributeBuffer("pos", GL_FLOAT, 0, 3);
@@ -540,35 +540,18 @@ namespace IMUProject{
         // Render pointers
 	    CHECK(line_shader_->bind());
         glLineWidth(5.0f);
-        //Initial heading
-		line_shader_->setUniformValue("m_mat", panel_modelview_);
-		line_shader_->setUniformValue("p_mat", panel_projection_matrix_);
-		glBindBuffer(GL_ARRAY_BUFFER, pointer_vertex_buffer_);
-		line_shader_->setAttributeBuffer("pos", GL_FLOAT, 0, 3);
-		glBindBuffer(GL_ARRAY_BUFFER, pointer_color_buffer_);
-		line_shader_->setAttributeBuffer("v_color", GL_FLOAT, 8 * 4 * sizeof(GLfloat), 4);
-		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, pointer_index_buffer_);
-		glDrawElements(GL_LINES, (GLsizei)pointer_index_data_.size(), GL_UNSIGNED_INT, 0);
+        for(int i=0; i<kTraj_; ++i){
+            line_shader_->setUniformValue("p_mat", panel_projection_matrix_);
+            line_shader_->setUniformValue("m_mat", pointer_modelviews_[i]);
 
-        // forward heading
-		line_shader_->setUniformValue("m_mat", panel_view_matrix_);
-	    glBindBuffer(GL_ARRAY_BUFFER, pointer_color_buffer_);
-	    line_shader_->setAttributeBuffer("v_color", GL_FLOAT, 0, 4);
-	    glDrawElements(GL_LINES, (GLsizei)pointer_index_data_.size(), GL_UNSIGNED_INT, 0);
-
-        // device heading
-		line_shader_->setUniformValue("m_mat", device_pointer_modelview_);
-	    glBindBuffer(GL_ARRAY_BUFFER, pointer_color_buffer_);
-	    line_shader_->setAttributeBuffer("v_color", GL_FLOAT, 4 * 4 * sizeof(GLfloat), 4);
-	    glDrawElements(GL_LINES, (GLsizei)pointer_index_data_.size(), GL_UNSIGNED_INT, 0);
-
-        // Render device icon
-//		glBindBuffer(GL_ARRAY_BUFFER, device_vertex_buffer_);
-//		line_shader_->setAttributeBuffer("pos", GL_FLOAT, 0, 3);
-//		glBindBuffer(GL_ARRAY_BUFFER, device_color_buffer_);
-//		line_shader_->setAttributeBuffer("v_color", GL_FLOAT, 0, 4);
-//		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, device_index_buffer_);
-//		glDrawElements(GL_TRIANGLES, (GLsizei)device_index_data_.size(), GL_UNSIGNED_INT, 0);
+            glBindBuffer(GL_ARRAY_BUFFER, pointer_vertex_buffer_);
+            line_shader_->setAttributeBuffer("pos", GL_FLOAT, 0, 3);
+            glBindBuffer(GL_ARRAY_BUFFER, pointer_color_buffer_);
+            line_shader_->setAttributeBuffer("v_color", GL_FLOAT, i * 16 * sizeof(GLfloat), 4);
+            //line_shader_->setAttributeBuffer("v_color", GL_FLOAT, 0, 4);
+            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, pointer_index_buffer_);
+            glDrawElements(GL_LINES, (GLsizei)pointer_index_data_.size(), GL_UNSIGNED_INT, 0);
+        }
 		line_shader_->release();
 
     }

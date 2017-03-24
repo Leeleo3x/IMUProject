@@ -19,8 +19,6 @@ namespace IMUProject{
 		setFocusPolicy(Qt::StrongFocus);
         canvas_.reset(new Canvas(canvas_width, canvas_height));
 		navigation_.reset(new Navigation(50.f, (float)width() / (float)height(), (float)canvas_width, (float)canvas_height));
-        speed_panel_.reset(new OfflineSpeedPanel());
-
 //		QImage traj_legend_image("../../viewer/resource/images/traj_legend.png");
 //		legend_areas_.emplace_back(width() / 2, 0.0, traj_legend_image.width(), traj_legend_image.height());
 //		legends_.emplace_back(new LegendRenderer(traj_legend_image.width(), traj_legend_image.height(), traj_legend_image));
@@ -33,28 +31,14 @@ namespace IMUProject{
 		const double fill_ratio = 0.8;
 		double ratio = -1;
 		char buffer[128] = {};
-		Eigen::Vector4d bbox(-1, -1, -1, -1);
 		Eigen::Vector3d centroid(-1, -1, -1);
+
+        std::vector<Eigen::Vector3f> traj_colors;
 
 		auto add_trajectory = [&](std::vector<Eigen::Vector3d>& traj, const std::vector<Eigen::Quaterniond>& orientation,
 		                          const Eigen::Vector3f color, const float frustum_size){
 			CHECK_GT(traj.size(), 0);
 			if(max_distance < 0) {
-//				for (auto i = 0; i < traj.size(); ++i) {
-//					if (bbox[0] < 0 || traj[i][0] < bbox[0]) {
-//						bbox[0] = traj[i][0];
-//					}
-//					if (bbox[1] < 0 || traj[i][0] > bbox[0]) {
-//						bbox[1] = traj[i][0];
-//					}
-//					if (bbox[2] < 0 || traj[i][1] < bbox[2]) {
-//						bbox[2] = traj[i][1];
-//					}
-//					if (bbox[3] < 0 || traj[i][1] > bbox[3]) {
-//						bbox[3] = traj[i][1];
-//					}
-//				}
-//                centroid = Eigen::Vector3d((bbox[0] + bbox[1]) / 2, (bbox[2] + bbox[3]) / 2, 1.0);
                 centroid = std::accumulate(traj.begin(), traj.end(), Eigen::Vector3d(0, 0, 0)) / (double)traj.size();
 				double traj_max_distance = -1.0;
 				for (auto i = 0; i < traj.size(); ++i) {
@@ -74,6 +58,7 @@ namespace IMUProject{
 			view_frustum_.emplace_back(new ViewFrustum(frustum_size, true));
 			positions_.push_back(traj);
 			orientations_.push_back(orientation);
+            traj_colors.push_back(color);
 		};
 
 		IMUDataset dataset(path);
@@ -128,6 +113,8 @@ namespace IMUProject{
 
 		add_trajectory(gt_position, gt_orientation, tango_traj_color, 0.5f);
 
+        speed_panel_.reset(new OfflineSpeedPanel((int)traj_colors.size(), traj_colors, 1.0f, 1.5f * ratio));
+
         // Sanity checks
 		CHECK_EQ(view_frustum_.size(), trajectories_.size());
 		CHECK_EQ(view_frustum_.size(), positions_.size());
@@ -166,7 +153,7 @@ namespace IMUProject{
 
 	void MainWidget::paintGL() {
 		canvas_->Render(*navigation_);
-		for(auto i=0; i<1; ++i){
+		for(auto i=0; i<view_frustum_.size(); ++i){
 			trajectories_[i]->Render(*navigation_);
 			view_frustum_[i]->Render(*navigation_);
 		}
@@ -191,15 +178,16 @@ namespace IMUProject{
 		    trajectories_[i]->SetRenderLength(ind);
 		    view_frustum_[i]->UpdateCameraPose(positions_[i][ind], orientations_[i][ind]);
 	    }
+
+        std::vector<Eigen::Vector3d> speeds;
         if(ind > 0){
-            Eigen::Vector3d forward_dir = (positions_[ref_traj][ind] - positions_[ref_traj][ind - 1])
-                                          / (ts_[ind] - ts_[ind-1]);
-            forward_dir[2] = 0.0;
-            Eigen::Vector3d device_dir = orientations_[ref_traj][ind] * Eigen::Vector3d(0, 0, -1);
-            device_dir[2] = 0.0;
-            speed_panel_->UpdateDirection(forward_dir, device_dir);
-        }else{
-            speed_panel_->UpdateDirection(Eigen::Vector3d(0, 1, 0), Eigen::Vector3d(0, 1, 0));
+            for(auto i=0; i<view_frustum_.size(); ++i){
+                Eigen::Vector3d speed = (positions_[i][ind] - positions_[i][ind - 1])
+                                        / (ts_[ind] - ts_[ind - 1]);
+                speed[2] = 0.0;
+                speeds.push_back(speed);
+            }
+            speed_panel_->UpdateDirections(speeds);
         }
 
         navigation_->UpdateNavitation(positions_[ref_traj][ind], orientations_[ref_traj][ind]);
@@ -248,6 +236,7 @@ namespace IMUProject{
 			}
             case(Qt::Key_R):{
                 render_count_ = 0;
+                speed_panel_->ResetFilters();
                 is_rendering_ = true;
             }
 			default:
