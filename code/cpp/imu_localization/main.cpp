@@ -14,13 +14,13 @@
 
 #include "imu_localization.h"
 
-DEFINE_string(model_path, "../../../../models/model_0321_full_w200_s20", "Path to model");
+DEFINE_string(model_path, "../../../../models/model_0326_full_w200_s20", "Path to model");
 DEFINE_string(mapinfo_path, "default", "path to map info");
 DEFINE_int32(log_interval, 1000, "logging interval");
-DEFINE_string(color, "blue", "color");
+DEFINE_string(color, "yellow", "color");
 DEFINE_double(weight_vs, 1.0, "weight_vs");
 DEFINE_double(weight_ls, 1.0, "weight_ls");
-DEFINE_string(id, "full", "suffix");
+DEFINE_string(id, "const", "suffix");
 
 DEFINE_bool(run_global, true, "Run global optimization at the end");
 DEFINE_bool(tango_ori, false, "Use ground truth orientation");

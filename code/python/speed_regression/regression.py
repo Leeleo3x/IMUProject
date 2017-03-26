@@ -22,7 +22,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('list')
     parser.add_argument('--window', default=200, type=int)
-    parser.add_argument('--step', default=10, type=int)
+    parser.add_argument('--step', default=20, type=int)
     parser.add_argument('--feature', default='direct_gravity', type=str)
     parser.add_argument('--target', default='local_speed_gravity', type=str)
     parser.add_argument('--frq_threshold', default=50, type=int)
