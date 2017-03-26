@@ -14,7 +14,7 @@
 
 #include "imu_localization.h"
 
-DEFINE_string(model_path, "../../../../models/model_0324_full_w200_s20", "Path to model");
+DEFINE_string(model_path, "../../../../models/model_0321_full_w200_s20", "Path to model");
 DEFINE_string(mapinfo_path, "default", "path to map info");
 DEFINE_int32(log_interval, 1000, "logging interval");
 DEFINE_string(color, "blue", "color");
@@ -133,7 +133,7 @@ int main(int argc, char** argv){
     if(FLAGS_color == "yellow"){
         traj_color = Eigen::Vector3d(128, 128, 0);
     }else if(FLAGS_color == "green"){
-        traj_color = Eigen::Vector3d(0, 128, 0);
+        traj_color = Eigen::Vector3d(0, 255, 0);
     }else if(FLAGS_color == "brown"){
         traj_color = Eigen::Vector3d(0, 128, 128);
     }

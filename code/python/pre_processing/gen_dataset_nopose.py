@@ -1,5 +1,6 @@
 import sys
 import os
+import math
 import argparse
 import numpy as np
 import quaternion
@@ -26,11 +27,12 @@ if __name__ == '__main__':
 
     rv_input[:, [1, 2, 3, 4]] = rv_input[:, [4, 1, 2, 3]]
 
-    rv_output = np.copy(rv_input)
-    imu_to_tango = geometry.quaternion_from_two_vectors(np.array([0, 0, -1]), np.array([0, 1, 0]))
+    init_tango_quat = [math.sqrt(2.0)/2.0, math.sqrt(2.0)/2.0, 0.0, 0.0]
+    init_imu_quat = quaternion.quaternion(0.567463, 0.436472, 0.411796, 0.563828) * quaternion.quaternion(*rv_input[0, 1:]).conj()
+
     for i in range(rv_input.shape[0]):
-        rv_tango = imu_to_tango * quaternion.quaternion(*rv_input[i, 1:])
-        rv_output[i, 1:] = np.array([rv_tango.w, rv_tango.x, rv_tango.y, rv_tango.z])
+        q = init_imu_quat * quaternion.quaternion(*rv_input[i, 1:])
+        rv_input[i, 1:] = np.array([q.w, q.x, q.y, q.z])
 
     output_dir = args.dir + '/processed'
     if not os.path.exists(output_dir):
@@ -47,7 +49,7 @@ if __name__ == '__main__':
     gravity_output = gen_dataset.interpolate_3dvector_linear(gravity_input, output_timestamp)
 
     fake_pose_data = np.zeros([rv_input.shape[0], 7], dtype=float)
-    fake_pose_data[:, -4:] = rv_output[:, 1:]
+    fake_pose_data[:, -4:] = init_tango_quat
 
     column_list = 'time,gyro_x,gyro_y,gyro_z,acce_x'.split(',') + \
                   'acce_y,acce_z,linacce_x,linacce_y,linacce_z,grav_x,grav_y,grav_z'.split(',') + \

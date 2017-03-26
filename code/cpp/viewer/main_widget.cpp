@@ -239,6 +239,20 @@ namespace IMUProject{
                 speed_panel_->ResetFilters();
                 is_rendering_ = true;
             }
+			case(Qt::Key_Left):{
+				if(render_count_ > 10) {
+					render_count_ -= 10;
+					UpdateCameraInfo(render_count_);
+					update();
+				}
+				break;
+			}
+			case(Qt::Key_Right):{
+				render_count_ = render_count_ < ts_.size() - 10 ? render_count_ + 10 : 0;
+				UpdateCameraInfo(render_count_);
+				update();
+				break;
+			}
 			default:
 				break;
 		}

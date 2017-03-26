@@ -16,7 +16,7 @@ namespace IMUProject{
         Eigen::Vector3f camera_center_back = pos_f + global_backward * 5.0f;
 
         camera_centers_[BACK] = QVector3D(camera_center_back[0], back_height_, -1.0f * camera_center_back[1]);
-        camera_centers_[CENTER] = QVector3D(-10.0f, center_height_, 0.0f);
+        camera_centers_[CENTER] = QVector3D(0.0f, center_height_, 0.0f);
         camera_centers_[PERSPECTIVE]  =QVector3D(0.0f, perspective_height_, (canvas_height_ - pos[1]) / 2.0f);
         camera_centers_[TOP] = QVector3D(0.0f, top_height_, 0.0f);
 
@@ -32,7 +32,7 @@ namespace IMUProject{
 
         fovs_[BACK] = 50.0f;
         fovs_[CENTER] = 50.0f;
-        fovs_[PERSPECTIVE] = 30.0f;
+        fovs_[PERSPECTIVE] = 40.0f;
         fovs_[TOP] = 50.0f;
 
         if(render_mode_ == TRANSITION) {
