@@ -35,6 +35,9 @@ namespace IMUProject{
 
         std::vector<Eigen::Vector3f> traj_colors;
 
+		const Eigen::Vector3f ori_traj_color(0.0, 0.8, 0.0);
+		const Eigen::Vector3f mag_traj_color(0.5, 0, 0.5);
+
 		auto add_trajectory = [&](std::vector<Eigen::Vector3d>& traj, const std::vector<Eigen::Quaterniond>& orientation,
 		                          const Eigen::Vector3f color, const float frustum_size){
 			CHECK_GT(traj.size(), 0);
@@ -78,10 +81,64 @@ namespace IMUProject{
 			ori = imu_to_tango * ori;
 		}
 
-		sprintf(buffer, "%s/result_full.csv", path.c_str());
 		string line;
+
+//		sprintf(buffer, "%s/result_const.csv", path.c_str());
+//		ifstream const_in(buffer);
+//		if(const_in.is_open()){
+//			printf("Loading %s\n", buffer);
+//			std::vector<Eigen::Vector3d> traj;
+//			std::getline(const_in, line);
+//			int count = 0;
+//			while(std::getline(const_in, line)) {
+//				std::vector<double> values = ParseCommaSeparatedLine(line);
+//				if(count %  frame_interval_ == 0) {
+//					traj.emplace_back(values[2], values[3], values[4]);
+//				}
+//				count++;
+//			}
+//			add_trajectory(traj, imu_orientation, const_traj_color, 0.5f);
+//		}
+
+		sprintf(buffer, "%s/result_ori_only.csv", path.c_str());
+		ifstream ori_in(buffer);
+		if(ori_in.is_open()){
+			printf("Loading %s\n", buffer);
+			std::vector<Eigen::Vector3d> traj;
+			std::getline(ori_in, line);
+			int count = 0;
+			while(std::getline(ori_in, line)) {
+				std::vector<double> values = ParseCommaSeparatedLine(line);
+				if(count %  frame_interval_ == 0) {
+					traj.emplace_back(values[2], values[3], values[4]);
+				}
+				count++;
+			}
+			add_trajectory(traj, imu_orientation, ori_traj_color, 0.5f);
+		}
+
+		sprintf(buffer, "%s/result_mag_only.csv", path.c_str());
+		ifstream mag_in(buffer);
+		if(mag_in.is_open()){
+			printf("Loading %s\n", buffer);
+			std::vector<Eigen::Vector3d> traj;
+			std::getline(mag_in, line);
+			int count = 0;
+			while(std::getline(mag_in, line)) {
+				std::vector<double> values = ParseCommaSeparatedLine(line);
+				if(count %  frame_interval_ == 0) {
+					traj.emplace_back(values[2], values[3], values[4]);
+
+				}
+				count++;
+			}
+			add_trajectory(traj, imu_orientation, mag_traj_color, 0.5f);
+		}
+
+		sprintf(buffer, "%s/result_full.csv", path.c_str());
 		ifstream full_in(buffer);
 		if(full_in.is_open()){
+			printf("Loading %s\n", buffer);
 			std::vector<Eigen::Vector3d> traj;
 			std::getline(full_in, line);
 			int count = 0;
@@ -93,22 +150,6 @@ namespace IMUProject{
 				count++;
 			}
 			add_trajectory(traj, imu_orientation, full_traj_color, 1.0f);
-		}
-
-		sprintf(buffer, "%s/result_const.csv", path.c_str());
-		ifstream const_in(buffer);
-		if(const_in.is_open()){
-			std::vector<Eigen::Vector3d> traj;
-			std::getline(const_in, line);
-			int count = 0;
-			while(std::getline(const_in, line)) {
-				std::vector<double> values = ParseCommaSeparatedLine(line);
-				if(count %  frame_interval_ == 0) {
-					traj.emplace_back(values[2], values[3], values[4]);
-				}
-				count++;
-			}
-			add_trajectory(traj, imu_orientation, const_traj_color, 0.5f);
 		}
 
 		add_trajectory(gt_position, gt_orientation, tango_traj_color, 0.5f);

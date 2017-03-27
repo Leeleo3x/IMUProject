@@ -20,6 +20,13 @@
 
 namespace IMUProject{
 
+	enum RegressionOption{
+		FULL,
+		MAG,
+		ORI,
+		CONST
+	};
+
     struct IMULocalizationOption{
         int local_opt_interval_ = 400;
         int local_opt_window_ = 1000;
@@ -27,6 +34,10 @@ namespace IMUProject{
         int global_opt_interval_ = 2000;
         double weight_ls_ = 1.0;
         double weight_vs_ = 1.0;
+
+	    RegressionOption reg_option_ = FULL;
+
+	    double const_speed_ = 1.0;
 
         static constexpr int reg_interval_ = 50;
         static constexpr int reg_window_ = 200;
