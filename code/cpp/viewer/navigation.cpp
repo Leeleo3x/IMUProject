@@ -16,23 +16,27 @@ namespace IMUProject{
         Eigen::Vector3f camera_center_back = pos_f + global_backward * 5.0f;
 
         camera_centers_[BACK] = QVector3D(camera_center_back[0], back_height_, -1.0f * camera_center_back[1]);
-        camera_centers_[CENTER] = QVector3D(0.0f, center_height_, 0.0f);
+        camera_centers_[CENTER] = QVector3D(0.0, center_height_, 0.0f);
         camera_centers_[PERSPECTIVE]  =QVector3D(0.0f, perspective_height_, (canvas_height_ - pos[1]) / 2.0f);
         camera_centers_[TOP] = QVector3D(0.0f, top_height_, 0.0f);
+        camera_centers_[SIDE] = QVector3D((-pos[0] - canvas_width_) / 2.0f, perspective_height_, -1 * pos_f[1]);
 
         center_points_[BACK] = QVector3D((float)pos[0], 1.0f, -1*(float)pos[1]);
         center_points_[CENTER] = QVector3D(pos[0], trajectory_height_, -1 * pos[1]);
         center_points_[PERSPECTIVE] = QVector3D(0.0f, 0.0f, -0.5f * pos[1]);
         center_points_[TOP] = QVector3D(0.0f, 0.0f, 0.0f);
+        center_points_[SIDE] = QVector3D(0.0f, 0.0f, -1 * pos_f[1]);
 
         up_dirs_[BACK] = QVector3D(0.0f, 1.0f, 0.0f);
         up_dirs_[CENTER] = QVector3D(0.0f, 1.0f, 0.0f);
         up_dirs_[PERSPECTIVE] = QVector3D(0.0f, 1.0f, 0.0f);
         up_dirs_[TOP] = QVector3D(0.0f, 0.0f, -1.0f);
+        up_dirs_[SIDE] = QVector3D(0.0f, 1.0f, 0.0f);
 
         fovs_[BACK] = 50.0f;
         fovs_[CENTER] = 50.0f;
         fovs_[PERSPECTIVE] = 45.0f;
+        fovs_[SIDE] = 30.0f;
         fovs_[TOP] = 50.0f;
 
         if(render_mode_ == TRANSITION) {

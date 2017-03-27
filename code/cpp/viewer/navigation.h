@@ -15,6 +15,7 @@ namespace IMUProject {
 		BACK,
 		TOP,
 		PERSPECTIVE,
+		SIDE,
 		TRANSITION,
 		NUM_MODE
 	};

@@ -24,6 +24,7 @@ namespace IMUProject{
 		FULL,
 		MAG,
 		ORI,
+        Z_ONLY,
 		CONST
 	};
 

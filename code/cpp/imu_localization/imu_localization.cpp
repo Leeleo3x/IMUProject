@@ -105,7 +105,9 @@ namespace IMUProject{
 	        }else if(option_.reg_option_ == ORI){
 		        double ang = std::atan2(ls_z, ls_x);
 		        local_speed_.emplace_back(option_.const_speed_ * std::cos(ang), 0, option_.const_speed_ * std::sin(ang));
-	        }else{
+	        }else if(Z_ONLY){
+				local_speed_.emplace_back(ls_x, 0, 0);
+			}else{
 		        CHECK(true) << "Unrecognized regression type";
 	        }
 
