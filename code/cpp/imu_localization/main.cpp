@@ -21,6 +21,7 @@ DEFINE_string(color, "blue", "color");
 DEFINE_double(weight_vs, 1.0, "weight_vs");
 DEFINE_double(weight_ls, 1.0, "weight_ls");
 DEFINE_string(id, "full", "suffix");
+DEFINE_string(preset, "none", "preset mode");
 
 DEFINE_bool(run_global, true, "Run global optimization at the end");
 DEFINE_bool(tango_ori, false, "Use ground truth orientation");
@@ -51,13 +52,6 @@ int main(int argc, char** argv){
         LOG(INFO) << buffer << " loaded";
     }
 
-    // crete trajectory instance
-    IMUProject::IMULocalizationOption option;
-    const double sigma = 0.2;
-    option.weight_ls_ = FLAGS_weight_ls;
-    option.weight_vs_ = FLAGS_weight_vs;
-    IMUProject::IMUTrajectory trajectory(Eigen::Vector3d(0, 0, 0), dataset.GetPosition()[0], regressors, sigma, option);
-
     // Run the system
     const int N = (int)dataset.GetTimeStamp().size();
     const std::vector<double>& ts = dataset.GetTimeStamp();
@@ -75,6 +69,40 @@ int main(int argc, char** argv){
             v = rv_to_tango * v;
         }
     }
+
+	Eigen::Vector3d traj_color(0, 0, 255);
+	if(FLAGS_color == "yellow"){
+		traj_color = Eigen::Vector3d(128, 128, 0);
+	}else if(FLAGS_color == "green"){
+		traj_color = Eigen::Vector3d(0, 128, 0);
+	}else if(FLAGS_color == "brown"){
+		traj_color = Eigen::Vector3d(0, 128, 128);
+	}
+
+	// crete trajectory instance
+	IMUProject::IMULocalizationOption option;
+	const double sigma = 0.2;
+	option.weight_ls_ = FLAGS_weight_ls;
+	option.weight_vs_ = FLAGS_weight_vs;
+	if(FLAGS_preset == "full"){
+		option.reg_option_ = IMUProject::FULL;
+		FLAGS_id = "full";
+		traj_color = Eigen::Vector3d(0, 0, 255);
+	}else if(FLAGS_preset == "ori_only"){
+		option.reg_option_ = IMUProject::ORI;
+		FLAGS_id = "ori_only";
+		traj_color = Eigen::Vector3d(0, 200, 0);
+	}else if(FLAGS_preset == "mag_only"){
+		option.reg_option_ = IMUProject::MAG;
+		FLAGS_id = "mag_only";
+		traj_color = Eigen::Vector3d(139, 0, 139);
+	}else if(FLAGS_preset == "const"){
+		option.reg_option_ = IMUProject::CONST;
+		FLAGS_id = "const";
+		traj_color = Eigen::Vector3d(150, 150, 0);
+	}
+
+	IMUProject::IMUTrajectory trajectory(Eigen::Vector3d(0, 0, 0), dataset.GetPosition()[0], regressors, sigma, option);
 
     float start_t = (float)cv::getTickCount();
 
@@ -129,14 +157,6 @@ int main(int argc, char** argv){
     const float fps_all = (float)trajectory.GetNumFrames() / (((float)cv::getTickCount() - start_t) / (float)cv::getTickFrequency());
     printf("Overall framerate: %.3f\n", fps_all);
 
-    Eigen::Vector3d traj_color(0, 0, 255);
-    if(FLAGS_color == "yellow"){
-        traj_color = Eigen::Vector3d(128, 128, 0);
-    }else if(FLAGS_color == "green"){
-        traj_color = Eigen::Vector3d(0, 255, 0);
-    }else if(FLAGS_color == "brown"){
-        traj_color = Eigen::Vector3d(0, 128, 128);
-    }
 
     sprintf(buffer, "%s/result_trajectory_%s.ply", argv[1], FLAGS_id.c_str());
     IMUProject::WriteToPly(std::string(buffer), dataset.GetTimeStamp().data(), trajectory.GetPositions().data(),
