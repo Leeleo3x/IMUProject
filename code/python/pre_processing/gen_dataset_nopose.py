@@ -15,15 +15,16 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('dir', type=str)
     parser.add_argument('--skip', default=2000, type=int)
+    parser.add_argument('--skip_end', default=600, type=int)
     args = parser.parse_args()
 
     rv_mag = 100
 
-    gyro_input = np.genfromtxt(args.dir + '/gyro.txt')[args.skip:-args.skip]
-    acce_input = np.genfromtxt(args.dir + '/acce.txt')[args.skip:-args.skip]
-    linacce_input = np.genfromtxt(args.dir + '/linacce.txt')[args.skip:-args.skip]
-    gravity_input = np.genfromtxt(args.dir + '/gravity.txt')[args.skip:-args.skip]
-    rv_input = np.genfromtxt(args.dir + '/orientation.txt')[args.skip+rv_mag:-args.skip-rv_mag]
+    gyro_input = np.genfromtxt(args.dir + '/gyro.txt')[args.skip:-args.skip_end]
+    acce_input = np.genfromtxt(args.dir + '/acce.txt')[args.skip:-args.skip_end]
+    linacce_input = np.genfromtxt(args.dir + '/linacce.txt')[args.skip:-args.skip_end]
+    gravity_input = np.genfromtxt(args.dir + '/gravity.txt')[args.skip:-args.skip_end]
+    rv_input = np.genfromtxt(args.dir + '/orientation.txt')[args.skip+rv_mag:-args.skip_end-rv_mag]
 
     rv_input[:, [1, 2, 3, 4]] = rv_input[:, [4, 1, 2, 3]]
 
