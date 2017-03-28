@@ -154,7 +154,7 @@ namespace IMUProject{
 
 
 
-		add_trajectory(gt_position, gt_orientation, tango_traj_color, 0.5f);
+//		add_trajectory(gt_position, gt_orientation, tango_traj_color, 0.5f);
 
         speed_panel_.reset(new OfflineSpeedPanel((int)traj_colors.size(), traj_colors, 1.0f, 1.5f * ratio));
 

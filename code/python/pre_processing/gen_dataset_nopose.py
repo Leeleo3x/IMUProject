@@ -14,8 +14,8 @@ from algorithms import geometry
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('dir', type=str)
-    parser.add_argument('--skip', default=2000, type=int)
-    parser.add_argument('--skip_end', default=600, type=int)
+    parser.add_argument('--skip', default=1700, type=int)
+    parser.add_argument('--skip_end', default=1600, type=int)
     args = parser.parse_args()
 
     rv_mag = 100
