@@ -18,6 +18,7 @@ import matplotlib.pyplot as plt
 import plyfile
 import pandas
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) + '/..')
+from algorithms import geometry
 from utility.write_trajectory_to_ply import write_ply_to_file
 
 
@@ -78,17 +79,6 @@ def interpolate_3dvector_linear(input, output_timestamp):
     func = scipy.interpolate.interp1d(input[:, 0], input[:, 1:], axis=0)
     interpolated = func(output_timestamp)
     return np.concatenate([output_timestamp[:, np.newaxis], interpolated], axis=1)
-
-
-def write_file(path, data, header=''):
-    with open(path, 'w') as f:
-        if len(header) > 0:
-            f.write(header + '\n')
-        for row in data:
-            f.write('{:.0f}'.format(row[0]))
-            for j in range(data.shape[1] - 1):
-                f.write(' {:.6f}'.format(row[j+1]))
-            f.write('\n')
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -162,6 +152,15 @@ if __name__ == '__main__':
             output_linacce_linear = interpolate_3dvector_linear(linacce_data, output_timestamp)
             output_gravity_linear = interpolate_3dvector_linear(gravity_data, output_timestamp)
             # output_magnet_linear = interpolate_3dvector_linear(magnet_data, output_timestamp)
+
+            # convert gyro, accelerometer and linear acceleration to stablized IMU frame
+            gyro_stab = geometry.align_eular_rotation_with_gravity(output_gyro_linear[:, 1:],
+                                                                   output_gravity_linear[:, 1:])
+            acce_stab = geometry.align_3dvector_with_gravity(output_accelerometer_linear[:, 1:],
+                                                             output_gravity_linear[:, 1:])
+            linacce_stab = geometry.align_3dvector_with_gravity(output_linacce_linear[:, 1:],
+                                                                output_gravity_linear[:, 1:])
+
             # swap from x,y,z,w to w,x,y,z
             orientation_data[:, [1, 2, 3, 4]] = orientation_data[:, [4, 1, 2, 3]]
             # Convert rotation vector to quaternion
@@ -170,7 +169,9 @@ if __name__ == '__main__':
             # construct a Pandas DataFrame
             column_list = 'time,gyro_x,gyro_y,gyro_z,acce_x'.split(',') + \
                           'acce_y,acce_z,linacce_x,linacce_y,linacce_z,grav_x,grav_y,grav_z'.split(',') + \
-                          'pos_x,pos_y,pos_z,ori_w,ori_x,ori_y,ori_z,rv_w,rv_x,rv_y,rv_z'.split(',')
+                          'pos_x,pos_y,pos_z,ori_w,ori_x,ori_y,ori_z,rv_w,rv_x,rv_y,rv_z'.split(',') + \
+                          'gyro_stab_x,gyro_stab_y,gyro_stab_z,acce_stab_x,acce_stab_y,acce_stab_z'.split(',') + \
+                          'linacce_stab_x,linacce_stab_y,linacce_stab_z'.split(',')
 
             data_mat = np.concatenate([output_gyro_linear,
                                        output_accelerometer_linear[:, 1:],
@@ -178,13 +179,10 @@ if __name__ == '__main__':
                                        output_gravity_linear[:, 1:],
                                        pose_data[:, 1:4],
                                        pose_data[:, -4:],
-                                       output_orientation[:, 1:]], axis=1)
+                                       output_orientation[:, 1:],
+                                       gyro_stab, acce_stab, linacce_stab], axis=1)
 
             # write individual files for convenience
-            # write_file(output_folder + '/output_gyro_linear.txt', output_gyro_linear)
-            # write_file(output_folder + '/linacce_linear.txt', output_linacce_linear)
-            # write_file(output_folder + '/gravity_linear.txt', output_gravity_linear)
-            # write_file(output_folder + '/acce_linear.txt', output_accelerometer_linear)
 
             # if the dataset comes with rotation vector, include it
             data_pandas = pandas.DataFrame(data_mat, columns=column_list)
