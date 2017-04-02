@@ -33,7 +33,8 @@ int main(int argc, char** argv){
     QWidget main_window;
     main_window.resize(FLAGS_width, FLAGS_height);
 
-    IMUProject::MainWidget *main_widget = new IMUProject::MainWidget(std::string(argv[1]), FLAGS_width, FLAGS_height);
+    IMUProject::MainWidget *main_widget = new IMUProject::MainWidget(std::string(argv[1]),
+                                                                     FLAGS_width, FLAGS_height, 5);
     QHBoxLayout *layout = new QHBoxLayout();
     layout->addWidget(main_widget);
 

@@ -10,10 +10,10 @@ namespace IMUProject{
 
     MainWidget::MainWidget(const std::string &path, const int graph_width, const int graph_height,
                            const int frame_interval, QWidget *parent)
-            :graph_width_(graph_width), graph_height_(graph_height), frame_interval_(frame_interval){
+            :graph_width_(graph_width), graph_height_(graph_height), frame_interval_(frame_interval), counter_(0){
 
 
-        const float x_scale = 100;
+        const float x_scale = 750 / frame_interval_;
 
         graph_renderers_.emplace_back(new GraphRenderer(Eigen::Vector3f(1.0f, 0.0f, 0.0f), graph_width_, graph_height_));
         graph_renderers_.emplace_back(new GraphRenderer(Eigen::Vector3f(0.0f, 1.0f, 0.0f), graph_width_, graph_height_));
@@ -40,6 +40,12 @@ namespace IMUProject{
             ++count;
         }
 
+	    // apply low pass filter
+	    const double alpha = 0.9;
+	    data_[0] *= 1.0 - alpha;
+	    for(auto i=1; i<data_.size(); ++i){
+		    data_[i] = alpha * data_[i-1] + (1.0 - alpha) * data_[i];
+	    }
         // normalize data
         const double init_t = ts_[0];
         double max_v = -1;
@@ -49,14 +55,11 @@ namespace IMUProject{
             }
         }
 
+	    // scale data and apply low pass filter
+
         for(auto i=0; i<ts_.size(); ++i){
             ts_[i] = (ts_[i] - init_t) * x_scale;
             data_[i] = data_[i] / max_v * graph_height / 2.0;
-        }
-
-        for(auto i=0; i<400; ++i){
-            //printf("%.6f, %.6f\n", ts_[i], data_[i][0]);
-            graph_renderers_[0]->AppendData(ts_[i], data_[i][0]);
         }
 
         LOG(INFO) << count << " data read";
@@ -76,10 +79,10 @@ namespace IMUProject{
 
     void MainWidget::paintGL() {
         glClear(GL_COLOR_BUFFER_BIT);
-//        for(auto& graph: graph_renderers_){
-//            graph->Render();
-//        }
-        graph_renderers_[0]->Render();
+        for(auto& graph: graph_renderers_){
+            graph->Render();
+        }
+	    graph_renderers_[0]->Render();
 
         glFlush();
     }
@@ -89,6 +92,15 @@ namespace IMUProject{
     }
 
     void MainWidget::timerEvent(QTimerEvent *event) {
+	    if(counter_ == ts_.size()){
+		    counter_ = 0;
+		    timer_.stop();
+		    return;
+	    }
+	    for(auto i=0; i<3; ++i){
+		    graph_renderers_[i]->AppendData(ts_[counter_], data_[counter_][i]);
+	    }
+	    counter_++;
         update();
     }
 

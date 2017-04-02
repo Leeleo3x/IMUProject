@@ -13,7 +13,7 @@ namespace IMUProject{
                                  const int graph_height,
                                  const int kMaxPoints)
             :graph_width_(graph_width), graph_height_(graph_height), kMaxPoints_(kMaxPoints),
-             left_border_(10.0f){
+             left_border_(10.0f), render_pointer_(0), insert_pointer_(0){
 
         const float wf = (float)graph_width_;
         const float hf = (float)graph_height_;
@@ -33,13 +33,40 @@ namespace IMUProject{
         line_color_data_[1] = color[1];
         line_color_data_[2] = color[2];
 
-        vertex_data_.reserve(20000);
+	    constexpr int capacity_ratio = 10;
+        vertex_data_.resize((size_t)kMaxPoints_ * 3 * capacity_ratio, 0.0f);
+	    ts_.resize((size_t)kMaxPoints_ * capacity_ratio, 0.0);
     }
 
     void GraphRenderer::AppendData(const double t, const double v){
-        vertex_data_.push_back((GLfloat)t + left_border_);
-        vertex_data_.push_back((GLfloat)v);
-        vertex_data_.push_back(z_pos_);
+	    CHECK(line_vertex_buffer_.bind()) << "Can not bind line_vertex_buffer";
+	    GLfloat* buffer_data = (GLfloat*)line_vertex_buffer_.map(QOpenGLBuffer::ReadWrite);
+
+	    CHECK(buffer_data) << "Can not map line_vertex_buffer";
+	    if(insert_pointer_ >= vertex_data_.size()) {
+		    const int sid = insert_pointer_ - kMaxPoints_ * 3;
+		    for (auto i = sid; i < vertex_data_.size(); ++i) {
+			    ts_[(i - sid) / 3] = ts_[i / 3];
+			    buffer_data[i - sid] = buffer_data[i];
+		    }
+		    insert_pointer_ = kMaxPoints_ * 3;
+	    }
+	    ts_[insert_pointer_ / 3] = t;
+	    buffer_data[insert_pointer_] = (float)t;
+	    buffer_data[insert_pointer_ + 1] = (float)v;
+	    buffer_data[insert_pointer_ + 2] = z_pos_;
+
+	    insert_pointer_ += 3;
+	    render_pointer_ = std::max(insert_pointer_ - kMaxPoints_ * 3, 0);
+
+	    float start_t = (float)ts_[render_pointer_ / 3];
+
+	    for(auto i=render_pointer_; i < insert_pointer_; i+=3){
+		    buffer_data[i] = (float)ts_[i/3] - start_t + left_border_;
+	    }
+
+	    line_vertex_buffer_.unmap();
+	    line_vertex_buffer_.release();
     }
 
     void GraphRenderer::initGL(){
@@ -69,6 +96,12 @@ namespace IMUProject{
         grid_vertex_buffer_.bind();
         grid_vertex_buffer_.allocate(grid_vertex_data_.data(), (int)grid_vertex_data_.size() * sizeof(GLfloat));
         grid_vertex_buffer_.release();
+
+	    line_vertex_buffer_.create();
+	    line_vertex_buffer_.bind();
+	    line_vertex_buffer_.setUsagePattern(QOpenGLBuffer::DynamicDraw);
+	    line_vertex_buffer_.allocate(vertex_data_.data(), (int)vertex_data_.size() * sizeof(GLfloat));
+	    line_vertex_buffer_.release();
     }
 
     void GraphRenderer::Render(){
@@ -84,24 +117,20 @@ namespace IMUProject{
         shader_->setUniformValue("color", grid_color_data_[0], grid_color_data_[1], grid_color_data_[2], 1.0f);
         grid_vertex_buffer_.bind();
         shader_->setAttributeBuffer("pos", GL_FLOAT, 0, 3);
-        //shader_->setAttributeArray("pos", grid_vertex_data_.data(), 3);
         glLineWidth(3.0f);
         glDrawArrays(GL_LINES, 0, 4);
         grid_vertex_buffer_.release();
 
         //draw graph
-        CHECK_EQ((int)vertex_data_.size() % 3, 0);
-        int start_pos = std::max((int)vertex_data_.size() / 3 - kMaxPoints_, 0);
-        modelview_.setToIdentity();
-        //modelview_.translate(-1 * vertex_data_[start_pos * 3], 0.0f, 0.0f);
-        modelview_.lookAt(QVector3D(0.0f, 0.0f, 0.0f), QVector3D(0.0f, 0.0f, z_pos_), QVector3D(0.0f, -1.0f, 0.0f));
-
+        CHECK_GE(render_pointer_, 0);
         shader_->setUniformValue("m_mat", modelview_);
         shader_->setUniformValue("color", line_color_data_[0], line_color_data_[1], line_color_data_[2], 1.0f);
-        shader_->setAttributeArray("pos", vertex_data_.data(), 3);
+	    line_vertex_buffer_.bind();
+        shader_->setAttributeBuffer("pos", GL_FLOAT, 0, 3);
         glLineWidth(2.0f);
 //         glDrawArrays(GL_LINE_STRIP, start_pos * 3, (GLsizei)((int)vertex_data_.size() - start_pos * 3));
-        glDrawArrays(GL_LINE_STRIP, 0, 300);
+        glDrawArrays(GL_LINE_STRIP, render_pointer_ / 3, (insert_pointer_ - render_pointer_) / 3);
+	    line_vertex_buffer_.release();
         shader_->release();
     }
 

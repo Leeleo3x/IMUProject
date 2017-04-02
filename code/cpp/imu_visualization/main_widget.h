@@ -41,6 +41,7 @@ namespace IMUProject {
         std::vector<std::shared_ptr<GraphRenderer> > graph_renderers_;
         QBasicTimer timer_;
 
+	    int counter_;
         std::vector<double> ts_;
         std::vector<Eigen::Vector3d> data_;
 
