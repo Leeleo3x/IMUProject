@@ -56,19 +56,19 @@ if __name__ == '__main__':
 
     font_config = {'family': 'serif',
                    'size': 60}
-    linew = 4.0
+    linew = 8.0
     markersize = 30
 
     plt.rc('font', **font_config)
-    fig = plt.figure('Sparse grid', figsize=(80, 12))
+    fig = plt.figure('Sparse grid', figsize=(60, 12))
 
     end_id = bias_ind[window]
 
     plt.subplot(121, axis_bgcolor='black')
     plt.ylabel('Acceleration (m/s2)')
     plt.xlabel('Time (s)')
-    plt.plot(ts[:end_id], linacce[:end_id, 2], color='r', lw=3.0)
-    plt.plot(ts[:end_id], corrected_linacce[:end_id, 3], color='b', lw=3.0)
+    plt.plot(ts[:end_id], linacce[:end_id, 2], color='r', lw=linew)
+    plt.plot(ts[:end_id], corrected_linacce[:end_id, 3], color='b', lw=linew)
     plt.plot(ts[bias_ind[:window]], bias[:window, 3], color=(.5, .8, .0), lw=linew,
              marker='o', markersize=markersize)
     # plt.legend(['Sparse bias', 'Raw acceleration', 'Corrected acceleration'], loc='lower left')
