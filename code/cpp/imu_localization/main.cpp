@@ -180,6 +180,20 @@ int main(int argc, char** argv){
 		sprintf(buffer, "%s/raw.ply", argv[1]);
 		IMUProject::WriteToPly(std::string(buffer), ts.data(), raw_traj.data(), orientation.data(),
 		                       (int)raw_traj.size(), true, Eigen::Vector3d(0, 128, 128));
+
+		sprintf(buffer, "%s/result_raw.csv", argv[1]);
+		ofstream raw_out(buffer);
+		CHECK(raw_out.is_open());
+		raw_out << ",time,pos_x,pos_y,pos_z,speed_x,speed_y,speed_z,bias_x,bias_y,bias_z" << endl;
+		for(auto i=0; i<raw_traj.size(); ++i){
+			const Eigen::Vector3d& pos = raw_traj[i];
+			const Eigen::Vector3d& acce = dataset.GetLinearAcceleration()[i];
+			const Eigen::Vector3d& spd = raw_speed[i];
+			sprintf(buffer, "%d,%.9f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f\n",
+			        i, dataset.GetTimeStamp()[i], pos[0], pos[1], pos[2], spd[0], spd[1], spd[2],
+			        acce[0]-linacce[i][0], acce[1]-linacce[i][1], acce[2]-linacce[i][2]);
+			raw_out << buffer;
+		}
 	}
 
     {

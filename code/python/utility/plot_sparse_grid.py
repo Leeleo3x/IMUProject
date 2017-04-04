@@ -64,7 +64,7 @@ if __name__ == '__main__':
 
     end_id = bias_ind[window]
 
-    plt.subplot(121)
+    plt.subplot(121, axis_bgcolor='black')
     plt.ylabel('Acceleration (m/s2)')
     plt.xlabel('Time (s)')
     plt.plot(ts[:end_id], linacce[:end_id, 2], color='r', lw=3.0)
@@ -78,7 +78,7 @@ if __name__ == '__main__':
         cw = i
         if constraint_ind[i] > bias_ind[window]:
             break
-    plt.subplot(122)
+    plt.subplot(122, axis_bgcolor='black')
     plt.ylabel('Velocity (m/s)')
     plt.xlabel('Time (s)')
     plt.plot(ts[:end_id], speed_raw[:end_id, 2], color='r', lw=linew)

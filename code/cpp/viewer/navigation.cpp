@@ -35,7 +35,7 @@ namespace IMUProject{
 
         fovs_[BACK] = 50.0f;
         fovs_[CENTER] = 50.0f;
-        fovs_[PERSPECTIVE] = 45.0f;
+        fovs_[PERSPECTIVE] = 50.0f;
         fovs_[SIDE] = 30.0f;
         fovs_[TOP] = 50.0f;
 

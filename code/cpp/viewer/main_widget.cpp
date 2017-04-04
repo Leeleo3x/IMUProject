@@ -12,7 +12,7 @@ namespace IMUProject{
                            const int canvas_width,
                            const int canvas_height,
                            QWidget *parent): render_count_(0),
-	                                         full_traj_color(0.0f, 0.0f, 1.0f),
+	                                         full_traj_color(0.0f, 0.8f, 0.0f),
 	                                         const_traj_color(0.6f, 0.6f, 0.0f),
 	                                         tango_traj_color(1.0f, 0.0f, 0.0f),
 	                                         panel_border_margin_(10), panel_size_(300), is_rendering_(false){
@@ -83,7 +83,7 @@ namespace IMUProject{
 
 		string line;
 
-        sprintf(buffer, "%s/result_full.csv", path.c_str());
+        sprintf(buffer, "%s/result_raw.csv", path.c_str());
         ifstream full_in(buffer);
         if(full_in.is_open()){
             printf("Loading %s\n", buffer);
@@ -154,7 +154,7 @@ namespace IMUProject{
 
 
 
-//		add_trajectory(gt_position, gt_orientation, tango_traj_color, 0.5f);
+		add_trajectory(gt_position, gt_orientation, tango_traj_color, 0.5f);
 
         speed_panel_.reset(new OfflineSpeedPanel((int)traj_colors.size(), traj_colors, 1.0f, 1.5f * ratio));
 
