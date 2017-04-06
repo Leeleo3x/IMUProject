@@ -4,8 +4,7 @@ import warnings
 import os
 
 from sklearn import svm
-from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import r2_score
+from sklearn.metrics import r2_score, mean_squared_error
 from sklearn.externals import joblib
 from sklearn.model_selection import GridSearchCV
 import numpy as np
@@ -130,7 +129,9 @@ if __name__ == '__main__':
 
                 predicted_training = regressor_cv.predict(training_feature_cv)[1]
                 score_cv = r2_score(training_target_all[:, chn], predicted_training)
-                print('Training score by OpenCV: {}, support vectors: {}'.format(score_cv, regressor_cv.getSupportVectors().shape[0]))
+                score_l2 = mean_squared_error(training_target_all[:, chn], predicted_training)
+                print('Training score by OpenCV: {}(r2), {}(l2), support vectors: {}'.
+                      format(score_cv, score_l2, regressor_cv.getSupportVectors().shape[0]))
                 if len(args.output) > 0:
                      cv_model_path = '{}_w{}_s{}_{}.yml'.format(args.output, args.window, args.step, chn)
                      print('CV model written into ', cv_model_path)
@@ -142,7 +143,11 @@ if __name__ == '__main__':
                 regressor.fit(training_feature_all, training_target_all[:, chn])
                 # score = mean_squared_error(regressor.predict(training_set_all[:, :-1]), training_set_all[:, -1])
                 score = regressor.score(training_feature_all, training_target_all[:, chn])
-                print('Training score:', score)
+
+                train_predicted = regressor.predict(training_feature_all)
+                print('Training score (r2):', r2_score(train_predicted, training_target_all[:, chn]))
+                print('Training score (l2):', mean_squared_error(train_predicted, training_target_all[:, chn]))
+
                         # write model to file
                 # if len(args.output) > 0:
                 # out_path = '{}_{}'.format(args.output, chn)

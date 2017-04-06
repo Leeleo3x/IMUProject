@@ -1,6 +1,7 @@
 import numpy as np
 import tensorflow as tf
 from scipy.ndimage.filters import gaussian_filter1d
+from sklearn.metrics import r2_score, mean_squared_error
 import matplotlib.pyplot as plt
 
 import sys
@@ -38,11 +39,12 @@ def construct_graph(input_dim, output_dim):
                        name='input_placeholder')
     y = tf.placeholder(tf.float32, [None, None, output_dim],
                        name='output_placeholder')
-    init_state = tf.placeholder(tf.float32, [2, None, args.state_size])
-    # cell = tf.contrib.rnn.BasicRNNCell(args.state_size)
+    init_state = tf.placeholder(tf.float32, [args.num_layer, 2, None, args.state_size])
     cell = tf.contrib.rnn.BasicLSTMCell(args.state_size, state_is_tuple=True)
-    rnn_outputs, final_state = tf.nn.dynamic_rnn(cell, x, initial_state=tf.contrib.rnn.LSTMStateTuple(
-        init_state[0], init_state[1]))
+    multi_cell = tf.contrib.rnn.MultiRNNCell([cell] * args.num_layer, state_is_tuple=True)
+
+    rnn_outputs, final_state = tf.nn.dynamic_rnn(multi_cell, x, initial_state=tuple([tf.contrib.rnn.LSTMStateTuple(
+        init_state[i][0], init_state[i][1]) for i in range(args.num_layer)]))
 
     # compute output, loss, training step
     with tf.variable_scope('output_layer'):
@@ -52,7 +54,8 @@ def construct_graph(input_dim, output_dim):
     return x, y, init_state, final_state, regressed
 
 
-def run_training(features, targets, num_epoch, verbose=True, output_path=None):
+def run_training(features, targets, num_epoch, verbose=True, output_path=None,
+                 tensorboard_path=None):
     assert len(features) == len(targets)
     assert features[0].ndim == 2
 
@@ -63,55 +66,78 @@ def run_training(features, targets, num_epoch, verbose=True, output_path=None):
     # construct graph
     x, y, init_state, final_state, regressed = construct_graph(input_dim, output_dim)
     # loss and training step
-    total_loss = tf.reduce_mean(tf.nn.l2_loss(tf.reshape(regressed, [-1, output_dim]) -
-                                              tf.reshape(y, [-1, output_dim])))
+    total_loss = tf.reduce_mean(tf.squared_difference(tf.reshape(regressed, [-1, output_dim]),
+                                                      tf.reshape(y, [-1, output_dim])))
+    tf.summary.scalar('mean squared loss', total_loss)
     tf.add_to_collection('total_loss', total_loss)
     tf.add_to_collection('rnn_input', x)
     tf.add_to_collection('rnn_output', y)
     tf.add_to_collection('init_state', init_state)
     tf.add_to_collection('regressed', regressed)
     tf.add_to_collection('state_size', args.state_size)
+    tf.add_to_collection('num_layer', args.num_layer)
 
     train_step = tf.train.AdagradOptimizer(args.learning_rate).minimize(total_loss)
 
-    report_interval = 2
+    all_summary = tf.summary.merge_all()
+
+    report_interval = 100
     with tf.Session() as sess:
+        train_writer = None
+        if tensorboard_path is not None:
+            train_writer = tf.summary.FileWriter(tensorboard_path, sess.graph)
+
         sess.run(tf.global_variables_initializer())
         training_losses = []
-        step = 0
+        global_step = 0
         saver = None
         if output_path is not None:
             saver = tf.train.Saver()
         for i in range(num_epoch):
             if verbose:
                 print('EPOCH', i)
-            temp_loss = 0.0
-            state = (np.zeros([args.batch_size, args.state_size]), np.zeros([args.batch_size, args.state_size]))
+            epoch_loss = 0.0
+            steps_in_epoch = 0
             for data_id in range(len(features)):
+                state = tuple(
+                    [(np.zeros([args.batch_size, args.state_size]), np.zeros([args.batch_size, args.state_size]))
+                     for i in range(args.num_layer)])
                 for _, (X, Y) in enumerate(get_batch(features[data_id], targets[data_id],
                                                      args.batch_size, args.num_steps)):
-                    current_loss, state, _ = sess.run([total_loss,
-                                                       final_state,
-                                                       train_step], feed_dict={x: X, y: Y, init_state: state})
-                    temp_loss += current_loss
-                    if step % report_interval == 0 and step > 0 and verbose:
-                        print('Average loss at step {:d}: {:f}'.format(step, temp_loss / report_interval))
-                        training_losses.append(temp_loss / report_interval)
-                        temp_loss = 0
-                    step += 1
+                    summaries, current_loss, state, _ = sess.run([all_summary,
+                                                                  total_loss,
+                                                                  final_state,
+                                                                  train_step], feed_dict={x: X, y: Y, init_state: state})
+                    epoch_loss += current_loss
+                    if global_step % report_interval == 0 and global_step > 0 and verbose:
+                        # print('Average loss at step {:d}: {:f}'.format(step, temp_loss / report_interval))
+                        # training_losses.append(temp_loss / report_interval)
+                        if tensorboard_path is not None:
+                            train_writer.add_summary(summaries, global_step)
+                    steps_in_epoch += 1
+                    global_step += 1
+            training_losses.append(epoch_loss / steps_in_epoch)
+            print('Average loss at epoch {:d}: {:f}'.format(i, epoch_loss / steps_in_epoch))
         if output_path is not None:
             saver.save(sess, output_path)
         print('Meta graph saved to', output_path)
 
         # testing
-        state = (np.zeros([1, args.state_size]), np.zeros([1, args.state_size]))
-        test_loss = sess.run([total_loss], feed_dict={x: features[0].reshape([1, -1, 6]),
-                                                      y: targets[0].reshape([1, -1, 1]),
-                                                      init_state: state})
-        plt.figure('test')
-        plt.plot(y[0])
-        plt.plot(targets[0])
-        print('Test loss:', test_loss)
+        # state = tuple([(np.zeros([args.batch_size, args.state_size]), np.zeros([args.batch_size, args.state_size]))
+        #                for i in range(args.num_layer)])
+
+        # test_result_whole, test_loss_whole = sess.run([regressed, total_loss],
+        #                                               feed_dict={x: features[0].reshape([1, -1, 6]),
+        #                                                          y: targets[0].reshape([1, -1, 1]),
+        #                                                          init_state: state})
+        # print('test loss whole:', mean_squared_error(test_result_whole.reshape([-1, 1]), targets[0].reshape([-1, 1])))
+        
+        # plt.figure('test')
+        # plt.plot(test_result_whole.reshape([-1, 1]))
+        # plt.plot(targets[0].reshape([-1, 1]))
+        # plt.legend(['predicted', 'gt'])
+        # plt.show()
+ 
     return training_losses
 
 
@@ -124,10 +150,11 @@ if __name__ == '__main__':
     parser.add_argument('--feature_smooth_sigma', type=float, default=-1)
     parser.add_argument('--target_smooth_sigma', type=float, default=30.0)
     parser.add_argument('--batch_size', type=int, default=1)
-    parser.add_argument('--num_steps', type=int, default=500)
+    parser.add_argument('--num_steps', type=int, default=1000)
     parser.add_argument('--state_size', type=int, default=300)
-    parser.add_argument('--num_epoch', type=int, default=10)
-    parser.add_argument('--learning_rate', type=float, default=1e-4)
+    parser.add_argument('--num_layer', type=int, default=5)
+    parser.add_argument('--num_epoch', type=int, default=50)
+    parser.add_argument('--learning_rate', type=float, default=1e-3)
     parser.add_argument('--output', type=str, default=None)
     args = parser.parse_args()
 
@@ -138,13 +165,14 @@ if __name__ == '__main__':
     with open(args.list) as f:
         datasets = f.readlines()
 
+    nano_to_sec = 1e09
     features_all = []
     targets_all = []
     total_samples = 0
     for data in datasets:
         data_name = data.strip()
         data_all = pandas.read_csv(root_dir + '/' + data_name + '/processed/data.csv')
-        ts = data_all['time'].values
+        ts = data_all['time'].values / nano_to_sec
         gravity = data_all[['grav_x', 'grav_y', 'grav_z']].values
         position = data_all[['pos_x', 'pos_y', 'pos_z']].values
         orientation = data_all[['ori_w', 'ori_x', 'ori_y', 'ori_z']].values
@@ -178,6 +206,7 @@ if __name__ == '__main__':
 
     print('Total number of samples: ', total_samples)
     print('Running training')
-    losses = run_training(features_all, targets_all, args.num_epoch, output_path=model_path)
-    plt.plot(losses)
-    plt.show()
+    losses = run_training(features_all, targets_all, args.num_epoch,
+                          output_path=model_path, tensorboard_path=tfboard_path)
+    # plt.plot(losses)
+    # plt.show()
