@@ -127,7 +127,7 @@ namespace IMUProject{
         shader_->setUniformValue("color", line_color_data_[0], line_color_data_[1], line_color_data_[2], 1.0f);
 	    line_vertex_buffer_.bind();
         shader_->setAttributeBuffer("pos", GL_FLOAT, 0, 3);
-        glLineWidth(2.0f);
+        glLineWidth(5.0f);
 //         glDrawArrays(GL_LINE_STRIP, start_pos * 3, (GLsizei)((int)vertex_data_.size() - start_pos * 3));
         glDrawArrays(GL_LINE_STRIP, render_pointer_ / 3, (insert_pointer_ - render_pointer_) / 3);
 	    line_vertex_buffer_.release();

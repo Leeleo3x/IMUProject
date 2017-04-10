@@ -10,8 +10,9 @@ namespace IMUProject{
 
     MainWidget::MainWidget(const std::string &path, const int graph_width, const int graph_height,
                            const int frame_interval, QWidget *parent)
-            :graph_width_(graph_width), graph_height_(graph_height), frame_interval_(frame_interval), counter_(0){
-
+            :graph_width_(graph_width), graph_height_(graph_height), frame_interval_(frame_interval), counter_(0),
+             is_rendering_(false){
+        setFocusPolicy(Qt::StrongFocus);
 
         const float x_scale = 750 / frame_interval_;
 
@@ -88,7 +89,14 @@ namespace IMUProject{
     }
 
     void MainWidget::keyPressEvent(QKeyEvent *e) {
-
+        switch(e->key()) {
+            case (Qt::Key_S): {
+                is_rendering_ = !is_rendering_;
+                break;
+            }
+            default:
+                break;
+        }
     }
 
     void MainWidget::timerEvent(QTimerEvent *event) {
@@ -97,10 +105,12 @@ namespace IMUProject{
 		    timer_.stop();
 		    return;
 	    }
-	    for(auto i=0; i<3; ++i){
-		    graph_renderers_[i]->AppendData(ts_[counter_], data_[counter_][i]);
-	    }
-	    counter_++;
+        if(is_rendering_) {
+            for (auto i = 0; i < 3; ++i) {
+                graph_renderers_[i]->AppendData(ts_[counter_], data_[counter_][i]);
+            }
+            counter_++;
+        }
         update();
     }
 

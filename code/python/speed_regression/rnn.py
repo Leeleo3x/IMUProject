@@ -46,16 +46,38 @@ def construct_graph(input_dim, output_dim):
     rnn_outputs, final_state = tf.nn.dynamic_rnn(multi_cell, x, initial_state=tuple([tf.contrib.rnn.LSTMStateTuple(
         init_state[i][0], init_state[i][1]) for i in range(args.num_layer)]))
 
-    # compute output, loss, training step
+    # Fully connected layer
+    init_stddev = 0.01
+    fully_dims = [512, 256, 128]
+    with tf.variable_scope('fully_connected1'):
+        W1 = tf.get_variable('W1', shape=[args.state_size, fully_dims[0]],
+                             initializer=tf.random_normal_initializer(stddev=init_stddev))
+        b1 = tf.get_variable('b1', shape=[fully_dims[0]],
+                             initializer=tf.random_normal_initializer(stddev=init_stddev))
+        out_fully1 = tf.tanh(tf.matmul(tf.reshape(rnn_outputs, [-1, args.state_size]), W1) + b1)
+    with tf.variable_scope('fully_connected2'):
+        W2 = tf.get_variable('W2', shape=[fully_dims[0], fully_dims[1]],
+                             initializer=tf.random_normal_initializer(stddev=init_stddev))
+        b2 = tf.get_variable('b2', shape=[fully_dims[1]])
+        out_fully2 = tf.tanh(tf.matmul(out_fully1, W2) + b2)
+    with tf.variable_scope('fully_connected3'):
+        W3 = tf.get_variable('W3', shape=[fully_dims[1], fully_dims[2]],
+                             initializer=tf.random_normal_initializer(stddev=init_stddev))
+        b3 = tf.get_variable('b3', shape=[fully_dims[fully_dims[2]]],
+                             initializer=tf.random_normal_initializer(stddev=init_stddev))
+        out_fully3 = tf.tanh(tf.matmul(out_fully2, W3), b3)
+
+    # output layer
     with tf.variable_scope('output_layer'):
-        W = tf.get_variable('W', shape=[args.state_size, output_dim])
-        b = tf.get_variable('b', shape=[output_dim], initializer=tf.constant_initializer(0.0))
-    regressed = tf.matmul(tf.reshape(rnn_outputs, [-1, args.state_size]), W) + b
+        W = tf.get_variable('W', shape=[fully_dims[-1], output_dim])
+        b = tf.get_variable('b', shape=[output_dim], initializer=tf.random_normal_initializer(stddev=init_stddev))
+    # regressed = tf.matmul(tf.reshape(rnn_outputs, [-1, args.state_size]), W) + b
+    regressed = tf.matmul(out_fully3, W) + b
     return x, y, init_state, final_state, regressed
 
 
 def run_training(features, targets, num_epoch, verbose=True, output_path=None,
-                 tensorboard_path=None):
+                 tensorboard_path=None, checkpoint_path=None):
     assert len(features) == len(targets)
     assert features[0].ndim == 2
 
@@ -77,11 +99,15 @@ def run_training(features, targets, num_epoch, verbose=True, output_path=None,
     tf.add_to_collection('state_size', args.state_size)
     tf.add_to_collection('num_layer', args.num_layer)
 
-    train_step = tf.train.AdagradOptimizer(args.learning_rate).minimize(total_loss)
+    global_step = tf.Variable(0, name='global_step', trainable=False)
+    learning_rate = tf.train.exponential_decay(args.learning_rate, global_step, args.decay_step, args.decay_rate)
 
+    # train_step = tf.train.AdagradOptimizer(learning_rate).minimize(total_loss, global_step=global_step)
+    train_step = tf.train.RMSPropOptimizer(learning_rate).minimize(total_loss, global_step=global_step)
     all_summary = tf.summary.merge_all()
 
     report_interval = 100
+    global_counter = 0
     with tf.Session() as sess:
         train_writer = None
         if tensorboard_path is not None:
@@ -89,7 +115,6 @@ def run_training(features, targets, num_epoch, verbose=True, output_path=None,
 
         sess.run(tf.global_variables_initializer())
         training_losses = []
-        global_step = 0
         saver = None
         if output_path is not None:
             saver = tf.train.Saver()
@@ -109,15 +134,17 @@ def run_training(features, targets, num_epoch, verbose=True, output_path=None,
                                                                   final_state,
                                                                   train_step], feed_dict={x: X, y: Y, init_state: state})
                     epoch_loss += current_loss
-                    if global_step % report_interval == 0 and global_step > 0 and verbose:
-                        # print('Average loss at step {:d}: {:f}'.format(step, temp_loss / report_interval))
-                        # training_losses.append(temp_loss / report_interval)
-                        if tensorboard_path is not None:
-                            train_writer.add_summary(summaries, global_step)
+                    # if tensorboard_path is not None:
+                    #     train_writer.add_summary(summaries, global_counter)
+                    if (checkpoint_path is not None) and global_counter % args.checkpoint == 0 and global_counter > 0:
+                        saver.save(sess, checkpoint_path + '/ckpt', global_step=global_counter)
+                        print('Checkpoint file saved at step', global_counter)
+                    # if global_step % report_interval == 0 and global_step > 0 and verbose:
+                    #     pass
                     steps_in_epoch += 1
-                    global_step += 1
+                    global_counter += 1
             training_losses.append(epoch_loss / steps_in_epoch)
-            print('Average loss at epoch {:d}: {:f}'.format(i, epoch_loss / steps_in_epoch))
+            print('Average loss at epoch {:d} (step {:d}): {:f}'.format(i, global_counter, epoch_loss / steps_in_epoch))
         if output_path is not None:
             saver.save(sess, output_path)
         print('Meta graph saved to', output_path)
@@ -150,12 +177,15 @@ if __name__ == '__main__':
     parser.add_argument('--feature_smooth_sigma', type=float, default=-1)
     parser.add_argument('--target_smooth_sigma', type=float, default=30.0)
     parser.add_argument('--batch_size', type=int, default=1)
-    parser.add_argument('--num_steps', type=int, default=1000)
-    parser.add_argument('--state_size', type=int, default=300)
-    parser.add_argument('--num_layer', type=int, default=5)
-    parser.add_argument('--num_epoch', type=int, default=50)
-    parser.add_argument('--learning_rate', type=float, default=1e-3)
+    parser.add_argument('--num_steps', type=int, default=500)
+    parser.add_argument('--state_size', type=int, default=500)
+    parser.add_argument('--num_layer', type=int, default=3)
+    parser.add_argument('--num_epoch', type=int, default=100)
+    parser.add_argument('--learning_rate', type=float, default=0.01)
+    parser.add_argument('--decay_step', type=int, default=1000)
+    parser.add_argument('--decay_rate', type=float, default=0.95)
     parser.add_argument('--output', type=str, default=None)
+    parser.add_argument('--checkpoint', type=int, default=5000)
     args = parser.parse_args()
 
     root_dir = os.path.dirname(args.list)
@@ -201,12 +231,15 @@ if __name__ == '__main__':
 
     model_path = output_root + '/model.tf'
     tfboard_path = output_root + '/tensorboard'
+    chpt_path = output_root + '/checkpoints/'
     if not os.path.exists(tfboard_path):
         os.makedirs(tfboard_path)
+    if not os.path.exists(chpt_path):
+        os.makedirs(chpt_path)
 
     print('Total number of samples: ', total_samples)
     print('Running training')
     losses = run_training(features_all, targets_all, args.num_epoch,
-                          output_path=model_path, tensorboard_path=tfboard_path)
+                          output_path=model_path, tensorboard_path=tfboard_path, checkpoint_path=chpt_path)
     # plt.plot(losses)
     # plt.show()

@@ -45,6 +45,8 @@ namespace IMUProject {
         std::vector<double> ts_;
         std::vector<Eigen::Vector3d> data_;
 
+        bool is_rendering_;
+
         const int graph_width_;
         const int graph_height_;
         const int frame_interval_;
