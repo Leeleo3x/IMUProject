@@ -32,19 +32,22 @@ def get_batch(input_feature, input_target, batch_size, num_steps):
         yield (feat, targ)
 
 
-def construct_graph(input_dim, output_dim):
+def construct_graph(input_dim, output_dim, batch_size=1):
     # construct graph
     # placeholders for input and output
-    x = tf.placeholder(tf.float32, [None, None, input_dim],
+    x = tf.placeholder(tf.float32, [batch_size, None, input_dim],
                        name='input_placeholder')
-    y = tf.placeholder(tf.float32, [None, None, output_dim],
+    y = tf.placeholder(tf.float32, [batch_size, None, output_dim],
                        name='output_placeholder')
-    init_state = tf.placeholder(tf.float32, [args.num_layer, 2, None, args.state_size])
+    # init_state = tf.placeholder(tf.float32, [args.num_layer, 2, None, args.state_size])
     cell = tf.contrib.rnn.BasicLSTMCell(args.state_size, state_is_tuple=True)
     multi_cell = tf.contrib.rnn.MultiRNNCell([cell] * args.num_layer, state_is_tuple=True)
+    init_state = multi_cell.zero_state(batch_size, dtype=tf.float32)
 
-    rnn_outputs, final_state = tf.nn.dynamic_rnn(multi_cell, x, initial_state=tuple([tf.contrib.rnn.LSTMStateTuple(
-        init_state[i][0], init_state[i][1]) for i in range(args.num_layer)]))
+    # rnn_outputs, final_state = tf.nn.dynamic_rnn(multi_cell, x, initial_state=tuple([tf.contrib.rnn.LSTMStateTuple(
+    #     init_state[i][0], init_state[i][1]) for i in range(args.num_layer)]))
+
+    rnn_outputs, final_state = tf.nn.dynamic_rnn(multi_cell, x, initial_state=init_state)
 
     # Fully connected layer
     init_stddev = 0.01
@@ -63,9 +66,9 @@ def construct_graph(input_dim, output_dim):
     with tf.variable_scope('fully_connected3'):
         W3 = tf.get_variable('W3', shape=[fully_dims[1], fully_dims[2]],
                              initializer=tf.random_normal_initializer(stddev=init_stddev))
-        b3 = tf.get_variable('b3', shape=[fully_dims[fully_dims[2]]],
+        b3 = tf.get_variable('b3', shape=[fully_dims[2]],
                              initializer=tf.random_normal_initializer(stddev=init_stddev))
-        out_fully3 = tf.tanh(tf.matmul(out_fully2, W3), b3)
+        out_fully3 = tf.tanh(tf.matmul(out_fully2, W3) + b3)
 
     # output layer
     with tf.variable_scope('output_layer'):
@@ -86,7 +89,7 @@ def run_training(features, targets, num_epoch, verbose=True, output_path=None,
 
     tf.reset_default_graph()
     # construct graph
-    x, y, init_state, final_state, regressed = construct_graph(input_dim, output_dim)
+    x, y, init_state, final_state, regressed = construct_graph(input_dim, output_dim, args.batch_size)
     # loss and training step
     total_loss = tf.reduce_mean(tf.squared_difference(tf.reshape(regressed, [-1, output_dim]),
                                                       tf.reshape(y, [-1, output_dim])))
@@ -94,7 +97,6 @@ def run_training(features, targets, num_epoch, verbose=True, output_path=None,
     tf.add_to_collection('total_loss', total_loss)
     tf.add_to_collection('rnn_input', x)
     tf.add_to_collection('rnn_output', y)
-    tf.add_to_collection('init_state', init_state)
     tf.add_to_collection('regressed', regressed)
     tf.add_to_collection('state_size', args.state_size)
     tf.add_to_collection('num_layer', args.num_layer)
@@ -102,8 +104,8 @@ def run_training(features, targets, num_epoch, verbose=True, output_path=None,
     global_step = tf.Variable(0, name='global_step', trainable=False)
     learning_rate = tf.train.exponential_decay(args.learning_rate, global_step, args.decay_step, args.decay_rate)
 
-    # train_step = tf.train.AdagradOptimizer(learning_rate).minimize(total_loss, global_step=global_step)
-    train_step = tf.train.RMSPropOptimizer(learning_rate).minimize(total_loss, global_step=global_step)
+    train_step = tf.train.AdagradOptimizer(learning_rate).minimize(total_loss, global_step=global_step)
+    # train_step = tf.train.RMSPropOptimizer(learning_rate).minimize(total_loss, global_step=global_step)
     all_summary = tf.summary.merge_all()
 
     report_interval = 100
@@ -134,37 +136,20 @@ def run_training(features, targets, num_epoch, verbose=True, output_path=None,
                                                                   final_state,
                                                                   train_step], feed_dict={x: X, y: Y, init_state: state})
                     epoch_loss += current_loss
-                    # if tensorboard_path is not None:
-                    #     train_writer.add_summary(summaries, global_counter)
+
                     if (checkpoint_path is not None) and global_counter % args.checkpoint == 0 and global_counter > 0:
                         saver.save(sess, checkpoint_path + '/ckpt', global_step=global_counter)
                         print('Checkpoint file saved at step', global_counter)
-                    # if global_step % report_interval == 0 and global_step > 0 and verbose:
-                    #     pass
+                    # if global_counter % report_interval == 0 and global_counter > 0 and verbose:
+                    #     if tensorboard_path is not None:
+                    #         train_writer.add_summary(summaries, global_counter)
                     steps_in_epoch += 1
                     global_counter += 1
             training_losses.append(epoch_loss / steps_in_epoch)
             print('Average loss at epoch {:d} (step {:d}): {:f}'.format(i, global_counter, epoch_loss / steps_in_epoch))
         if output_path is not None:
-            saver.save(sess, output_path)
+            saver.save(sess, output_path, global_step=global_counter)
         print('Meta graph saved to', output_path)
-
-        # testing
-        # state = tuple([(np.zeros([args.batch_size, args.state_size]), np.zeros([args.batch_size, args.state_size]))
-        #                for i in range(args.num_layer)])
-
-        # test_result_whole, test_loss_whole = sess.run([regressed, total_loss],
-        #                                               feed_dict={x: features[0].reshape([1, -1, 6]),
-        #                                                          y: targets[0].reshape([1, -1, 1]),
-        #                                                          init_state: state})
-        # print('test loss whole:', mean_squared_error(test_result_whole.reshape([-1, 1]), targets[0].reshape([-1, 1])))
-        
-        # plt.figure('test')
-        # plt.plot(test_result_whole.reshape([-1, 1]))
-        # plt.plot(targets[0].reshape([-1, 1]))
-        # plt.legend(['predicted', 'gt'])
-        # plt.show()
- 
     return training_losses
 
 
@@ -174,13 +159,13 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument('list', type=str)
-    parser.add_argument('--feature_smooth_sigma', type=float, default=-1)
+    parser.add_argument('--feature_smooth_sigma', type=float, default=-1.0)
     parser.add_argument('--target_smooth_sigma', type=float, default=30.0)
     parser.add_argument('--batch_size', type=int, default=1)
     parser.add_argument('--num_steps', type=int, default=500)
-    parser.add_argument('--state_size', type=int, default=500)
-    parser.add_argument('--num_layer', type=int, default=3)
-    parser.add_argument('--num_epoch', type=int, default=100)
+    parser.add_argument('--state_size', type=int, default=1000)
+    parser.add_argument('--num_layer', type=int, default=1)
+    parser.add_argument('--num_epoch', type=int, default=150)
     parser.add_argument('--learning_rate', type=float, default=0.01)
     parser.add_argument('--decay_step', type=int, default=1000)
     parser.add_argument('--decay_rate', type=float, default=0.95)
@@ -212,7 +197,6 @@ if __name__ == '__main__':
         if args.feature_smooth_sigma > 0:
             feature_vectors = gaussian_filter1d(feature_vectors, sigma=args.feature_smooth_sigma, axis=0)
         # get training data
-
         target_speed = td.compute_local_speed_with_gravity(ts, position, orientation, gravity)
         if args.target_smooth_sigma > 0:
             target_speed = gaussian_filter1d(target_speed, sigma=args.target_smooth_sigma, axis=0)
