@@ -34,12 +34,15 @@ def get_batch(input_feature, input_target, batch_size, num_steps):
 
 def construct_graph(input_dim, output_dim, batch_size=1):
     # construct graph
+    init_stddev = 0.01
+    fully_dims = [512, 256, 128]
     # placeholders for input and output
     x = tf.placeholder(tf.float32, [batch_size, None, input_dim],
                        name='input_placeholder')
     y = tf.placeholder(tf.float32, [batch_size, None, output_dim],
                        name='output_placeholder')
     # init_state = tf.placeholder(tf.float32, [args.num_layer, 2, None, args.state_size])
+
     cell = tf.contrib.rnn.BasicLSTMCell(args.state_size, state_is_tuple=True)
     multi_cell = tf.contrib.rnn.MultiRNNCell([cell] * args.num_layer, state_is_tuple=True)
     init_state = multi_cell.zero_state(batch_size, dtype=tf.float32)
@@ -50,8 +53,7 @@ def construct_graph(input_dim, output_dim, batch_size=1):
     rnn_outputs, final_state = tf.nn.dynamic_rnn(multi_cell, x, initial_state=init_state)
 
     # Fully connected layer
-    init_stddev = 0.01
-    fully_dims = [512, 256, 128]
+
     with tf.variable_scope('fully_connected1'):
         W1 = tf.get_variable('W1', shape=[args.state_size, fully_dims[0]],
                              initializer=tf.random_normal_initializer(stddev=init_stddev))
