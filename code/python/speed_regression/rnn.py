@@ -138,7 +138,6 @@ def run_training(features, targets, num_epoch, verbose=True, output_path=None,
                                                                   final_state,
                                                                   train_step], feed_dict={x: X, y: Y, init_state: state})
                     epoch_loss += current_loss
-
                     if (checkpoint_path is not None) and global_counter % args.checkpoint == 0 and global_counter > 0:
                         saver.save(sess, checkpoint_path + '/ckpt', global_step=global_counter)
                         print('Checkpoint file saved at step', global_counter)
@@ -152,6 +151,19 @@ def run_training(features, targets, num_epoch, verbose=True, output_path=None,
         if output_path is not None:
             saver.save(sess, output_path, global_step=global_counter)
         print('Meta graph saved to', output_path)
+
+        # output final training loss
+        total_samples = 0
+        train_error_axis = np.zeros(output_dim, dtype=float)
+        for data_id in range(len(features)):
+            feature_rnn = features[data_id].reshape([1, -1, input_dim])
+            target_rnn = targets[data_id].reshape([1, -1, output_dim])
+            predicted = sess.run([regressed], feed_dict={x: feature_rnn, y: target_rnn})
+            diff = np.power((predicted.reshape([-1, output_dim]) - targets[data_id]), 2)
+            train_error_axis += np.average(diff, axis=0)
+            total_samples += features[data_id].shape[0]
+        print('Overall training loss:', train_error_axis / total_samples)
+
     return training_losses
 
 
@@ -177,7 +189,8 @@ if __name__ == '__main__':
 
     root_dir = os.path.dirname(args.list)
     imu_columns = ['gyro_stab_x', 'gyro_stab_y', 'gyro_stab_z',
-                   'linacce_stab_x', 'linacce_stab_y', 'linacce_stab_z']
+                   'linacce_stab_x', 'linacce_stab_y', 'linacce_stab_z',
+                   'grav_x', 'grav_y', 'grav_z']
 
     with open(args.list) as f:
         datasets = f.readlines()
