@@ -3,7 +3,7 @@ import sys
 import math
 import argparse
 import time
-from numba import jit
+#from numba import jit
 import numpy as np
 import quaternion
 import pandas
@@ -24,7 +24,7 @@ class TrainingDataOption:
         self.nanoToSec = 1000000000.0
 
 
-@jit
+#@jit
 def low_pass_filter(data, alpha):
     output = np.copy(data)
     for i in range(1, output.shape[0]):
