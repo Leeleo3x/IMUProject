@@ -201,7 +201,7 @@ if __name__ == '__main__':
         if args.target_smooth_sigma > 0:
             target_speed = gaussian_filter1d(target_speed, sigma=args.target_smooth_sigma, axis=0)
         features_all.append(feature_vectors.astype(np.float32))
-        targets_all.append(target_speed[:, 2:3].astype(np.float32))
+        targets_all.append(target_speed[:, [0, 2]].astype(np.float32))
         total_samples += target_speed.shape[0]
 
     # configure output path
