@@ -150,7 +150,7 @@ def run_training(features, targets, num_epoch, verbose=True, output_path=None,
             print('Average loss at epoch {:d} (step {:d}): {:f}'.format(i, global_counter, epoch_loss / steps_in_epoch))
         if output_path is not None:
             saver.save(sess, output_path, global_step=global_counter)
-        print('Meta graph saved to', output_path)
+            print('Meta graph saved to', output_path)
 
         # output final training loss
         total_samples = 0
@@ -159,8 +159,8 @@ def run_training(features, targets, num_epoch, verbose=True, output_path=None,
             feature_rnn = features[data_id].reshape([1, -1, input_dim])
             target_rnn = targets[data_id].reshape([1, -1, output_dim])
             predicted = sess.run([regressed], feed_dict={x: feature_rnn, y: target_rnn})
-            diff = np.power((tf.reshape(predicted, [-1, output_dim]) - targets[data_id]), 2)
-            train_error_axis += np.average(diff, axis=0)
+            diff = np.power(np.array(predicted).reshape([-1, output_dim]) - targets[data_id], 2)
+            train_error_axis += np.sum(diff, axis=0)
             total_samples += features[data_id].shape[0]
         print('Overall training loss:', train_error_axis / total_samples)
 
@@ -216,25 +216,25 @@ if __name__ == '__main__':
         if args.target_smooth_sigma > 0:
             target_speed = gaussian_filter1d(target_speed, sigma=args.target_smooth_sigma, axis=0)
         features_all.append(feature_vectors.astype(np.float32))
-        targets_all.append(target_speed[:, [0, 2]].astype(np.float32))
+        targets_all.append(target_speed[:, [0]].astype(np.float32))
         total_samples += target_speed.shape[0]
 
     # configure output path
     output_root = None
-    if args.output is None:
-        output_root = '../../../models/LSTM'
-    else:
+    model_path = None
+    tfboard_path = None
+    chpt_path = None
+    if args.output is not None:
         output_root = args.output
-    if not os.path.exists(output_root):
-        os.makedirs(output_root)
-
-    model_path = output_root + '/model.tf'
-    tfboard_path = output_root + '/tensorboard'
-    chpt_path = output_root + '/checkpoints/'
-    if not os.path.exists(tfboard_path):
-        os.makedirs(tfboard_path)
-    if not os.path.exists(chpt_path):
-        os.makedirs(chpt_path)
+        if not os.path.exists(output_root):
+            os.makedirs(output_root)
+        model_path = output_root + '/model.tf'
+        tfboard_path = output_root + '/tensorboard'
+        chpt_path = output_root + '/checkpoints/'
+        if not os.path.exists(tfboard_path):
+            os.makedirs(tfboard_path)
+        if not os.path.exists(chpt_path):
+            os.makedirs(chpt_path)
 
     print('Total number of samples: ', total_samples)
     print('Running training')
