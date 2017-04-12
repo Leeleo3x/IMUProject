@@ -159,7 +159,7 @@ def run_training(features, targets, num_epoch, verbose=True, output_path=None,
             feature_rnn = features[data_id].reshape([1, -1, input_dim])
             target_rnn = targets[data_id].reshape([1, -1, output_dim])
             predicted = sess.run([regressed], feed_dict={x: feature_rnn, y: target_rnn})
-            diff = np.power((predicted.reshape([-1, output_dim]) - targets[data_id]), 2)
+            diff = np.power((tf.reshape(predicted, [-1, output_dim]) - targets[data_id]), 2)
             train_error_axis += np.average(diff, axis=0)
             total_samples += features[data_id].shape[0]
         print('Overall training loss:', train_error_axis / total_samples)
