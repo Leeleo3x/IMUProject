@@ -13,7 +13,7 @@ from speed_regression import training_data as td
 args = None
 
 
-def get_batch(input_feature, input_target, batch_size, num_steps):
+def get_batch(input_feature, input_target, batch_size, num_steps, stride_ratio=2):
     total_num, dim = input_feature.shape
     assert input_target.shape[0] == total_num
 
@@ -24,11 +24,13 @@ def get_batch(input_feature, input_target, batch_size, num_steps):
         feature_batches[i] = input_feature[i * partition_length:(i+1) * partition_length, :]
         target_batches[i] = input_target[i * partition_length:(i+1) * partition_length, :]
 
-    epoch_size = partition_length // num_steps
-
+    stride = num_steps // stride_ratio
+    epoch_size = partition_length // stride
     for i in range(epoch_size):
-        feat = feature_batches[:, i * num_steps: (i+1) * num_steps, :]
-        targ = target_batches[:, i * num_steps: (i+1) * num_steps, :]
+        if i * stride + num_steps >= feature_batches.shape[1]:
+            break
+        feat = feature_batches[:, i * stride: i * stride + num_steps, :]
+        targ = target_batches[:, i * stride: i * stride + num_steps, :]
         yield (feat, targ)
 
 
@@ -174,21 +176,21 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('list', type=str)
     parser.add_argument('--feature_smooth_sigma', type=float, default=-1.0)
-    parser.add_argument('--target_smooth_sigma', type=float, default=30.0)
+    parser.add_argument('--target_smooth_sigma', type=float, default=50.0)
     parser.add_argument('--batch_size', type=int, default=1)
     parser.add_argument('--num_steps', type=int, default=500)
     parser.add_argument('--state_size', type=int, default=1000)
     parser.add_argument('--num_layer', type=int, default=1)
     parser.add_argument('--num_epoch', type=int, default=150)
-    parser.add_argument('--learning_rate', type=float, default=0.01)
+    parser.add_argument('--learning_rate', type=float, default=0.1)
     parser.add_argument('--decay_step', type=int, default=1000)
     parser.add_argument('--decay_rate', type=float, default=0.95)
     parser.add_argument('--output', type=str, default=None)
-    parser.add_argument('--checkpoint', type=int, default=5000)
+    parser.add_argument('--checkpoint', type=int, default=10000)
     args = parser.parse_args()
 
     root_dir = os.path.dirname(args.list)
-    imu_columns = ['gyro_stab_x', 'gyro_stab_y', 'gyro_stab_z',
+    imu_columns = ['gyro_x', 'gyro_y', 'gyro_z',
                    'linacce_stab_x', 'linacce_stab_y', 'linacce_stab_z',
                    'grav_x', 'grav_y', 'grav_z']
 
@@ -216,7 +218,7 @@ if __name__ == '__main__':
         if args.target_smooth_sigma > 0:
             target_speed = gaussian_filter1d(target_speed, sigma=args.target_smooth_sigma, axis=0)
         features_all.append(feature_vectors.astype(np.float32))
-        targets_all.append(target_speed[:, [0]].astype(np.float32))
+        targets_all.append(target_speed[:, [0, 2]].astype(np.float32))
         total_samples += target_speed.shape[0]
 
     # configure output path
