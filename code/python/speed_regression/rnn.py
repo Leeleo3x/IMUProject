@@ -11,6 +11,7 @@ sys.path.append('/home/yanhang/Documents/research/IMUProject/code/python')
 from speed_regression import training_data as td
 
 args = None
+nano_to_sec = 1e09
 
 
 def get_batch(input_feature, input_target, batch_size, num_steps, stride_ratio=1):
@@ -80,12 +81,22 @@ def construct_graph(input_dim, output_dim, batch_size=1):
         b = tf.get_variable('b', shape=[output_dim], initializer=tf.random_normal_initializer(stddev=init_stddev))
     # regressed = tf.matmul(tf.reshape(rnn_outputs, [-1, args.state_size]), W) + b
     regressed = tf.matmul(out_fully3, W) + b
-    return x, y, init_state, final_state, regressed
+    return {'x':x, 'y':y, 'init_state':init_state, 'final_state':final_state, 'regressed:':regressed}
 
 
-def run_training(features, targets, num_epoch, verbose=True, output_path=None,
+def run_testing(sess, variable_dict, feature, target):
+    input_dim, output_dim = feature.shape[1], target.shape[1]
+    feature_rnn = feature.reshape([1, -1, input_dim])
+    target_rnn = target.reshape([1, -1, output_dim])
+    regressed_rnn = sess.run([variable_dict['regressed']],
+                             feed_dict={variable_dict['x']: feature_rnn, variable_dict['y']: target_rnn})
+    predicted = np.array(tf.reshape(regressed_rnn, [-1, output_dim]))
+    return predicted
+
+def run_training(features, targets, valid_features, valid_targets, num_epoch, verbose=True, output_path=None,
                  tensorboard_path=None, checkpoint_path=None):
     assert len(features) == len(targets)
+    assert len(valid_features) == len(valid_targets)
     assert features[0].ndim == 2
 
     input_dim = features[0].shape[1]
@@ -93,7 +104,12 @@ def run_training(features, targets, num_epoch, verbose=True, output_path=None,
 
     tf.reset_default_graph()
     # construct graph
-    x, y, init_state, final_state, regressed = construct_graph(input_dim, output_dim, args.batch_size)
+    variable_dict = construct_graph(input_dim, output_dim, args.batch_size)
+    x = variable_dict['x']
+    y = variable_dict['y']
+    regressed = variable_dict['regressed']
+    init_state = variable_dict['init_state']
+    final_state = variable_dict['final_state']
     # loss and training step
     total_loss = tf.reduce_mean(tf.squared_difference(tf.reshape(regressed, [-1, output_dim]),
                                                       tf.reshape(y, [-1, output_dim])))
@@ -122,6 +138,7 @@ def run_training(features, targets, num_epoch, verbose=True, output_path=None,
 
         sess.run(tf.global_variables_initializer())
         training_losses = []
+        validation_losses = []
         saver = None
         if output_path is not None:
             saver = tf.train.Saver()
@@ -150,28 +167,60 @@ def run_training(features, targets, num_epoch, verbose=True, output_path=None,
                     steps_in_epoch += 1
                     global_counter += 1
             training_losses.append(epoch_loss / steps_in_epoch)
-            print('Average loss at epoch {:d} (step {:d}): {:f}'.format(i, global_counter, epoch_loss / steps_in_epoch))
+            print('Training loss at epoch {:d} (step {:d}): {:f}'.format(i, global_counter, training_losses[-1]))
+
+            # run validation
+            valid_loss = np.zeros(2, dtype=float)
+            for valid_id in range(len(valid_features)):
+                predicted = run_testing(sess, variable_dict, valid_features[valid_id], valid_targets[valid_id])
+                valid_loss += mean_squared_error(predicted, targets_validation[valid_id]) * len(targets_validation[valid_id])
+            validation_losses.append(valid_loss / sum([len(target) for target in targets_validation]))
+            print('Validation loss at epoch {:d} (step {:d}): {:f}'.format(i, global_counter, validation_losses[-1]))
+
         if output_path is not None:
             saver.save(sess, output_path, global_step=global_counter)
             print('Meta graph saved to', output_path)
 
         # output final training loss
-        total_samples = 0
-        train_error_axis = np.zeros(output_dim, dtype=float)
-        for data_id in range(len(features)):
-            feature_rnn = features[data_id].reshape([1, -1, input_dim])
-            target_rnn = targets[data_id].reshape([1, -1, output_dim])
-            predicted = sess.run([regressed], feed_dict={x: feature_rnn, y: target_rnn})
-            diff = np.power(np.array(predicted).reshape([-1, output_dim]) - targets[data_id], 2)
-            train_error_axis += np.sum(diff, axis=0)
-            total_samples += features[data_id].shape[0]
-        print('Overall training loss:', train_error_axis / total_samples)
+        # total_samples = 0
+        # train_error_axis = np.zeros(output_dim, dtype=float)
+        # for data_id in range(len(features)):
+        #     feature_rnn = features[data_id].reshape([1, -1, input_dim])
+        #     target_rnn = targets[data_id].reshape([1, -1, output_dim])
+        #     predicted = sess.run([regressed], feed_dict={x: feature_rnn, y: target_rnn})
+        #     diff = np.power(np.array(predicted).reshape([-1, output_dim]) - targets[data_id], 2)
+        #     train_error_axis += np.sum(diff, axis=0)
+        #     total_samples += features[data_id].shape[0]
+        #print('Overall training loss:', train_error_axis / total_samples)
 
     return training_losses
 
 
-def load_dataset(listpath, imu_columns):
-    pass
+def load_dataset(listpath, imu_columns, feature_smooth_sigma, target_smooth_sigma):
+    root_dir = os.path.dirname(listpath)
+    features_all = []
+    targets_all = []
+    with open(args.list) as f:
+        datasets = f.readlines()
+    for data in datasets:
+        data_name = data.strip()
+        data_all = pandas.read_csv(root_dir + '/' + data_name + '/processed/data.csv')
+        ts = data_all['time'].values / nano_to_sec
+        gravity = data_all[['grav_x', 'grav_y', 'grav_z']].values
+        position = data_all[['pos_x', 'pos_y', 'pos_z']].values
+        orientation = data_all[['ori_w', 'ori_x', 'ori_y', 'ori_z']].values
+        print('Loading ' + data_name + ', samples:', ts.shape[0])
+
+        feature_vectors = data_all[imu_columns].values
+        if feature_smooth_sigma > 0:
+            feature_vectors = gaussian_filter1d(feature_vectors, sigma=args.feature_smooth_sigma, axis=0)
+        # get training data
+        target_speed = td.compute_local_speed_with_gravity(ts, position, orientation, gravity)
+        if target_smooth_sigma > 0:
+            target_speed = gaussian_filter1d(target_speed, sigma=args.target_smooth_sigma, axis=0)
+        features_all.append(feature_vectors.astype(np.float32))
+        targets_all.append(target_speed[:, [0]].astype(np.float32))
+    return features_all, targets_all
 
 if __name__ == '__main__':
     import pandas
@@ -179,7 +228,7 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument('list', type=str)
-#    parser.add_argument('validation', type=str)
+    parser.add_argument('validation', type=str)
     parser.add_argument('--feature_smooth_sigma', type=float, default=-1.0)
     parser.add_argument('--target_smooth_sigma', type=float, default=50.0)
     parser.add_argument('--batch_size', type=int, default=1)
@@ -194,40 +243,14 @@ if __name__ == '__main__':
     parser.add_argument('--checkpoint', type=int, default=10000)
     args = parser.parse_args()
 
-    root_dir = os.path.dirname(args.list)
     imu_columns = ['gyro_x', 'gyro_y', 'gyro_z',
                    'linacce_x', 'linacce_y', 'linacce_z',
                    'grav_x', 'grav_y', 'grav_z']
 
-    with open(args.list) as f:
-        datasets = f.readlines()
-
-    nano_to_sec = 1e09
-    features_all = []
-    targets_all = []
-    valid_feature_all = []
-    valid_target_all = []
-    total_samples = 0
-    for data in datasets:
-        data_name = data.strip()
-        data_all = pandas.read_csv(root_dir + '/' + data_name + '/processed/data.csv')
-        ts = data_all['time'].values / nano_to_sec
-        gravity = data_all[['grav_x', 'grav_y', 'grav_z']].values
-        position = data_all[['pos_x', 'pos_y', 'pos_z']].values
-        orientation = data_all[['ori_w', 'ori_x', 'ori_y', 'ori_z']].values
-        print('Loading ' + data_name + ', samples:', ts.shape[0])
-
-        feature_vectors = data_all[imu_columns].values
-        if args.feature_smooth_sigma > 0:
-            feature_vectors = gaussian_filter1d(feature_vectors, sigma=args.feature_smooth_sigma, axis=0)
-        # get training data
-        target_speed = td.compute_local_speed_with_gravity(ts, position, orientation, gravity)
-        if args.target_smooth_sigma > 0:
-            target_speed = gaussian_filter1d(target_speed, sigma=args.target_smooth_sigma, axis=0)
-        features_all.append(feature_vectors.astype(np.float32))
-        targets_all.append(target_speed[:, [0]].astype(np.float32))
-        total_samples += target_speed.shape[0]
-
+    features_train, targets_train = load_dataset(args.list, imu_columns,
+                                                 args.feature_smooth_sigma, args.target_smooth_sigma)
+    features_validation, targets_validation = load_dataset(args.validation, imu_columns,
+                                                           args.feature_smooth_sigma, args.target_smooth_sigma)
     # configure output path
     output_root = None
     model_path = None
@@ -245,9 +268,9 @@ if __name__ == '__main__':
         if not os.path.exists(chpt_path):
             os.makedirs(chpt_path)
 
-    print('Total number of samples: ', total_samples)
+    print('Total number of samples: ', sum([len(target) for target in targets_train]))
     print('Running training')
-    losses = run_training(features_all, targets_all, args.num_epoch,
+    losses = run_training(features_train, targets_train, features_validation, targets_validation, args.num_epoch,
                           output_path=model_path, tensorboard_path=tfboard_path, checkpoint_path=chpt_path)
     # plt.plot(losses)
     # plt.show()
