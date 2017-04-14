@@ -170,6 +170,9 @@ def run_training(features, targets, num_epoch, verbose=True, output_path=None,
     return training_losses
 
 
+def load_dataset(listpath, imu_columns):
+
+
 if __name__ == '__main__':
     import pandas
     import argparse
