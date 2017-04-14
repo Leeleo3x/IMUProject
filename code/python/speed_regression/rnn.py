@@ -181,13 +181,13 @@ if __name__ == '__main__':
     parser.add_argument('list', type=str)
 #    parser.add_argument('validation', type=str)
     parser.add_argument('--feature_smooth_sigma', type=float, default=-1.0)
-    parser.add_argument('--target_smooth_sigma', type=float, default=50.0)
+    parser.add_argument('--target_smooth_sigma', type=float, default=30.0)
     parser.add_argument('--batch_size', type=int, default=1)
     parser.add_argument('--num_steps', type=int, default=500)
     parser.add_argument('--state_size', type=int, default=1000)
     parser.add_argument('--num_layer', type=int, default=1)
     parser.add_argument('--num_epoch', type=int, default=150)
-    parser.add_argument('--learning_rate', type=float, default=0.1)
+    parser.add_argument('--learning_rate', type=float, default=0.01)
     parser.add_argument('--decay_step', type=int, default=1000)
     parser.add_argument('--decay_rate', type=float, default=0.95)
     parser.add_argument('--output', type=str, default=None)
@@ -225,7 +225,7 @@ if __name__ == '__main__':
         if args.target_smooth_sigma > 0:
             target_speed = gaussian_filter1d(target_speed, sigma=args.target_smooth_sigma, axis=0)
         features_all.append(feature_vectors.astype(np.float32))
-        targets_all.append(target_speed[:, [0]].astype(np.float32))
+        targets_all.append(target_speed[:, [0, 2]].astype(np.float32))
         total_samples += target_speed.shape[0]
 
     # configure output path
