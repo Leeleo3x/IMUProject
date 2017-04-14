@@ -109,7 +109,7 @@ def run_training(features, targets, num_epoch, verbose=True, output_path=None,
     learning_rate = tf.train.exponential_decay(args.learning_rate, global_step, args.decay_step, args.decay_rate)
 
     # train_step = tf.train.AdagradOptimizer(learning_rate).minimize(total_loss, global_step=global_step)
-    train_step = tf.train.AdadeltaOptimizer().minimize(total_loss, global_step=global_step)
+    train_step = tf.train.AdadeltaOptimizer(learning_rate).minimize(total_loss, global_step=global_step)
     # train_step = tf.train.RMSPropOptimizer(learning_rate).minimize(total_loss, global_step=global_step)
     all_summary = tf.summary.merge_all()
 
@@ -171,7 +171,7 @@ def run_training(features, targets, num_epoch, verbose=True, output_path=None,
 
 
 def load_dataset(listpath, imu_columns):
-
+    pass
 
 if __name__ == '__main__':
     import pandas
@@ -179,7 +179,7 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument('list', type=str)
-    parser.add_argument('validation', type=str)
+#    parser.add_argument('validation', type=str)
     parser.add_argument('--feature_smooth_sigma', type=float, default=-1.0)
     parser.add_argument('--target_smooth_sigma', type=float, default=50.0)
     parser.add_argument('--batch_size', type=int, default=1)
