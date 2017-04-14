@@ -13,7 +13,7 @@ from speed_regression import training_data as td
 args = None
 
 
-def get_batch(input_feature, input_target, batch_size, num_steps, stride_ratio=2):
+def get_batch(input_feature, input_target, batch_size, num_steps, stride_ratio=1):
     total_num, dim = input_feature.shape
     assert input_target.shape[0] == total_num
 
@@ -108,7 +108,8 @@ def run_training(features, targets, num_epoch, verbose=True, output_path=None,
     global_step = tf.Variable(0, name='global_step', trainable=False)
     learning_rate = tf.train.exponential_decay(args.learning_rate, global_step, args.decay_step, args.decay_rate)
 
-    train_step = tf.train.AdagradOptimizer(learning_rate).minimize(total_loss, global_step=global_step)
+    # train_step = tf.train.AdagradOptimizer(learning_rate).minimize(total_loss, global_step=global_step)
+    train_step = tf.train.AdadeltaOptimizer().minimize(total_loss, global_step=global_step)
     # train_step = tf.train.RMSPropOptimizer(learning_rate).minimize(total_loss, global_step=global_step)
     all_summary = tf.summary.merge_all()
 
@@ -175,6 +176,7 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument('list', type=str)
+    parser.add_argument('validation', type=str)
     parser.add_argument('--feature_smooth_sigma', type=float, default=-1.0)
     parser.add_argument('--target_smooth_sigma', type=float, default=50.0)
     parser.add_argument('--batch_size', type=int, default=1)
@@ -191,7 +193,7 @@ if __name__ == '__main__':
 
     root_dir = os.path.dirname(args.list)
     imu_columns = ['gyro_x', 'gyro_y', 'gyro_z',
-                   'linacce_stab_x', 'linacce_stab_y', 'linacce_stab_z',
+                   'linacce_x', 'linacce_y', 'linacce_z',
                    'grav_x', 'grav_y', 'grav_z']
 
     with open(args.list) as f:
@@ -200,6 +202,8 @@ if __name__ == '__main__':
     nano_to_sec = 1e09
     features_all = []
     targets_all = []
+    valid_feature_all = []
+    valid_target_all = []
     total_samples = 0
     for data in datasets:
         data_name = data.strip()
@@ -218,7 +222,7 @@ if __name__ == '__main__':
         if args.target_smooth_sigma > 0:
             target_speed = gaussian_filter1d(target_speed, sigma=args.target_smooth_sigma, axis=0)
         features_all.append(feature_vectors.astype(np.float32))
-        targets_all.append(target_speed[:, [0, 2]].astype(np.float32))
+        targets_all.append(target_speed[:, [0]].astype(np.float32))
         total_samples += target_speed.shape[0]
 
     # configure output path
