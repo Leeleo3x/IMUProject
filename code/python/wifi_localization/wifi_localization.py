@@ -1,31 +1,75 @@
 import numpy as np
 import os
 import sys
+import json
+sys.path.append('/Users/yanhang/Documents/research/IMUProject/code/python')
+sys.path.append('/home/yanhang/Documents/research/IMUProject/code/python')
+
+from pre_processing import gen_dataset
 
 args = None
 
-class WifiDatabase:
-    def __init__(self, wifi_records):
-        wifi_all = []
-        median_time = []
-        for scan in wifi_records:
-            scan_times = np.array([v['t'] for v in scan], dtype=int)
-            median_time.append(np.median(scan_times, axis=0))
-            wifi_all += scan
+micro_to_nano = 1000
 
-        print('time:', median_time)
-        # resort all records by time stamp
-        wifi_all = sorted(wifi_all, key=lambda k: k['t'])
-        self.bssid_map_ = self.build_bssid_map(wifi_all)
-        # re-cluster the scan results with median time stamp
-        self.wifi_reordered = [[] for _ in range(len(median_time))]
-        for rec in wifi_all:
+
+def reorder_wifi_records(wifi_records):
+    median_time = []
+    for scan in wifi_records:
+        scan_times = []
+        for rec in scan:
+            scan_times.append(rec['t'])
+        median_time.append(np.median(scan_times, axis=0))
+    # re-cluster the scan results with median time stamp
+    wifi_reordered = [[] for _ in range(len(median_time))]
+    for scan in wifi_records:
+        for rec in scan:
             cluster_id = np.argmin([abs(rec['t'] - v) for v in median_time])
-            self.wifi_reordered[cluster_id].append(rec)
+            wifi_reordered[cluster_id].append(rec)
+    # remove empty scans
+    for scan in wifi_reordered:
+        if len(scan) == 0:
+            wifi_reordered.remove(scan)
+    return wifi_reordered
 
-    def build_bssid_map(self, wifi_records):
-        return []
 
+def build_bssid_map(wifi_records, min_count=5):
+    bssid_count = {}
+    for scan in wifi_records:
+        for rec in scan:
+            if rec['BSSID'] not in bssid_count:
+                bssid_count[rec['BSSID']] = 1
+            else:
+                bssid_count[rec['BSSID']] += 1
+    bssid_map = {}
+    ind = 0
+    for scan in wifi_records:
+        for rec in scan:
+            if bssid_count[rec['BSSID']] < min_count:
+                continue
+            elif rec['BSSID'] not in bssid_map:
+                bssid_map[rec['BSSID']] = ind
+                ind += 1
+    return bssid_map
+
+
+def filter_scan(scan, min_time, max_time, min_level):
+    scan_filtered = []
+    for rec in scan:
+        if min_time < rec['t'] < max_time and rec['level'] > min_level:
+            scan_filtered.append(rec)
+    return scan_filtered
+
+
+def build_wifi_footprint(scan, bssid_map):
+    assert len(scan) > 0
+    footprint = [0 for _ in range(len(bssid_map))]
+    position = None
+    if 'pos' in scan[0]:
+        position = sum([v['pos'] for v in scan]) / float(len(scan))
+    for rec in scan:
+        if rec['BSSID'] in bssid_map:
+            footprint[bssid_map[rec['BSSID']]] = rec['level']
+    return np.array(footprint), position
 
 def load_wifi_data(path):
     records = []
@@ -37,15 +81,39 @@ def load_wifi_data(path):
             num_wifi = int(wifi_file.readline().strip())
             for j in range(num_wifi):
                 line = wifi_file.readline().strip().split()
-                cur_record.append({'t': int(line[0]), 'BSSID': line[1], 'level': int(line[2])})
+                cur_record.append({'t': int(line[0]) * micro_to_nano, 'BSSID': line[1], 'level': int(line[2])})
             records.append(cur_record)
     return records
+
+
+def write_wifi_footprints(footprints, bssid_map, path, positions=None):
+    json_obj = {'footprints': footprints.tolist(), 'bssid_map': bssid_map}
+    if positions is not None:
+        json_obj['positions'] = positions.tolist()
+    with open(path, 'w') as f:
+        json.dump(json_obj, f)
+
+
+def read_wifi_foorprints(path):
+    footprints = None
+    bssid_map = {}
+    positions = None
+    with open(path, 'r') as f:
+        json_obj = json.load(f)
+        footprints = np.array(json_obj['footprints'])
+        bssid_map = json_obj['bssid_map']
+        if 'positions' in json_obj:
+            positions = np.array(json_obj['positions'])
+    return footprints, bssid_map, positions
 
 if __name__ == '__main__':
     import argparse
 
     parser = argparse.ArgumentParser()
     parser.add_argument('list')
+    parser.add_argument('--output', type=str, default=None)
+    parser.add_argument('--min_level', default=-75, type=int)
+    parser.add_argument('--min_count', default=10, type=int)
 
     args = parser.parse_args()
 
@@ -54,20 +122,52 @@ if __name__ == '__main__':
     with open(args.list) as f:
         datasets = f.readlines()
 
-    wifi_records = []
+    wifi_all = []
     for data in datasets:
         if len(data) == 0:
             continue
         data_name = data.strip().split()[0]
         data_path = root_dir + '/' + data_name
         print('Loading ' + data_path)
-        wifi_records += load_wifi_data(data_path + '/wifi.txt')
-        print('{} records in the file {}'.format(len(wifi_records), data_name))
+        wifi_records = load_wifi_data(data_path + '/wifi.txt')
+        wifi_reordered = reorder_wifi_records(wifi_records)
+        wifi_records = None
+        pose_data = np.genfromtxt(data_path + '/pose.txt')[:, :4]
+        # remove records that are out of pose data's time range, or with too small signal level
+        wifi_reordered = [filter_scan(scan, pose_data[0][0], pose_data[-1][0], args.min_level)
+                          for scan in wifi_reordered]
+        wifi_with_pose = []
+        for scan in wifi_reordered:
+            if len(scan) == 0:
+                continue
+            scan_times = np.array([v['t'] for v in scan])
+            rec_poses = gen_dataset.interpolate_3dvector_linear(pose_data, scan_times)
+            for i in range(len(rec_poses)):
+                scan[i]['pos'] = rec_poses[i][1:]
+            wifi_with_pose.append(scan)
+        print('{} records in the file {}'.format(len(wifi_with_pose), data_name))
 
-    wifi_base = WifiDatabase(wifi_records)
-    for sec in wifi_base.wifi_reordered:
-        print('----------------------')
-        print(len(sec))
-        for v in sec:
-            print(v)
-    print('Total scans in reordered:', len(wifi_base.wifi_reordered))
+        # for scan in wifi_reordered:
+        #     print('----------------------')
+        #     print(len(scan))
+        #     for v in sec:
+        #         print(v)
+        print('Total scans in reordered:', len(wifi_reordered))
+        wifi_all += wifi_with_pose
+
+    bssid_map = build_bssid_map(wifi_all, args.min_count)
+    print('BSSID mapping:')
+    print(bssid_map)
+    print('{} different BSSIDs'.format(len(bssid_map)))
+
+    print('Constructing footprints...')
+    footprints_all = np.empty([len(wifi_all), len(bssid_map)], dtype=int)
+    positions_all = np.empty([len(wifi_all), 3])
+    for i in range(len(wifi_all)):
+        footprint, position = build_wifi_footprint(wifi_all[i], bssid_map)
+        footprints_all[i] = footprint
+        positions_all[i] = position
+    # test: save and load
+    if args.output is not None:
+        print('Writing to ' + args.output)
+        write_wifi_footprints(footprints_all, bssid_map, args.output, positions_all)
