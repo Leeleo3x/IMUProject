@@ -114,7 +114,8 @@ def query_position(scan, footprints, positions, bssid_map, k=3):
     query_footprint, _ = build_wifi_footprint(scan, bssid_map)
     distances = []
     for i in range(len(footprints)):
-        distances.append({'id': i, 'dis': np.linalg.norm((query_footprint-footprints[i]), ord=1)})
+        dis = np.sort(query_footprint - footprints[i], axis=0)
+        distances.append({'id': i, 'dis': np.linalg.norm(dis[:20], ord=1)})
     distances = sorted(distances, key=lambda v: v['dis'])
     query_pos = np.zeros(3, dtype=float)
     for i in range(k):
@@ -182,10 +183,10 @@ if __name__ == '__main__':
         positions_all[i] = position
 
     # test self validation
-    # for i in range(len(wifi_all)):
-    #     pos = query_position(wifi_all[i], footprints_all, positions_all, bssid_map, 1)
-    #     print('{}, ({}, {}, {}) | ({}, {}, {})'.format(i, positions_all[i][0], positions_all[i][1], positions_all[i][2],
-    #                                                    pos[0], pos[1], pos[2]))
+    for i in range(len(wifi_all)):
+        pos = query_position(wifi_all[i], footprints_all, positions_all, bssid_map, 1)
+        print('{}, ({}, {}, {}) | ({}, {}, {})'.format(i, positions_all[i][0], positions_all[i][1], positions_all[i][2],
+                                                       pos[0], pos[1], pos[2]))
 
     if args.output is not None:
         print('Writing to ' + args.output)
