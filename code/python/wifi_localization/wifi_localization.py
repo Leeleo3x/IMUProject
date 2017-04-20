@@ -71,6 +71,7 @@ def build_wifi_footprint(scan, bssid_map):
             footprint[bssid_map[rec['BSSID']]] = rec['level']
     return np.array(footprint), position
 
+
 def load_wifi_data(path):
     records = []
     with open(path) as wifi_file:
@@ -105,6 +106,20 @@ def read_wifi_foorprints(path):
         if 'positions' in json_obj:
             positions = np.array(json_obj['positions'])
     return footprints, bssid_map, positions
+
+
+def query_position(scan, footprints, positions, bssid_map, k=3):
+    assert len(footprints) == len(positions)
+    assert len(footprints) >= k
+    query_footprint, _ = build_wifi_footprint(scan, bssid_map)
+    distances = []
+    for i in range(len(footprints)):
+        distances.append({'id': i, 'dis': np.linalg.norm((query_footprint-footprints[i]), ord=1)})
+    distances = sorted(distances, key=lambda v: v['dis'])
+    query_pos = np.zeros(3, dtype=float)
+    for i in range(k):
+        query_pos += positions[distances[i]['id']]
+    return query_pos / k
 
 if __name__ == '__main__':
     import argparse
@@ -156,8 +171,6 @@ if __name__ == '__main__':
         wifi_all += wifi_with_pose
 
     bssid_map = build_bssid_map(wifi_all, args.min_count)
-    print('BSSID mapping:')
-    print(bssid_map)
     print('{} different BSSIDs'.format(len(bssid_map)))
 
     print('Constructing footprints...')
@@ -167,7 +180,13 @@ if __name__ == '__main__':
         footprint, position = build_wifi_footprint(wifi_all[i], bssid_map)
         footprints_all[i] = footprint
         positions_all[i] = position
-    # test: save and load
+
+    # test self validation
+    # for i in range(len(wifi_all)):
+    #     pos = query_position(wifi_all[i], footprints_all, positions_all, bssid_map, 1)
+    #     print('{}, ({}, {}, {}) | ({}, {}, {})'.format(i, positions_all[i][0], positions_all[i][1], positions_all[i][2],
+    #                                                    pos[0], pos[1], pos[2]))
+
     if args.output is not None:
         print('Writing to ' + args.output)
         write_wifi_footprints(footprints_all, bssid_map, args.output, positions_all)
