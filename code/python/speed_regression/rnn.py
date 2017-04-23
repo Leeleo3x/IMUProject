@@ -38,7 +38,8 @@ def get_batch(input_feature, input_target, batch_size, num_steps, stride_ratio=1
 def construct_graph(input_dim, output_dim, batch_size=1):
     # construct graph
     init_stddev = 0.001
-    fully_dims = [512, 256, 128]
+    # fully_dims = [512, 256, 128]
+    fully_dims = [512]
     # placeholders for input and output
     x = tf.placeholder(tf.float32, [batch_size, None, input_dim],
                        name='input_placeholder')
@@ -63,24 +64,24 @@ def construct_graph(input_dim, output_dim, batch_size=1):
         b1 = tf.get_variable('b1', shape=[fully_dims[0]],
                              initializer=tf.random_normal_initializer(stddev=init_stddev))
         out_fully1 = tf.tanh(tf.matmul(tf.reshape(rnn_outputs, [-1, args.state_size]), W1) + b1)
-    with tf.variable_scope('fully_connected2'):
-        W2 = tf.get_variable('W2', shape=[fully_dims[0], fully_dims[1]],
-                             initializer=tf.random_normal_initializer(stddev=init_stddev))
-        b2 = tf.get_variable('b2', shape=[fully_dims[1]])
-        out_fully2 = tf.tanh(tf.matmul(out_fully1, W2) + b2)
-    with tf.variable_scope('fully_connected3'):
-        W3 = tf.get_variable('W3', shape=[fully_dims[1], fully_dims[2]],
-                             initializer=tf.random_normal_initializer(stddev=init_stddev))
-        b3 = tf.get_variable('b3', shape=[fully_dims[2]],
-                             initializer=tf.random_normal_initializer(stddev=init_stddev))
-        out_fully3 = tf.tanh(tf.matmul(out_fully2, W3) + b3)
+    # with tf.variable_scope('fully_connected2'):
+    #     W2 = tf.get_variable('W2', shape=[fully_dims[0], fully_dims[1]],
+    #                          initializer=tf.random_normal_initializer(stddev=init_stddev))
+    #     b2 = tf.get_variable('b2', shape=[fully_dims[1]])
+    #     out_fully2 = tf.tanh(tf.matmul(out_fully1, W2) + b2)
+    # with tf.variable_scope('fully_connected3'):
+    #     W3 = tf.get_variable('W3', shape=[fully_dims[1], fully_dims[2]],
+    #                          initializer=tf.random_normal_initializer(stddev=init_stddev))
+    #     b3 = tf.get_variable('b3', shape=[fully_dims[2]],
+    #                          initializer=tf.random_normal_initializer(stddev=init_stddev))
+    #     out_fully3 = tf.tanh(tf.matmul(out_fully2, W3) + b3)
 
     # output layer
     with tf.variable_scope('output_layer'):
         W = tf.get_variable('W', shape=[fully_dims[-1], output_dim])
         b = tf.get_variable('b', shape=[output_dim], initializer=tf.random_normal_initializer(stddev=init_stddev))
     # regressed = tf.matmul(tf.reshape(rnn_outputs, [-1, args.state_size]), W) + b
-    regressed = tf.matmul(out_fully3, W) + b
+    regressed = tf.matmul(out_fully1, W) + b
     return {'x': x, 'y': y, 'init_state': init_state, 'final_state': final_state, 'regressed': regressed}
 
 
@@ -106,7 +107,7 @@ def run_training(features, targets, valid_features, valid_targets, num_epoch, ve
 
     # first compute the variable of all channels
     targets_concat = np.concatenate(targets, axis=0)
-    valid_targets_concat = np.concatenate(valid_targets, axis=0)
+
     target_mean = np.mean(targets_concat, axis=0)
     target_variance = np.var(targets_concat, axis=0)
     print('target mean:', target_mean)
@@ -121,8 +122,7 @@ def run_training(features, targets, valid_features, valid_targets, num_epoch, ve
 
     for i in range(len(valid_targets)):
         valid_targets[i] = np.divide(valid_targets[i] - target_mean, target_variance)
-    valid_targets_concat = np.divide(valid_targets_concat - target_mean, target_variance)
-    
+    valid_targets_concat = np.concatenate(valid_targets, axis=0)
 
     tf.reset_default_graph()
     # construct graph
@@ -200,8 +200,8 @@ def run_training(features, targets, valid_features, valid_targets, num_epoch, ve
                     [(np.zeros([1, args.state_size]), np.zeros([1, args.state_size]))
                      for i in range(args.num_layer)])
                 predicted, cur_loss = run_testing(sess, variable_dict, valid_features[valid_id], valid_targets[valid_id], state)
-                loss_sklearn = mean_squared_error(np.reshape(np.array(predicted), [-1, 2]), valid_targets[valid_id])
-                print('Loss for valid set {}: {:.6f}(tf), {:.6f}(sklearn)'.format(valid_id, cur_loss, loss_sklearn))
+                # loss_sklearn = mean_squared_error(np.reshape(np.array(predicted), [-1, 2]), valid_targets[valid_id])
+                # print('Loss for valid set {}: {:.6f}(tf), {:.6f}(sklearn)'.format(valid_id, cur_loss, loss_sklearn))
                 predicted_concat.append(predicted)
             predicted_concat = np.concatenate(predicted_concat, axis=0)
             l2_loss = np.array([mean_squared_error(predicted_concat[:, 0], valid_targets_concat[:, 0]),
@@ -226,8 +226,7 @@ def run_training(features, targets, valid_features, valid_targets, num_epoch, ve
         #     total_samples += features[data_id].shape[0]
         #print('Overall training loss:', train_error_axis / total_samples)
 
-    return training_losses
-
+    return training_losses, validation_losses
 
 def load_dataset(listpath, imu_columns, feature_smooth_sigma, target_smooth_sigma):
     root_dir = os.path.dirname(listpath)
@@ -265,7 +264,7 @@ if __name__ == '__main__':
     parser.add_argument('--feature_smooth_sigma', type=float, default=-1.0)
     parser.add_argument('--target_smooth_sigma', type=float, default=30.0)
     parser.add_argument('--batch_size', type=int, default=1)
-    parser.add_argument('--num_steps', type=int, default=12772)
+    parser.add_argument('--num_steps', type=int, default=500)
     parser.add_argument('--state_size', type=int, default=1000)
     parser.add_argument('--num_layer', type=int, default=1)
     parser.add_argument('--num_epoch', type=int, default=150)
@@ -305,7 +304,14 @@ if __name__ == '__main__':
 
     print('Total number of samples: ', sum([len(target) for target in targets_train]))
     print('Running training')
-    losses = run_training(features_train, targets_train, features_validation, targets_validation, args.num_epoch,
-                          output_path=model_path, tensorboard_path=tfboard_path, checkpoint_path=chpt_path)
+    training_losses, validation_losses  = run_training(features_train, targets_train, features_validation, targets_validation, args.num_epoch,
+                                                       output_path=model_path, tensorboard_path=tfboard_path, checkpoint_path=chpt_path)
+
+    if output_root is not None:
+        assert len(training_losses) == len(validation_losses)
+        with open(output_root + '/losses.txt', 'w') as f:
+            for i in range(len(training_losses)):
+                f.write('{} {} {}\n'.format(training_losses[i], validation_losses[i][0], validation_losses[i][1]))
+            
     # plt.plot(losses)
     # plt.show()

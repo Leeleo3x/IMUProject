@@ -115,12 +115,14 @@ def query_position(scan, footprints, positions, bssid_map, k=3):
     distances = []
     for i in range(len(footprints)):
         dis = np.sort(query_footprint - footprints[i], axis=0)
-        distances.append({'id': i, 'dis': np.linalg.norm(dis[:20], ord=1)})
+        distances.append({'id': i, 'dis': np.linalg.norm(dis, ord=2)})
     distances = sorted(distances, key=lambda v: v['dis'])
     query_pos = np.zeros(3, dtype=float)
+    result_footprint = []
     for i in range(k):
         query_pos += positions[distances[i]['id']]
-    return query_pos / k
+        result_footprint.append(footprints[distances[i]['id']])
+    return query_pos / k, query_footprint, result_footprint
 
 if __name__ == '__main__':
     import argparse
