@@ -39,20 +39,16 @@ def construct_graph(input_dim, output_dim, batch_size=1):
     # construct graph
     init_stddev = 0.001
     # fully_dims = [512, 256, 128]
-    fully_dims = [512]
+    fully_dims = [512, 256]
     # placeholders for input and output
     x = tf.placeholder(tf.float32, [batch_size, None, input_dim],
                        name='input_placeholder')
     y = tf.placeholder(tf.float32, [batch_size, None, output_dim],
                        name='output_placeholder')
-    # init_state = tf.placeholder(tf.float32, [args.num_layer, 2, None, args.state_size])
 
     cell = tf.contrib.rnn.BasicLSTMCell(args.state_size, state_is_tuple=True)
     multi_cell = tf.contrib.rnn.MultiRNNCell([cell] * args.num_layer, state_is_tuple=True)
     init_state = multi_cell.zero_state(batch_size, dtype=tf.float32)
-
-    # rnn_outputs, final_state = tf.nn.dynamic_rnn(multi_cell, x, initial_state=tuple([tf.contrib.rnn.LSTMStateTuple(
-    #     init_state[i][0], init_state[i][1]) for i in range(args.num_layer)]))
 
     rnn_outputs, final_state = tf.nn.dynamic_rnn(multi_cell, x, initial_state=init_state)
 
@@ -64,11 +60,11 @@ def construct_graph(input_dim, output_dim, batch_size=1):
         b1 = tf.get_variable('b1', shape=[fully_dims[0]],
                              initializer=tf.random_normal_initializer(stddev=init_stddev))
         out_fully1 = tf.tanh(tf.matmul(tf.reshape(rnn_outputs, [-1, args.state_size]), W1) + b1)
-    # with tf.variable_scope('fully_connected2'):
-    #     W2 = tf.get_variable('W2', shape=[fully_dims[0], fully_dims[1]],
-    #                          initializer=tf.random_normal_initializer(stddev=init_stddev))
-    #     b2 = tf.get_variable('b2', shape=[fully_dims[1]])
-    #     out_fully2 = tf.tanh(tf.matmul(out_fully1, W2) + b2)
+    with tf.variable_scope('fully_connected2'):
+        W2 = tf.get_variable('W2', shape=[fully_dims[0], fully_dims[1]],
+                             initializer=tf.random_normal_initializer(stddev=init_stddev))
+        b2 = tf.get_variable('b2', shape=[fully_dims[1]])
+        out_fully2 = tf.tanh(tf.matmul(out_fully1, W2) + b2)
     # with tf.variable_scope('fully_connected3'):
     #     W3 = tf.get_variable('W3', shape=[fully_dims[1], fully_dims[2]],
     #                          initializer=tf.random_normal_initializer(stddev=init_stddev))
@@ -81,7 +77,7 @@ def construct_graph(input_dim, output_dim, batch_size=1):
         W = tf.get_variable('W', shape=[fully_dims[-1], output_dim])
         b = tf.get_variable('b', shape=[output_dim], initializer=tf.random_normal_initializer(stddev=init_stddev))
     # regressed = tf.matmul(tf.reshape(rnn_outputs, [-1, args.state_size]), W) + b
-    regressed = tf.matmul(out_fully1, W) + b
+    regressed = tf.matmul(out_fully2, W) + b
     return {'x': x, 'y': y, 'init_state': init_state, 'final_state': final_state, 'regressed': regressed}
 
 
@@ -113,8 +109,10 @@ def run_training(features, targets, valid_features, valid_targets, num_epoch, ve
     print('target mean:', target_mean)
     print('target variance:', target_variance)
 
-    tf.add_to_collection('target_mean', target_mean)
-    tf.add_to_collection('target_variance', target_variance)
+    tf.add_to_collection('target_mean_x', target_mean[0])
+    tf.add_to_collection('target_mean_z', target_mean[1])
+    tf.add_to_collection('target_variance_x', target_variance[0])
+    tf.add_to_collection('target_variance_z', target_variance[1])
 
     # normalize the input
     for i in range(len(targets)):
@@ -264,10 +262,10 @@ if __name__ == '__main__':
     parser.add_argument('--feature_smooth_sigma', type=float, default=-1.0)
     parser.add_argument('--target_smooth_sigma', type=float, default=30.0)
     parser.add_argument('--batch_size', type=int, default=1)
-    parser.add_argument('--num_steps', type=int, default=500)
-    parser.add_argument('--state_size', type=int, default=1000)
+    parser.add_argument('--num_steps', type=int, default=400)
+    parser.add_argument('--state_size', type=int, default=1500)
     parser.add_argument('--num_layer', type=int, default=1)
-    parser.add_argument('--num_epoch', type=int, default=150)
+    parser.add_argument('--num_epoch', type=int, default=200)
     parser.add_argument('--learning_rate', type=float, default=0.01)
     parser.add_argument('--decay_step', type=int, default=1000)
     parser.add_argument('--decay_rate', type=float, default=0.95)
@@ -302,7 +300,7 @@ if __name__ == '__main__':
         if not os.path.exists(chpt_path):
             os.makedirs(chpt_path)
 
-    print('Total number of samples: ', sum([len(target) for target in targets_train]))
+    print('Total number of training samples: ', sum([len(target) for target in targets_train]))
     print('Running training')
     training_losses, validation_losses  = run_training(features_train, targets_train, features_validation, targets_validation, args.num_epoch,
                                                        output_path=model_path, tensorboard_path=tfboard_path, checkpoint_path=chpt_path)

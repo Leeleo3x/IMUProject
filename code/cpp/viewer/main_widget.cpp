@@ -83,7 +83,7 @@ namespace IMUProject{
 
 		string line;
 
-        sprintf(buffer, "%s/result_raw.csv", path.c_str());
+        sprintf(buffer, "%s/result_full.csv", path.c_str());
         ifstream full_in(buffer);
         if(full_in.is_open()){
             printf("Loading %s\n", buffer);
@@ -99,6 +99,7 @@ namespace IMUProject{
             }
             add_trajectory(traj, imu_orientation, full_traj_color, 1.0f);
         }
+
 
 		sprintf(buffer, "%s/result_const.csv", path.c_str());
 		ifstream const_in(buffer);

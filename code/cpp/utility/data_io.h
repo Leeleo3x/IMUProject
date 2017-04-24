@@ -48,6 +48,9 @@ namespace IMUProject{
         const int position = 13;
         const int orientation = 16;
         const int rotation_vector = 20;
+        const int gyro_stab = 24;
+        const int acce_stab = 27;
+        const int linacce_stab = 30;
     };
 
 
