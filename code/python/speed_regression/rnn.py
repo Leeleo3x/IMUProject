@@ -301,6 +301,7 @@ if __name__ == '__main__':
             os.makedirs(chpt_path)
 
     print('Total number of training samples: ', sum([len(target) for target in targets_train]))
+    print('Total number of validation samples: ', sum([len(target) for target in targets_validation]))
     print('Running training')
     training_losses, validation_losses  = run_training(features_train, targets_train, features_validation, targets_validation, args.num_epoch,
                                                        output_path=model_path, tensorboard_path=tfboard_path, checkpoint_path=chpt_path)

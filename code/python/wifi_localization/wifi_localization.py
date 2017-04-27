@@ -24,7 +24,14 @@ def reorder_wifi_records(wifi_records):
     for scan in wifi_records:
         for rec in scan:
             cluster_id = np.argmin([abs(rec['t'] - v) for v in median_time])
-            wifi_reordered[cluster_id].append(rec)
+            is_new = True
+            for ext in wifi_reordered[cluster_id]:
+                if ext['BSSID'] == rec['BSSID']:
+                    ext['level'] = max(rec['level'], ext['level'])
+                    is_new = False
+                    break
+            if is_new:
+                wifi_reordered[cluster_id].append(rec)
     # remove empty scans
     for scan in wifi_reordered:
         if len(scan) == 0:
@@ -118,11 +125,9 @@ def query_position(scan, footprints, positions, bssid_map, k=3):
         distances.append({'id': i, 'dis': np.linalg.norm(dis, ord=2)})
     distances = sorted(distances, key=lambda v: v['dis'])
     query_pos = np.zeros(3, dtype=float)
-    result_footprint = []
     for i in range(k):
         query_pos += positions[distances[i]['id']]
-        result_footprint.append(footprints[distances[i]['id']])
-    return query_pos / k, query_footprint, result_footprint
+    return query_pos / k, query_footprint
 
 if __name__ == '__main__':
     import argparse
@@ -186,7 +191,7 @@ if __name__ == '__main__':
 
     # test self validation
     for i in range(len(wifi_all)):
-        pos = query_position(wifi_all[i], footprints_all, positions_all, bssid_map, 1)
+        pos, _, = query_position(wifi_all[i], footprints_all, positions_all, bssid_map, 1)
         print('{}, ({}, {}, {}) | ({}, {}, {})'.format(i, positions_all[i][0], positions_all[i][1], positions_all[i][2],
                                                        pos[0], pos[1], pos[2]))
 

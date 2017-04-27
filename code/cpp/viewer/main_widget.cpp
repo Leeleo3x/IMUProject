@@ -12,7 +12,7 @@ namespace IMUProject{
                            const int canvas_width,
                            const int canvas_height,
                            QWidget *parent): render_count_(0),
-	                                         full_traj_color(0.0f, 0.8f, 0.0f),
+	                                         full_traj_color(0.0f, 0.0f, 1.0f),
 	                                         const_traj_color(0.6f, 0.6f, 0.0f),
 	                                         tango_traj_color(1.0f, 0.0f, 0.0f),
 	                                         panel_border_margin_(10), panel_size_(300), is_rendering_(false){
@@ -37,6 +37,7 @@ namespace IMUProject{
 
 		const Eigen::Vector3f ori_traj_color(0.0, 0.8, 0.0);
 		const Eigen::Vector3f mag_traj_color(0.5, 0, 0.5);
+        const Eigen::Vector3f step_traj_color(0.5, 0.0, 0.2);
 
 		auto add_trajectory = [&](std::vector<Eigen::Vector3d>& traj, const std::vector<Eigen::Quaterniond>& orientation,
 		                          const Eigen::Vector3f color, const float frustum_size){
@@ -83,40 +84,64 @@ namespace IMUProject{
 
 		string line;
 
-        sprintf(buffer, "%s/result_full.csv", path.c_str());
-        ifstream full_in(buffer);
-        if(full_in.is_open()){
-            printf("Loading %s\n", buffer);
-            std::vector<Eigen::Vector3d> traj;
-            std::getline(full_in, line);
-            int count = 0;
-            while(std::getline(full_in, line)) {
-                std::vector<double> values = ParseCommaSeparatedLine(line);
-                if(count %  frame_interval_ == 0) {
-                    traj.emplace_back(values[2], values[3], values[4]);
+        {
+            sprintf(buffer, "%s/result_full.csv", path.c_str());
+            ifstream full_in(buffer);
+            if(full_in.is_open()){
+                printf("Loading %s\n", buffer);
+                std::vector<Eigen::Vector3d> traj;
+                std::getline(full_in, line);
+                int count = 0;
+                while(std::getline(full_in, line)) {
+                    std::vector<double> values = ParseCommaSeparatedLine(line);
+                    if(count %  frame_interval_ == 0) {
+                        traj.emplace_back(values[2], values[3], values[4]);
+                    }
+                    count++;
                 }
-                count++;
+                add_trajectory(traj, imu_orientation, full_traj_color, 1.0f);
             }
-            add_trajectory(traj, imu_orientation, full_traj_color, 1.0f);
+        }
+
+        {
+            sprintf(buffer, "%s/result_step.csv", path.c_str());
+            ifstream step_in(buffer);
+            if(step_in.is_open()){
+                printf("Loading %s\n", buffer);
+                std::vector<Eigen::Vector3d> traj;
+                std::getline(step_in, line);
+                int count = 0;
+                while(std::getline(step_in, line)) {
+                    std::vector<double> values = ParseCommaSeparatedLine(line);
+                    if(count %  frame_interval_ == 0) {
+                        traj.emplace_back(values[2], values[3], values[4]);
+                    }
+                    count++;
+                }
+                add_trajectory(traj, imu_orientation, step_traj_color, 1.0f);
+            }
         }
 
 
-		sprintf(buffer, "%s/result_const.csv", path.c_str());
-		ifstream const_in(buffer);
-		if(const_in.is_open()){
-			printf("Loading %s\n", buffer);
-			std::vector<Eigen::Vector3d> traj;
-			std::getline(const_in, line);
-			int count = 0;
-			while(std::getline(const_in, line)) {
-				std::vector<double> values = ParseCommaSeparatedLine(line);
-				if(count %  frame_interval_ == 0) {
-					traj.emplace_back(values[2], values[3], values[4]);
-				}
-				count++;
-			}
-			add_trajectory(traj, imu_orientation, const_traj_color, 0.5f);
-		}
+        {
+            sprintf(buffer, "%s/result_const.csv", path.c_str());
+            ifstream const_in(buffer);
+            if(const_in.is_open()){
+                printf("Loading %s\n", buffer);
+                std::vector<Eigen::Vector3d> traj;
+                std::getline(const_in, line);
+                int count = 0;
+                while(std::getline(const_in, line)) {
+                    std::vector<double> values = ParseCommaSeparatedLine(line);
+                    if(count %  frame_interval_ == 0) {
+                        traj.emplace_back(values[2], values[3], values[4]);
+                    }
+                    count++;
+                }
+                add_trajectory(traj, imu_orientation, const_traj_color, 0.5f);
+            }
+        }
+
 
 //		sprintf(buffer, "%s/result_ori_only.csv", path.c_str());
 //		ifstream ori_in(buffer);
