@@ -67,6 +67,23 @@ def filter_scan(scan, min_time, max_time, min_level):
     return scan_filtered
 
 
+def merge_grouped_records(wifi_records, grouping=1):
+    assert len(wifi_records) % grouping == 0
+    merged_records = [[] for _ in range(len(wifi_records) // grouping)]
+    for gid in range(len(merged_records)):
+        for scan in wifi_records[gid * grouping:(gid+1) * grouping]:
+            for rec in scan:
+                append_new = True
+                if len(merged_records[gid]) > 0:
+                    for ext_rec in merged_records[gid]:
+                        if rec['BSSID'] == ext_rec['BSSID']:
+                            append_new = False
+                            ext_rec['level'] = max(ext_rec['level'], rec['level'])
+                if append_new:
+                    merged_records[gid].append(rec)
+    return merged_records
+
+
 def build_wifi_footprint(scan, bssid_map):
     assert len(scan) > 0
     footprint = [0 for _ in range(len(bssid_map))]
@@ -83,6 +100,7 @@ def load_wifi_data(path):
     records = []
     with open(path) as wifi_file:
         header = wifi_file.readline()
+        redun = int(wifi_file.readline().strip())
         num_record = int(wifi_file.readline().strip())
         for i in range(num_record):
             cur_record = []
@@ -91,7 +109,7 @@ def load_wifi_data(path):
                 line = wifi_file.readline().strip().split()
                 cur_record.append({'t': int(line[0]) * micro_to_nano, 'BSSID': line[1], 'level': int(line[2])})
             records.append(cur_record)
-    return records
+    return records, redun
 
 
 def write_wifi_footprints(footprints, bssid_map, path, positions=None):
@@ -137,7 +155,7 @@ if __name__ == '__main__':
     parser.add_argument('--output', type=str, default=None)
     parser.add_argument('--min_level', default=-75, type=int)
     parser.add_argument('--min_count', default=10, type=int)
-
+    parser.add_argument('--no_group', action='store_true')
     args = parser.parse_args()
 
     root_dir = os.path.dirname(args.list)
@@ -152,13 +170,16 @@ if __name__ == '__main__':
         data_name = data.strip().split()[0]
         data_path = root_dir + '/' + data_name
         print('Loading ' + data_path)
-        wifi_records = load_wifi_data(data_path + '/wifi.txt')
+        wifi_records, redun = load_wifi_data(data_path + '/wifi.txt')
+        print('{} scans in file {}'.format(len(wifi_records), data_path))
         wifi_reordered = reorder_wifi_records(wifi_records)
         wifi_records = None
         pose_data = np.genfromtxt(data_path + '/pose.txt')[:, :4]
         # remove records that are out of pose data's time range, or with too small signal level
         wifi_reordered = [filter_scan(scan, pose_data[0][0], pose_data[-1][0], args.min_level)
                           for scan in wifi_reordered]
+        if not args.no_group:
+            wifi_reordered = merge_grouped_records(wifi_reordered, redun)
         wifi_with_pose = []
         for scan in wifi_reordered:
             if len(scan) == 0:
@@ -168,7 +189,6 @@ if __name__ == '__main__':
             for i in range(len(rec_poses)):
                 scan[i]['pos'] = rec_poses[i][1:]
             wifi_with_pose.append(scan)
-        print('{} records in the file {}'.format(len(wifi_with_pose), data_name))
 
         # for scan in wifi_reordered:
         #     print('----------------------')
