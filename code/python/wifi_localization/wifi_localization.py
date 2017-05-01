@@ -84,9 +84,16 @@ def merge_grouped_records(wifi_records, grouping=1):
     return merged_records
 
 
-def build_wifi_footprint(scan, bssid_map):
+def downsample_grouped_records(wifi_records, grouping=1):
+    ds = []
+    for i in range(0, len(wifi_records), grouping):
+        ds.append(wifi_records[i])
+    return ds
+
+
+def build_wifi_footprint(scan, bssid_map, min_level=-100):
     assert len(scan) > 0
-    footprint = [0 for _ in range(len(bssid_map))]
+    footprint = [min_level for _ in range(len(bssid_map))]
     position = None
     if 'pos' in scan[0]:
         position = sum([v['pos'] for v in scan]) / float(len(scan))
@@ -107,7 +114,8 @@ def load_wifi_data(path):
             num_wifi = int(wifi_file.readline().strip())
             for j in range(num_wifi):
                 line = wifi_file.readline().strip().split()
-                cur_record.append({'t': int(line[0]) * micro_to_nano, 'BSSID': line[1], 'level': int(line[2])})
+                level = int(line[2])
+                cur_record.append({'t': int(line[0]) * micro_to_nano, 'BSSID': line[1], 'level': level})
             records.append(cur_record)
     return records, redun
 
@@ -155,7 +163,7 @@ if __name__ == '__main__':
     parser.add_argument('--output', type=str, default=None)
     parser.add_argument('--min_level', default=-75, type=int)
     parser.add_argument('--min_count', default=10, type=int)
-    parser.add_argument('--no_group', action='store_true')
+    parser.add_argument('--merge_mode', default='none', type=str)
     args = parser.parse_args()
 
     root_dir = os.path.dirname(args.list)
@@ -178,8 +186,11 @@ if __name__ == '__main__':
         # remove records that are out of pose data's time range, or with too small signal level
         wifi_reordered = [filter_scan(scan, pose_data[0][0], pose_data[-1][0], args.min_level)
                           for scan in wifi_reordered]
-        if not args.no_group:
+        if args.merge_mode == 'merge':
             wifi_reordered = merge_grouped_records(wifi_reordered, redun)
+        elif args.merge_mode == 'downsample':
+            wifi_reordered = downsample_grouped_records(wifi_reordered, redun)
+
         wifi_with_pose = []
         for scan in wifi_reordered:
             if len(scan) == 0:
