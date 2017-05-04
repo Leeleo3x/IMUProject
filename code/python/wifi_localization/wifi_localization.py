@@ -161,7 +161,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('list')
     parser.add_argument('--output', type=str, default=None)
-    parser.add_argument('--min_level', default=-75, type=int)
+    parser.add_argument('--min_level', default=-80, type=int)
     parser.add_argument('--min_count', default=10, type=int)
     parser.add_argument('--merge_mode', default='none', type=str)
     args = parser.parse_args()

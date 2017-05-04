@@ -88,5 +88,5 @@ if __name__ == '__main__':
 
     # plt.legend(['Predicted speed', 'Before correction', 'After correction'], loc='lower left')
 
-    fig.savefig('/Users/yanhang/Documents/research/paper/iccv2017/8514476vhgjvhxssxgf/images/sparse_plot.png', bbox_inches='tight')
-    # plt.show()
+    # fig.savefig('/Users/yanhang/Documents/research/paper/iccv2017/8514476vhgjvhxssxgf/images/sparse_plot.png', bbox_inches='tight')
+    plt.show()
