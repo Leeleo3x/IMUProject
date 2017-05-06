@@ -11,6 +11,7 @@ sys.path.append('/home/yanhang/Documents/research/IMUProject/code/python')
 
 from algorithms import geometry
 
+
 def compute_gravity_speed(ts, linacce, orientation, gravity):
     directed = np.empty(linacce.shape, dtype=float)
     for i in range(directed.shape[0]):

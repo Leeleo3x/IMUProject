@@ -131,8 +131,9 @@ if __name__ == '__main__':
             print('Gravity found. Sample rate:{:2f} Hz'
                   .format((gravity_data.shape[0] - 1.0) * nano_to_sec / (gravity_data[-1, 0] - gravity_data[0, 0])))
 
-            # magnet_data = np.genfromtxt(data_root + '/magnet.txt')[args.skip:]
-            # print('Magnetometer: {:.2f}Hz'.format((magnet_data.shape[0] - 1.0) * nano_to_sec / (magnet_data[-1, 0] - magnet_data[0, 0])))
+            magnet_data = np.genfromtxt(data_root + '/magnet.txt')[args.skip:]
+            print('Magnetometer: {:.2f}Hz'.
+                  format((magnet_data.shape[0] - 1.0) * nano_to_sec / (magnet_data[-1, 0] - magnet_data[0, 0])))
 
             orientation_data = np.genfromtxt(data_root + '/orientation.txt')[args.skip:]
             print('Orientation found. Sample rate:{:2f}'
@@ -151,7 +152,7 @@ if __name__ == '__main__':
             output_accelerometer_linear = interpolate_3dvector_linear(acce_data, output_timestamp)
             output_linacce_linear = interpolate_3dvector_linear(linacce_data, output_timestamp)
             output_gravity_linear = interpolate_3dvector_linear(gravity_data, output_timestamp)
-            # output_magnet_linear = interpolate_3dvector_linear(magnet_data, output_timestamp)
+            output_magnet_linear = interpolate_3dvector_linear(magnet_data, output_timestamp)
 
             # convert gyro, accelerometer and linear acceleration to stablized IMU frame
             gyro_stab = geometry.align_eular_rotation_with_gravity(output_gyro_linear[:, 1:],
@@ -169,6 +170,7 @@ if __name__ == '__main__':
             # construct a Pandas DataFrame
             column_list = 'time,gyro_x,gyro_y,gyro_z,acce_x'.split(',') + \
                           'acce_y,acce_z,linacce_x,linacce_y,linacce_z,grav_x,grav_y,grav_z'.split(',') + \
+                          'magnet_x,magnet_y,magnet_z'.split(',') + \
                           'pos_x,pos_y,pos_z,ori_w,ori_x,ori_y,ori_z,rv_w,rv_x,rv_y,rv_z'.split(',') + \
                           'gyro_stab_x,gyro_stab_y,gyro_stab_z,acce_stab_x,acce_stab_y,acce_stab_z'.split(',') + \
                           'linacce_stab_x,linacce_stab_y,linacce_stab_z'.split(',')
@@ -177,6 +179,7 @@ if __name__ == '__main__':
                                        output_accelerometer_linear[:, 1:],
                                        output_linacce_linear[:, 1:],
                                        output_gravity_linear[:, 1:],
+                                       output_magnet_linear[:, 1:],
                                        pose_data[:, 1:4],
                                        pose_data[:, -4:],
                                        output_orientation[:, 1:],
