@@ -122,43 +122,56 @@ def align_eular_rotation_with_gravity(data, gravity, local_g_direction=np.array(
     return output
 
 
+def orientation_from_gravity_and_magnet(grav, magnet,
+                                        local_gravity=np.array([0, 1, 0]),
+                                        global_gravity=np.array([0, 0, 1]),
+                                        global_north=np.array([-1, 0, 0])):
+    rot_grav = quaternion_from_two_vectors(grav, global_gravity)
+    # remove tilting
+    rot_tilt = quaternion_from_two_vectors(grav, local_gravity)
+    magnet_grav = (rot_tilt * quaternion.quaternion(1.0, *magnet) * rot_tilt.conj()).vec
+    magnet_grav[1] = 0.0
+    magnet_grav = (rot_grav * quaternion.quaternion(1.0, *magnet_grav) * rot_grav.conj()).vec
+    rot_magnet = quaternion_from_two_vectors(magnet_grav, global_north)
+    return rot_magnet * rot_grav
+
+
 if __name__ == '__main__':
 
     import pandas
     import quaternion
 
-    data_all = pandas.read_csv('../../../data/phab_body/lopata_left1/processed/data.csv')
-    
-    gyro = data_all[['gyro_x', 'gyro_y', 'gyro_z']].values
+    data_dir = '../../../data/phab_body/cse1'
+    data_all = pandas.read_csv(data_dir + '/processed/data.csv')[:-5]
+    ts = data_all['time'].values
+    position = data_all[['pos_x', 'pos_y', 'pos_z']].values
+    orientation = data_all[['ori_w', 'ori_x', 'ori_y', 'ori_z']].values
     gravity = data_all[['grav_x', 'grav_y', 'grav_z']].values
-    gyro2 = np.empty(gyro.shape, dtype=float)
+    magnet_data = np.genfromtxt(data_dir + '/magnet.txt')
 
-    for i in range(gyro.shape[0]):
-        gyro2[i] = adjust_eular_angle(quaternion.as_euler_angles(quaternion.from_euler_angles(*gyro[i])))
+    from scipy.interpolate import interp1d
+    magnet_func = interp1d(magnet_data[:, 0], magnet_data[:, 1:], axis=0)
+    magnet = magnet_func(ts)
 
-    gyro3 = align_eular_rotation_with_gravity(gyro, gravity)
+    ori_grav_mag = []
+    for i in range(ts.shape[0]):
+        ori_grav_mag.append(orientation_from_gravity_and_magnet(gravity[i], magnet[i]))
 
-    diff = 0
+    rv = data_all[['rv_w', 'rv_x', 'rv_y', 'rv_z']].values
+    init_trans = quaternion.quaternion(*rv[0]) * ori_grav_mag[0].inverse()
+    for i in range(ts.shape[0]):
+       ori_grav_mag[i] = init_trans * ori_grav_mag[i]
 
-    # for i in range(0, gyro.shape[0]):
-    #     print('{:.6f}, {:.6f}, {:.6f} | {:.6f}, {:.6f}, {:.6f}'.format(
-    #     gyro[i][0], gyro[i][1], gyro[i][2], gyro2[i][0], gyro2[i][1], gyro2[i][2]))
-    #     cur_diff = np.linalg.norm(gyro2[i] - gyro[i])
-    #     if cur_diff > 1e-9:
-    #         print('diff')
-    #     diff += cur_diff
+    mag_grav = align_3dvector_with_gravity(magnet, gravity)
+    mag_grav[:, 1] = 0
 
-    # for i in range(0, gyro.shape[0]):
-    #     print('{:.6f}, {:.6f}, {:.6f} | {:.6f}, {:.6f}, {:.6f}'.format(
-    #     gyro[i][0], gyro[i][1], gyro[i][2], gyro3[i][0], gyro3[i][1], gyro3[i][2]))
-    #     cur_diff = np.linalg.norm(gyro3[i] - gyro[i])
-    #     if cur_diff > 0.1:
-    #         print('diff')
-    #     diff += cur_diff
+    ori_grav_mag = quaternion.as_float_array(ori_grav_mag)
+    from utility import write_trajectory_to_ply
+    write_trajectory_to_ply.write_ply_to_file(data_dir + '/processed/test_grav_magnet.ply', position, ori_grav_mag,
+                                              acceleration=mag_grav,
+                                              interval=200)
 
-    print('Diff: ', diff)
-
-
+    print('Trajectory written')
 
 
 
