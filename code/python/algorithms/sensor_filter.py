@@ -43,6 +43,19 @@ def low_pass_filter(t, data, alpha):
         filtered[i] = filtered[i-1] + (time_interval[i-1] / (alpha + time_interval[i-1])) * (data[i] - filtered[i-1])
     return filtered
 
+
+def correct_gyro_drifting(t, rv, magnet):
+    assert t.shape[0] == rv.shape[0]
+    assert t.shape[0] == magnet.shape[0]
+    d_rot = np.empty([rv.shape[0], 4], dtype=float)
+    rv_quats = []
+    for r in rv:
+        rv_quats.append(quaternion.quaternion(*r))
+
+    rv_dev = [quaternion.quaternion(1.0, 0.0, 0.0, 0.0)]
+    for i in range(1, rv.shape[0]):
+        d_rot[i] = quaternion.as_float_array()
+
 if __name__ == '__main__':
     import pandas
     import argparse
