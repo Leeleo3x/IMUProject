@@ -136,42 +136,91 @@ def orientation_from_gravity_and_magnet(grav, magnet,
     return rot_magnet * rot_grav
 
 
+# complmentary filter
+def correct_gyro_drifting(rv, magnet, gravity, alpha=0.98,
+                          min_cos=0.0, global_orientation=None):
+    assert rv.shape[0] == magnet.shape[0]
+    assert rv.shape[0] == gravity.shape[0]
+
+    rv_quats = []
+    for r in rv:
+        rv_quats.append(quaternion.quaternion(*r))
+    if global_orientation is None:
+        global_orientation = rv_quats[0]
+
+    # fake the angular velocity by differentiating the rotation vector
+    rv_dif = [quaternion.quaternion(1.0, 0.0, 0.0, 0.0) for _ in range(rv.shape[0])]
+    for i in range(1, rv.shape[0]):
+        rv_dif[i] = rv_quats[i] * rv_quats[i - 1].inverse()
+
+    # complementary filter
+    rv_filtered = [global_orientation for _ in range(rv.shape[0])]
+    rv_mag_init_trans = global_orientation * orientation_from_gravity_and_magnet(magnet[0], gravity[0]).inverse()
+    fused = [False for _ in range(rv.shape[0])]
+    for i in range(1, rv.shape[0]):
+        # from gyroscop
+        rv_filtered[i] = rv_dif[i] * rv_filtered[i - 1]
+        # from magnetometer
+        rv_mag = rv_mag_init_trans * orientation_from_gravity_and_magnet(magnet[i], gravity[i])
+        diff_angle = rv_filtered[i].inverse() * rv_mag
+        # only fuse when the magnetometer is "reasonable"
+        if diff_angle.w >= min_cos:
+            fused[i] = True
+            rv_filtered[i] = quaternion.slerp(rv_filtered[i], rv_mag, 0.0, 1.0, 1.0 - alpha)
+    return quaternion.as_float_array(rv_filtered), fused
+
+
 if __name__ == '__main__':
-
     import pandas
-    import quaternion
-
-    data_dir = '../../../data/phab_body/cse8'
-    data_all = pandas.read_csv(data_dir + '/processed/data.csv')[:-5]
-    ts = data_all['time'].values
-    position = data_all[['pos_x', 'pos_y', 'pos_z']].values
-    orientation = data_all[['ori_w', 'ori_x', 'ori_y', 'ori_z']].values
-    gravity = data_all[['grav_x', 'grav_y', 'grav_z']].values
-    magnet_data = np.genfromtxt(data_dir + '/magnet.txt')
-
-    from scipy.interpolate import interp1d
-    magnet_func = interp1d(magnet_data[:, 0], magnet_data[:, 1:], axis=0)
-    magnet = magnet_func(ts)
-
-    ori_grav_mag = []
-    for i in range(ts.shape[0]):
-        ori_grav_mag.append(orientation_from_gravity_and_magnet(gravity[i], magnet[i]))
-
-    rv = data_all[['rv_w', 'rv_x', 'rv_y', 'rv_z']].values
-    init_trans = quaternion.quaternion(*rv[0]) * ori_grav_mag[0].inverse()
-    for i in range(ts.shape[0]):
-       ori_grav_mag[i] = init_trans * ori_grav_mag[i]
-
-    mag_grav = align_3dvector_with_gravity(magnet, gravity)
-    mag_grav[:, 1] = 0
-
-    ori_grav_mag = quaternion.as_float_array(ori_grav_mag)
+    import matplotlib.pyplot as plt
     from utility import write_trajectory_to_ply
-    write_trajectory_to_ply.write_ply_to_file(data_dir + '/processed/test_grav_magnet.ply', position, ori_grav_mag,
-                                              acceleration=mag_grav,
+    from pre_processing import gen_dataset
+
+    skip = 400
+    data_path = '../../data/phab_body/cse8'
+    data_all = pandas.read_csv(data_path + '/processed/data.csv')[:-10]
+
+    magnet_data = np.genfromtxt(data_path + '/magnet.txt')
+    ts = data_all['time'].values
+    orientation = data_all[['ori_w', 'ori_x', 'ori_y', 'ori_z']].values
+    position = data_all[['pos_x', 'pos_y', 'pos_z']].values
+    gravity = data_all[['grav_x', 'grav_y', 'grav_z']].values
+
+    magnet = gen_dataset.interpolate_3dvector_linear(magnet_data, ts)[:, 1:]
+
+    for i in range(magnet.shape[0]):
+        q = quaternion.quaternion(*orientation[i])
+        magnet[i] = (q * quaternion.quaternion(0.0, *magnet[i]) * q.conj()).vec
+
+    # magnet = gaussian_filter1d(magnet, sigma=2.0, axis=0)
+    magnet_mag = np.linalg.norm(magnet, axis=1)
+    max_mag = np.max(magnet_mag)
+
+    mag_error = np.empty(magnet.shape[0])
+    ref = magnet[0, :2] / np.linalg.norm(magnet[0, :2])
+    for i in range(magnet.shape[0]):
+        mag_error[i] = 1.0 - np.dot(magnet[i, :2], ref) / np.linalg.norm(magnet[i, :2])
+
+    # test with complmentary filter
+    rv = data_all[['rv_w', 'rv_x', 'rv_y', 'rv_z']].values
+    rv_filtered, fused = correct_gyro_drifting(rv, magnet, gravity, alpha=0.01,
+                                               global_orientation=quaternion.quaternion(*orientation[0]))
+
+    write_trajectory_to_ply.write_ply_to_file(data_path + '/processed/comp_filter.ply', position, rv_filtered,
                                               interval=200)
 
-    print('Trajectory written')
+    plt.figure('Magnet direction')
+    plt.plot(position[0:-1:10, 0], position[0:-1:10, 1], color='r')
+
+    interval = 100
+    mag_ratio = 10.0 / max_mag
+    for i in range(0, magnet.shape[0], interval):
+        vtx = np.array([position[i, :2], position[i, :2] + magnet[i, :2] * mag_ratio])
+        if fused[i]:
+            plt.plot(vtx[:, 0], vtx[:, 1], color='r')
+        else:
+            plt.plot(vtx[:, 0], vtx[:, 1], color='b')
+    plt.show()
 
 
 
