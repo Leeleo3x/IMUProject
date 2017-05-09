@@ -141,7 +141,7 @@ if __name__ == '__main__':
     import pandas
     import quaternion
 
-    data_dir = '../../../data/phab_body/cse1'
+    data_dir = '../../../data/phab_body/cse8'
     data_all = pandas.read_csv(data_dir + '/processed/data.csv')[:-5]
     ts = data_all['time'].values
     position = data_all[['pos_x', 'pos_y', 'pos_z']].values
