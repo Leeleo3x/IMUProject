@@ -131,7 +131,7 @@ if __name__ == '__main__':
             print('Gravity found. Sample rate:{:2f} Hz'
                   .format((gravity_data.shape[0] - 1.0) * nano_to_sec / (gravity_data[-1, 0] - gravity_data[0, 0])))
 
-            magnet_data = np.genfromtxt(data_root + '/magnet.txt')[args.skip:]
+            magnet_data = np.genfromtxt(data_root + '/magnet.txt')
             print('Magnetometer: {:.2f}Hz'.
                   format((magnet_data.shape[0] - 1.0) * nano_to_sec / (magnet_data[-1, 0] - magnet_data[0, 0])))
 
@@ -207,7 +207,7 @@ if __name__ == '__main__':
                 viewing_dir[:, 2] = -1.0
                 write_ply_to_file(path=output_folder + '/trajectory.ply', position=pose_data[:, 1:4],
                                   orientation=pose_data[:, -4:], acceleration=output_gravity_linear[:, 1:],
-                                  length=0.5, kpoints=100, interval=200)
+                                  length=5.0, kpoints=100, interval=200)
 
                 q_device_tango = quaternion.quaternion(*pose_data[0, -4:])
                 # q_device_tango = quaternion.quaternion(1., 0., 0., 0.)
@@ -217,7 +217,7 @@ if __name__ == '__main__':
                     orientation_tango_frame[i] = quaternion.as_float_array(q_rv_tango *
                                                                            quaternion.quaternion(*output_orientation[i, 1:]))
                 write_ply_to_file(output_folder + '/trajectory_rv.ply', position=pose_data[:, -7:-4],
-                                  orientation=orientation_tango_frame, length=0.5, kpoints=100, interval=200)
+                                  orientation=orientation_tango_frame, length=5.0, kpoints=100, interval=200)
 
         length = (data_pandas['time'].values[-1] - data_pandas['time'].values[0]) / nano_to_sec
         hertz = data_pandas.shape[0] / length

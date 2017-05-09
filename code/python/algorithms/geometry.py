@@ -177,7 +177,7 @@ if __name__ == '__main__':
     from pre_processing import gen_dataset
 
     skip = 400
-    data_path = '../../data/phab_body/cse8'
+    data_path = '../../../data/phab_body/cse8'
     data_all = pandas.read_csv(data_path + '/processed/data.csv')[:-10]
 
     magnet_data = np.genfromtxt(data_path + '/magnet.txt')
@@ -196,11 +196,6 @@ if __name__ == '__main__':
     magnet_mag = np.linalg.norm(magnet, axis=1)
     max_mag = np.max(magnet_mag)
 
-    mag_error = np.empty(magnet.shape[0])
-    ref = magnet[0, :2] / np.linalg.norm(magnet[0, :2])
-    for i in range(magnet.shape[0]):
-        mag_error[i] = 1.0 - np.dot(magnet[i, :2], ref) / np.linalg.norm(magnet[i, :2])
-
     # test with complmentary filter
     rv = data_all[['rv_w', 'rv_x', 'rv_y', 'rv_z']].values
     rv_filtered, fused = correct_gyro_drifting(rv, magnet, gravity, alpha=0.01,
@@ -216,10 +211,7 @@ if __name__ == '__main__':
     mag_ratio = 10.0 / max_mag
     for i in range(0, magnet.shape[0], interval):
         vtx = np.array([position[i, :2], position[i, :2] + magnet[i, :2] * mag_ratio])
-        if fused[i]:
-            plt.plot(vtx[:, 0], vtx[:, 1], color='r')
-        else:
-            plt.plot(vtx[:, 0], vtx[:, 1], color='b')
+        plt.plot(vtx[:, 0], vtx[:, 1], color='r')
     plt.show()
 
 
