@@ -68,9 +68,8 @@ if __name__ == '__main__':
     plt.ylabel('Acceleration (m/s2)')
     plt.xlabel('Time (s)')
     plt.plot(ts[:end_id], linacce[:end_id, 2], color='r', lw=linew)
-    plt.plot(ts[:end_id], corrected_linacce[:end_id, 3], color='b', lw=linew)
-    plt.plot(ts[bias_ind[:window]], bias[:window, 3], color=(.5, .8, .0), lw=linew,
-             marker='o', markersize=markersize)
+    # plt.plot(ts[:end_id], corrected_linacce[:end_id, 3], color='b', lw=linew)
+    # plt.plot(ts[bias_ind[:window]], bias[:window, 3], color=(.5, .8, .0), lw=linew, marker='o', markersize=markersize)
     # plt.legend(['Sparse bias', 'Raw acceleration', 'Corrected acceleration'], loc='lower left')
 
     cw = 0
@@ -81,12 +80,12 @@ if __name__ == '__main__':
     plt.subplot(122, axis_bgcolor='black')
     plt.ylabel('Velocity (m/s)')
     plt.xlabel('Time (s)')
-    plt.plot(ts[:end_id], speed_raw[:end_id, 2], color='r', lw=linew)
-    plt.plot(ts[:end_id], speed_corrected[:end_id, 2], color='b', lw=linew)
+    plt.plot(ts[:end_id], speed_raw[:end_id, 2], color=(0., 0., 0.), lw=linew)
+    # plt.plot(ts[:end_id], speed_corrected[:end_id, 2], color='b', lw=linew)
     plt.plot(ts[constraint_ind[:cw]], constraint[:cw, 3], color=(.8, .5, 0), lw=linew,
              marker='^', markersize=markersize)
 
     # plt.legend(['Predicted speed', 'Before correction', 'After correction'], loc='lower left')
 
-    # fig.savefig('/Users/yanhang/Documents/research/paper/iccv2017/8514476vhgjvhxssxgf/images/sparse_plot.png', bbox_inches='tight')
-    plt.show()
+    fig.savefig('/Users/yanhang/Documents/research/paper/iccv2017_supplementary/presentation/alg1.png', bbox_inches='tight')
+    # plt.show()
