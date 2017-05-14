@@ -21,7 +21,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('list')
     parser.add_argument('--window', default=200, type=int)
-    parser.add_argument('--step', default=20, type=int)
+    parser.add_argument('--step', default=10, type=int)
     parser.add_argument('--feature', default='direct_gravity', type=str)
     parser.add_argument('--target', default='local_speed_gravity', type=str)
     parser.add_argument('--frq_threshold', default=50, type=int)
@@ -85,8 +85,8 @@ if __name__ == '__main__':
     if training_target_all.ndim == 1:
         training_target_all = training_target_all[:, None]
 
-    best_C = [1.0, 10.0, 1.0]
-    best_e = [0.001, 0.01, 0.001]
+    best_C = [10.0, 10.0, 10.0]
+    best_e = [0.01, 0.01, 0.01]
 
     for chn in [0, 2]:
         print('Training SVM for target ', chn)

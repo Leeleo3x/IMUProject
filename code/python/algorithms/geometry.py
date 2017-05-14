@@ -123,15 +123,12 @@ def align_eular_rotation_with_gravity(data, gravity, local_g_direction=np.array(
 
 
 def orientation_from_gravity_and_magnet(grav, magnet,
-                                        local_gravity=np.array([0, 1, 0]),
                                         global_gravity=np.array([0, 0, 1]),
-                                        global_north=np.array([-1, 0, 0])):
+                                        global_north=np.array([0, 1, 0])):
     rot_grav = quaternion_from_two_vectors(grav, global_gravity)
     # remove tilting
-    rot_tilt = quaternion_from_two_vectors(grav, local_gravity)
-    magnet_grav = (rot_tilt * quaternion.quaternion(1.0, *magnet) * rot_tilt.conj()).vec
-    magnet_grav[1] = 0.0
-    magnet_grav = (rot_grav * quaternion.quaternion(1.0, *magnet_grav) * rot_grav.conj()).vec
+    magnet_grav = (rot_grav * quaternion.quaternion(1.0, *magnet) * rot_grav.conj()).vec
+    magnet_grav[2] = 0.0
     rot_magnet = quaternion_from_two_vectors(magnet_grav, global_north)
     return rot_magnet * rot_grav
 

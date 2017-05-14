@@ -113,7 +113,7 @@ if __name__ == '__main__':
             data_pandas = pandas.read_csv(data_root + '/processed/data.csv')
         else:
             print('------------------\nProcessing ' + data_root, ', type: ' + motion_type)
-            pose_data = np.genfromtxt(data_root+'/pose.txt')[args.skip:]
+            pose_data = np.genfromtxt(data_root+'/pose.txt')[args.skip:-args.skip]
             # swap tango's orientation from [x,y,z,w] to [w,x,y,z]
             pose_data[:, [-4, -3, -2, -1]] = pose_data[:, [-1, -4, -3, -2]]
 
@@ -217,6 +217,7 @@ if __name__ == '__main__':
                     orientation_tango_frame[i] = quaternion.as_float_array(q_rv_tango *
                                                                            quaternion.quaternion(*output_orientation[i, 1:]))
                 write_ply_to_file(output_folder + '/trajectory_rv.ply', position=pose_data[:, -7:-4],
+                                  acceleration=output_gravity_linear[:, 1:],
                                   orientation=orientation_tango_frame, length=5.0, kpoints=100, interval=200)
 
         length = (data_pandas['time'].values[-1] - data_pandas['time'].values[0]) / nano_to_sec
