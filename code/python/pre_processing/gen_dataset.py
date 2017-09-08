@@ -1,84 +1,68 @@
 #pylint: disable=C0103,C0111,C0301
 
-"""
-Modification 02/02/17
-1. Remove 'adjustAxis'. Now the imu coordinate frame is the same with tango device frame
-2. Use Eular angle for gyro data. Interpolate linearly
-3. Swap indices of Tango orientation from [x,y,z,w] to [w,x,y,z]
-"""
+from __future__ import print_function
 import sys
 import os
-import math
 import argparse
 import numpy as np
 import scipy.interpolate
 import quaternion
 import quaternion.quaternion_time_series
-import matplotlib.pyplot as plt
-import plyfile
 import pandas
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) + '/..')
 from algorithms import geometry
 from utility.write_trajectory_to_ply import write_ply_to_file
 
 
-def analysis_error(pose_data):
-    position = np.linalg.norm(pose_data[-1, 1:4] - pose_data[0, 1:4])
-    q_start = quaternion.quaternion(pose_data[0, -4], pose_data[0, -3], pose_data[0, -2], pose_data[0, -1])
-    q_end = quaternion.quaternion(pose_data[-1, -4], pose_data[-1, -3], pose_data[-1, -2], pose_data[-1, -1])
-    q_diff = q_start.inverse() * q_end
-    return position, 2 * math.acos(q_diff.w)
-
-
-def interpolate_quaternion_spline(gyro_data, output_timestamp):
+def interpolate_quaternion_spline(gyro_data, input_timestamp, output_timestamp):
     # convert angular velocity to quaternion
-    N_input = gyro_data.shape[0]
-    gyro_quat = np.empty([gyro_data.shape[0], 4], dtype=float)
+    assert gyro_data.shape[1] == 4
+    n_input = gyro_data.shape[0]
+    assert input_timestamp.shape[0] == n_input
+    gyro_quat = np.empty([n_input, 4], dtype=float)
 
-    for i in range(N_input):
-        record = gyro_data[i, 1:4]
-        gyro_quat[i] = quaternion.as_float_array(quaternion.from_euler_angles(record[0], record[1], record[2]))
-
+    for i in range(n_input):
+        gyro_quat[i] = quaternion.as_float_array(quaternion.from_euler_angles(*gyro_data[i]))
     gyro_interpolated = quaternion.quaternion_time_series.squad(quaternion.as_quat_array(gyro_quat),
                                                                 gyro_data[:, 0], output_timestamp)
     return np.concatenate([output_timestamp[:, np.newaxis], quaternion.as_float_array(gyro_interpolated)], axis=1)
 
 
-def interpolate_quaternion_linear(quat_data, output_timestamp):
-    N_input = quat_data.shape[0]
-    N_output = output_timestamp.shape[0]
+def interpolate_quaternion_linear(quat_data, input_timestamp, output_timestamp):
+    n_input = quat_data.shape[0]
+    assert input_timestamp.shape[0] == n_input
+    assert quat_data.shape[1] == 4
+    n_output = output_timestamp.shape[0]
 
-    quat_inter = np.zeros([N_output, 4])
+    quat_inter = np.zeros([n_output, 4])
     ptr1 = 0
     ptr2 = 0
-    for i in range(N_output):
-        if ptr1 >= N_input - 1 or ptr2 >= N_input:
-            raise ValueError
+    for i in range(n_output):
+        if ptr1 >= n_input - 1 or ptr2 >= n_input:
+            raise ValueError("")
         # Forward to the correct interval
-        while quat_data[ptr1 + 1, 0] < output_timestamp[i]:
+        while input_timestamp[ptr1 + 1] < output_timestamp[i]:
             ptr1 += 1
-            if ptr1 == N_input - 1:
+            if ptr1 == n_input - 1:
                 break
-        while quat_data[ptr2, 0] < output_timestamp[i]:
+        while input_timestamp[ptr2] < output_timestamp[i]:
             ptr2 += 1
-            if ptr2 == N_input:
+            if ptr2 == n_input:
                 break
-        if quat_data.shape[1] == 4:
-            q1 = quaternion.from_euler_angles(*quat_data[ptr1, 1:])
-            q2 = quaternion.from_euler_angles(*quat_data[ptr2, 1:])
-        else:
-            q1 = quaternion.quaternion(*quat_data[ptr1, 1:])
-            q2 = quaternion.quaternion(*quat_data[ptr2, 1:])
-        quat_inter[i] = quaternion.as_float_array(quaternion.quaternion_time_series.
-                                                  slerp(q1, q2, quat_data[ptr1, 0],
-                                                        quat_data[ptr2, 0], output_timestamp[i]))
-    return np.concatenate([output_timestamp[:, np.newaxis], quat_inter], axis=1)
+        q1 = quaternion.quaternion(*quat_data[ptr1])
+        q2 = quaternion.quaternion(*quat_data[ptr2])
+        quat_inter[i] = quaternion.as_float_array(quaternion.quaternion_time_series.slerp(q1, q2, input_timestamp[ptr1],
+                                                                                          input_timestamp[ptr2],
+                                                                                          output_timestamp[i]))
+    return quat_inter
 
 
-def interpolate_3dvector_linear(input, output_timestamp):
-    func = scipy.interpolate.interp1d(input[:, 0], input[:, 1:], axis=0)
+def interpolate_3dvector_linear(input, input_timestamp, output_timestamp):
+    assert input.shape[0] == input_timestamp.shape[0]
+    func = scipy.interpolate.interp1d(input_timestamp, input, axis=0)
     interpolated = func(output_timestamp)
-    return np.concatenate([output_timestamp[:, np.newaxis], interpolated], axis=1)
+    return interpolated
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -113,21 +97,21 @@ if __name__ == '__main__':
             data_pandas = pandas.read_csv(data_root + '/processed/data.csv')
         else:
             print('------------------\nProcessing ' + data_root, ', type: ' + motion_type)
-            pose_data = np.genfromtxt(data_root+'/pose.txt')[args.skip:-args.skip]
+            # drop the head and tail
+            pose_data = np.genfromtxt(data_root+'/pose.txt')
             # swap tango's orientation from [x,y,z,w] to [w,x,y,z]
             pose_data[:, [-4, -3, -2, -1]] = pose_data[:, [-1, -4, -3, -2]]
 
-            # drop the head
-            acce_data = np.genfromtxt(data_root+'/acce.txt')[args.skip:]
+            acce_data = np.genfromtxt(data_root+'/acce.txt')
             print('Acceleration found. Sample rate:{:2f} Hz'
                   .format((acce_data.shape[0] - 1.0) * nano_to_sec / (acce_data[-1, 0] - acce_data[0, 0])))
-            gyro_data = np.genfromtxt(data_root+'/gyro.txt')[args.skip:]
+            gyro_data = np.genfromtxt(data_root+'/gyro.txt')
             print('Gyroscope found. Sample rate:{:2f} Hz'
                   .format((gyro_data.shape[0] - 1.0) * nano_to_sec / (gyro_data[-1, 0] - gyro_data[0, 0])))
-            linacce_data = np.genfromtxt(data_root+'/linacce.txt')[args.skip:]
+            linacce_data = np.genfromtxt(data_root+'/linacce.txt')
             print('Linear acceleration found. Sample rate:{:2f} Hz'
                   .format((linacce_data.shape[0] - 1.0) * nano_to_sec / (linacce_data[-1, 0] - linacce_data[0, 0])))
-            gravity_data = np.genfromtxt(data_root+'/gravity.txt')[args.skip:]
+            gravity_data = np.genfromtxt(data_root+'/gravity.txt')
             print('Gravity found. Sample rate:{:2f} Hz'
                   .format((gravity_data.shape[0] - 1.0) * nano_to_sec / (gravity_data[-1, 0] - gravity_data[0, 0])))
 
@@ -135,7 +119,7 @@ if __name__ == '__main__':
             print('Magnetometer: {:.2f}Hz'.
                   format((magnet_data.shape[0] - 1.0) * nano_to_sec / (magnet_data[-1, 0] - magnet_data[0, 0])))
 
-            orientation_data = np.genfromtxt(data_root + '/orientation.txt')[args.skip:]
+            orientation_data = np.genfromtxt(data_root + '/orientation.txt')
             print('Orientation found. Sample rate:{:2f}'
                   .format((orientation_data.shape[0] - 1.0) * nano_to_sec /
                           (orientation_data[-1, 0] - orientation_data[0, 0])))
@@ -146,26 +130,25 @@ if __name__ == '__main__':
 
             # Generate dataset
             output_timestamp = pose_data[:, 0]
-
             # output_gyro_linear = interpolateAngularRateLinear(gyro_data, output_timestamp)
-            output_gyro_linear = interpolate_3dvector_linear(gyro_data, output_timestamp)
-            output_accelerometer_linear = interpolate_3dvector_linear(acce_data, output_timestamp)
-            output_linacce_linear = interpolate_3dvector_linear(linacce_data, output_timestamp)
-            output_gravity_linear = interpolate_3dvector_linear(gravity_data, output_timestamp)
-            output_magnet_linear = interpolate_3dvector_linear(magnet_data, output_timestamp)
-
+            output_gyro_linear = interpolate_3dvector_linear(gyro_data[:, 1:], gyro_data[:, 0], output_timestamp)
+            output_accelerometer_linear = interpolate_3dvector_linear(acce_data[:, 1:], acce_data[:, 0],
+                                                                      output_timestamp)
+            output_linacce_linear = interpolate_3dvector_linear(linacce_data[:, 1:], linacce_data[:, 0],
+                                                                output_timestamp)
+            output_gravity_linear = interpolate_3dvector_linear(gravity_data[:, 1:], gravity_data[:, 0],
+                                                                output_timestamp)
+            output_magnet_linear = interpolate_3dvector_linear(magnet_data[:, 1:], magnet_data[:, 0], output_timestamp)
             # convert gyro, accelerometer and linear acceleration to stablized IMU frame
-            gyro_stab = geometry.align_eular_rotation_with_gravity(output_gyro_linear[:, 1:],
-                                                                   output_gravity_linear[:, 1:])
-            acce_stab = geometry.align_3dvector_with_gravity(output_accelerometer_linear[:, 1:],
-                                                             output_gravity_linear[:, 1:])
-            linacce_stab = geometry.align_3dvector_with_gravity(output_linacce_linear[:, 1:],
-                                                                output_gravity_linear[:, 1:])
+            gyro_stab = geometry.align_eular_rotation_with_gravity(output_gyro_linear, output_gravity_linear)
+            acce_stab = geometry.align_3dvector_with_gravity(output_accelerometer_linear, output_gravity_linear)
+            linacce_stab = geometry.align_3dvector_with_gravity(output_linacce_linear, output_gravity_linear)
 
             # swap from x,y,z,w to w,x,y,z
             orientation_data[:, [1, 2, 3, 4]] = orientation_data[:, [4, 1, 2, 3]]
             # Convert rotation vector to quaternion
-            output_orientation = interpolate_quaternion_linear(orientation_data, output_timestamp)
+            output_orientation = interpolate_quaternion_linear(orientation_data[:, 1:], orientation_data[:, 0],
+                                                               output_timestamp)
 
             # construct a Pandas DataFrame
             column_list = 'time,gyro_x,gyro_y,gyro_z,acce_x'.split(',') + \
@@ -175,21 +158,20 @@ if __name__ == '__main__':
                           'gyro_stab_x,gyro_stab_y,gyro_stab_z,acce_stab_x,acce_stab_y,acce_stab_z'.split(',') + \
                           'linacce_stab_x,linacce_stab_y,linacce_stab_z'.split(',')
 
-            data_mat = np.concatenate([output_gyro_linear,
-                                       output_accelerometer_linear[:, 1:],
-                                       output_linacce_linear[:, 1:],
-                                       output_gravity_linear[:, 1:],
-                                       output_magnet_linear[:, 1:],
+            data_mat = np.concatenate([output_timestamp[:, np.newaxis], output_gyro_linear,
+                                       output_accelerometer_linear,
+                                       output_linacce_linear,
+                                       output_gravity_linear,
+                                       output_magnet_linear,
                                        pose_data[:, 1:4],
                                        pose_data[:, -4:],
-                                       output_orientation[:, 1:],
+                                       output_orientation,
                                        gyro_stab, acce_stab, linacce_stab], axis=1)
 
             # write individual files for convenience
 
             # if the dataset comes with rotation vector, include it
             data_pandas = pandas.DataFrame(data_mat, columns=column_list)
-
             data_pandas.to_csv(output_folder + '/data.csv')
             print('Dataset written to ' + output_folder + '/data.txt')
 
@@ -205,20 +187,20 @@ if __name__ == '__main__':
                 print("Writing trajectory to ply file")
                 viewing_dir = np.zeros([data_mat.shape[0], 3], dtype=float)
                 viewing_dir[:, 2] = -1.0
+                # write_ply_to_file(path=output_folder + '/trajectory.ply', position=pose_data[:, 1:4],
+                #                   orientation=pose_data[:, -4:], acceleration=output_gravity_linear[:, 1:])
                 write_ply_to_file(path=output_folder + '/trajectory.ply', position=pose_data[:, 1:4],
-                                  orientation=pose_data[:, -4:], acceleration=output_gravity_linear[:, 1:],
-                                  length=5.0, kpoints=100, interval=200)
+                                  orientation=pose_data[:, -4:])
 
-                q_device_tango = quaternion.quaternion(*pose_data[0, -4:])
-                # q_device_tango = quaternion.quaternion(1., 0., 0., 0.)
-                q_rv_tango = q_device_tango * quaternion.quaternion(*output_orientation[0, 1:]).inverse()
-                orientation_tango_frame = np.empty([output_orientation.shape[0], 4], dtype=float)
-                for i in range(orientation_tango_frame.shape[0]):
-                    orientation_tango_frame[i] = quaternion.as_float_array(q_rv_tango *
-                                                                           quaternion.quaternion(*output_orientation[i, 1:]))
-                write_ply_to_file(output_folder + '/trajectory_rv.ply', position=pose_data[:, -7:-4],
-                                  acceleration=output_gravity_linear[:, 1:],
-                                  orientation=orientation_tango_frame, length=5.0, kpoints=100, interval=200)
+                # q_device_tango = quaternion.quaternion(*pose_data[0, -4:])
+                # q_rv_tango = q_device_tango * quaternion.quaternion(*output_orientation[0]).inverse()
+                # orientation_tango_frame = np.empty([output_orientation.shape[0], 4], dtype=float)
+                # for i in range(orientation_tango_frame.shape[0]):
+                #     orientation_tango_frame[i] = quaternion.as_float_array(q_rv_tango *
+                #                                                            quaternion.quaternion(*output_orientation[i]))
+                # write_ply_to_file(output_folder + '/trajectory_rv.ply', position=pose_data[:, -7:-4],
+                #                   acceleration=output_gravity_linear,
+                #                   orientation=orientation_tango_frame, length=5.0, kpoints=100, interval=200)
 
         length = (data_pandas['time'].values[-1] - data_pandas['time'].values[0]) / nano_to_sec
         hertz = data_pandas.shape[0] / length

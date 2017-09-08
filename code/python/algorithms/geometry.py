@@ -12,7 +12,7 @@ def rotate_vector(input, orientation):
         output[i] = (q * quaternion.quaternion(1.0, *input[i]) * q.conj()).vec
     return output
 
-@jit
+
 def rotation_matrix_from_two_vectors(v1, v2):
     """
     Using Rodrigues rotation formula
@@ -34,7 +34,6 @@ def rotation_matrix_from_two_vectors(v1, v2):
     return np.identity(3) + math.sqrt(1 - theta * theta) * K + np.dot((1 - theta) * K * K, v1)
 
 
-# @jit
 def quaternion_from_two_vectors(v1, v2):
     """
     Compute quaternion from two vectors
@@ -71,7 +70,6 @@ def align_3dvector_with_gravity(data, gravity, local_g_direction=np.array([0, 1,
     return output
 
 
-@jit
 def adjust_eular_angle(source):
     # convert the euler angle s.t. pitch is in (-pi/2, pi/2), roll and yaw are in (-pi, pi)
     output = np.copy(source)

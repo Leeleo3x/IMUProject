@@ -4,8 +4,8 @@ from scipy.optimize import least_squares as least_squares
 
 
 def similarity_functor(x, *args, **kwargs):
-
     pass
+
 
 def estimate_similarity(pa, pb, refine=False):
     """
@@ -35,8 +35,8 @@ def estimate_similarity(pa, pb, refine=False):
     result[:, 3] = translation
     return result * scale
 
-if __name__ == '__main__':
 
+if __name__ == '__main__':
     import random
     # test_scale = random.uniform(0, 1)
     test_scale = 1.0

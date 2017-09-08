@@ -2,8 +2,6 @@ import os
 import sys
 import math
 import argparse
-import time
-#from numba import jit
 import numpy as np
 import quaternion
 import pandas
@@ -16,7 +14,7 @@ from algorithms import geometry
 
 
 class TrainingDataOption:
-    def __init__(self, sample_step=10, window_size=200, feature='fourier', target='speed_magnitude'):
+    def __init__(self, sample_step=10, window_size=200, feature='direct_gravity', target='speed_magnitude'):
         self.sample_step_ = sample_step
         self.window_size_ = window_size
         self.feature_ = feature
@@ -24,14 +22,13 @@ class TrainingDataOption:
         self.nanoToSec = 1000000000.0
 
 
-#@jit
 def low_pass_filter(data, alpha):
     output = np.copy(data)
     for i in range(1, output.shape[0]):
         output[i] = (1.0 - alpha) * output[i-1] + alpha * data[i]
     return output
 
-#@jit
+
 def compute_fourier_features(data, samples, window_size, threshold, discard_direct=False):
     """
     Compute fourier coefficients as feature vector
@@ -47,7 +44,6 @@ def compute_fourier_features(data, samples, window_size, threshold, discard_dire
     return features
 
 
-#@jit
 def compute_direct_features(data, samples_points, window_size, sigma=-1):
     features = np.empty([samples_points.shape[0], data.shape[1] * window_size], dtype=np.float)
     for i in range(samples_points.shape[0]):
@@ -115,8 +111,8 @@ def compute_local_speed_with_gravity(time_stamp, position, orientation, gravity,
     return local_speed
 
 
-def compute_delta_angle(time_stamp, position, orientation,
-                        sample_points=None, local_axis=quaternion.quaternion(1.0, 0., 0., -1.)):
+def compute_delta_angle(time_stamp, position, orientation, sample_points=None,
+                        local_axis=quaternion.quaternion(1.0, 0., 0., -1.)):
     """
     Compute the cosine between the moving direction and viewing direction
     :param time_stamp: Time stamp
@@ -149,6 +145,10 @@ def get_training_data(data_all, imu_columns, option, sample_points=None, extra_a
     Create training data.
     :param data_all: The whole dataset. Must include 'time' column and all columns inside imu_columns
     :param imu_columns: Columns used for constructing feature vectors. Fields must exist in the dataset
+    :param option: An instance of TrainingDataOption
+    :param sample_points: an array of locations where the data sample is computed. If not provided, samples are
+           uniformly distributed based on option.sample_step_
+    :param extra_args: Extra arguments.
     :return: [Nx(d+1)] array. Target value is appended at back
     """
     N = data_all.shape[0]
@@ -189,16 +189,16 @@ def get_training_data(data_all, imu_columns, option, sample_points=None, extra_a
             print('Smoothing the signal by low pass filter: alpha = ', extra_args['feature_smooth_alpha'])
             data_used = low_pass_filter(data_used, extra_args['feature_smooth_alpha'])
         if 'feature_smooth_sigma' in extra_args:
-            print('Smoothing the signal by gaussin filter: sigma = ', extra_args['feature_smooth_sigma'])
+            print('Smoothing the signal by gaussian filter: sigma = ', extra_args['feature_smooth_sigma'])
             gaussian_sigma = extra_args['feature_smooth_sigma']
-            # data_used = gaussian_filter1d(data_used, extra_args['feature_smooth_sigma'], axis=0)
+            data_used = gaussian_filter1d(data_used, extra_args['feature_smooth_sigma'], axis=0)
 
     if option.feature_ == 'direct':
         features = compute_direct_features(data_used, sample_points, option.window_size_, gaussian_sigma)
     elif option.feature_ == 'fourier':
         print('Additional parameters: ', extra_args)
         features = compute_fourier_features(data_used, sample_points, option.window_size_, extra_args['frq_threshold'],
-                                                  extra_args['discard_direct'])
+                                            extra_args['discard_direct'])
     elif option.feature_ == 'direct_gravity':
         gravity = data_all[['grav_x', 'grav_y', 'grav_z']].values
         features = compute_direct_feature_gravity(data_used[:, :3], data_used[:, -3:],
@@ -235,8 +235,9 @@ def test_decompose_speed(data_all):
 
     step = 1
     sample_points = np.arange(0, num_samples, step, dtype=int)
-    moving_dir = (position_xy[sample_points[1:]] - position_xy[sample_points[:-1]]) \
-                 / (time_stamp[sample_points[1:]] - time_stamp[sample_points[:-1]])[:, None]
+    moving_dir = (position_xy[sample_points[1:]] -
+                  position_xy[sample_points[:-1]]) / (time_stamp[sample_points[1:]] -
+                                                      time_stamp[sample_points[:-1]])[:, None]
     moving_dir = np.concatenate([moving_dir, [moving_dir[-1]]], axis=0)
     moving_mag = np.linalg.norm(moving_dir, axis=1)
     speed_decomposed = np.zeros([sample_points.shape[0], 2], dtype=float)
@@ -257,7 +258,6 @@ def test_decompose_speed(data_all):
         speed_decomposed[i] = np.dot(rot_mat, camera_dir) * moving_mag[i]
 
     # Get the position by integrating
-    import scipy.integrate as integrate
     from utility import write_trajectory_to_ply
     position_inte_xy = np.cumsum((speed_decomposed[1:]+speed_decomposed[:-1]) / 2.0
                                  * (time_stamp[sample_points[1:]] - time_stamp[sample_points[:-1]])[:, None], axis=0)
@@ -268,24 +268,23 @@ def test_decompose_speed(data_all):
                                               position_output, orientation[sample_points])
     return position_output
 
+
 # for tests
 if __name__ == '__main__':
-
     parser = argparse.ArgumentParser()
     parser.add_argument('dir')
     parser.add_argument('--window', default=300, type=int)
     parser.add_argument('--step', default=50, type=int)
     parser.add_argument('--feature', default='direct', type=str)
-    parser.add_argument('--frq_threshold', default=50, type=int)
-    parser.add_argument('--speed_smooth_sigma', default=0.0, type=float)
+    parser.add_argument('--target_smooth_sigma', default=0.0, type=float)
 
     args = parser.parse_args()
 
     data_dir = args.dir + '/processed'
     print('Loading dataset ' + data_dir + '/data.csv')
     data_all = pandas.read_csv(data_dir + '/data.csv')
-    option = TrainingDataOption(window_size=args.window, sample_step=args.step, frq_threshold=args.frq_threshold,
-                                feature=args.feature, speed_smooth_sigma=args.speed_smooth_sigma)
+    option = TrainingDataOption(window_size=args.window, sample_step=args.step,
+                                feature=args.feature, target="local_speed_gravity")
     # Create a small sample for testing
     N = data_all.shape[0]
     imu_columns = ['gyro_x', 'gyro_y', 'gyro_z', 'acce_x', 'acce_y', 'acce_z']
