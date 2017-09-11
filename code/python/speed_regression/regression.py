@@ -14,8 +14,7 @@ import cv2
 # from speed_regression import training_data as td
 # from speed_regression import grid_search
 
-import training_data as td
-
+from . import training_data
 args = None
 
 

@@ -14,7 +14,7 @@ from algorithms import geometry
 
 
 class TrainingDataOption:
-    def __init__(self, sample_step=10, window_size=200, feature='direct_gravity', target='speed_magnitude'):
+    def __init__(self, sample_step=10, window_size=200, feature='direct_gravity', target='local_speed_gravity'):
         self.sample_step_ = sample_step
         self.window_size_ = window_size
         self.feature_ = feature
