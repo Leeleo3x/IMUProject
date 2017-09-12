@@ -104,7 +104,7 @@ if __name__ == '__main__':
         if args.grid:
             print('Running grid search')
             
-            search_dict = {'C': [0.01, 0.1, 1.0, 1.0, 50.0],
+            search_dict = {'C': [0.01, 0.1, 1.0, 10.0, 50.0],
                            'epsilon': [0.001, 0.01, 0.1, 1.0],
                            'kernel': ['rbf']}
 

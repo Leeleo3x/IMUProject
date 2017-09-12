@@ -1,10 +1,13 @@
 import os
+import time
 import warnings
 import cv2
 import numpy as np
 from sklearn.metrics import r2_score
 from sklearn.metrics import mean_squared_error
 from sklearn.metrics import accuracy_score
+from sklearn import svm
+from sklearn.model_selection import GridSearchCV
 
 import training_data as td
 
@@ -19,6 +22,40 @@ class SVMOption:
         self.C = C
         self.e = e
         self.max_iter = max_iter
+        self.kParams__ = 7
+
+    def to_string(self):
+        type_str = 'SVM' if self.svm_type==cv2.ml.SVM_C_SVC else 'SVR'
+        kernel_type_str = 'RBF'
+        if self.kernel_type == cv2.ml.SVM_LINEAR:
+            kernel_type_str = 'Linear'
+        elif self.kernel_type == cv2.ml.SVM_POLY:
+            kernel_type_str = 'Poly'
+        return '%s %s %d %f %f %f %d' % (type_str, kernel_type_str, self.degree,
+                                         self.gamma, self.C, self.e, self.max_iter)
+
+    def from_string(self, input_string):
+        buffer = input_string.strip().split()
+        assert len(buffer) == self.kParams__
+        if buffer[0] == 'SVM':
+            self.svm_type = cv2.ml.SVM_C_SVC
+        elif buffer[0] == 'SVR':
+            self.svm_type = cv2.ml.SVM_EPS_SVR
+        else:
+            raise ValueError('Invalid SVM type: ', buffer[0])
+        if buffer[1] == 'RBF':
+            self.kernel_type = cv2.ml.SVM_RBF
+        elif buffer[1] == 'Linear':
+            self.kernel_type = cv2.ml.SVM_LINEAR
+        elif buffer[1] == 'Poly':
+            self.kernel_type = cv2.ml.SVM_POLY
+        else:
+            raise ValueError('Invalid kernel type: ', buffer[1])
+        self.degree = int(buffer[2])
+        self.gamma = float(buffer[3])
+        self.C = float(buffer[4])
+        self.e = float(buffer[5])
+        self.max_iter = int(buffer[6])
 
 
 def create_svm(svm_options):
@@ -33,22 +70,65 @@ def create_svm(svm_options):
     return svm
 
 
-class SVRCascade:
-    def __init__(self, num_classes, svm_option, svr_options, num_channels):
+class SVRCascadeOption:
+    """
+    This structure represents the options for SVR cascading model.
+    """
+    def __init__(self, num_classes=1, num_channels=1, svm_option=None, svr_options=None):
         self.num_classes = num_classes
         self.num_channels = num_channels
-        assert len(svr_options) == self.num_classes * self.num_channels
-        self.classifier = create_svm(svm_option)
-        self.regressors = [create_svm(option) for option in svr_options]
+        if svm_option is None:
+            svm_option = SVMOption()
+        self.svm_option = svm_option
+        if svr_options is None:
+            svr_options = [SVMOption() for _ in range(self.num_channels * self.num_classes)]
+        self.svr_options = svr_options
+        self.version_tag = 'v1.0'
+
+    def write_to_file(self, path):
+        with open(path, 'w') as f:
+            f.write(self.version_tag + '\n')
+            f.write('%d %d\n' % (self.num_classes, self.num_channels))
+            f.write(self.svm_option.to_string() + '\n')
+            for svr_opt in self.svr_options:
+                f.write(svr_opt.to_string() + '\n')
+
+    def load_from_file(self, path):
+        with open(path, 'r') as f:
+            version = f.readline().strip()
+            if version != self.version_tag:
+                raise ValueError('The version of the file does match the current version: {} vs {}'
+                                 .format(self.version_tag, version))
+
+            header = f.readline().strip().split()
+            self.num_classes = int(header[0])
+            self.num_channels = int(header[1])
+            svm_line = f.readline()
+            self.svm_option.from_string(svm_line)
+            self.svr_options = [SVMOption() for _ in range(self.num_classes * self.num_channels)]
+            for cls in range(num_classes):
+                for chn in range(num_channels):
+                    svr_line = f.readline()
+                    self.svr_options[cls * self.num_channels + chn].from_string(svr_line)
+
+
+class SVRCascade:
+    def __init__(self, options):
+        self.num_classes = options.num_classes
+        self.num_channels = options.num_channels
+        assert len(options.svr_options) == self.num_classes * self.num_channels
+        self.classifier = create_svm(options.svm_option)
+        self.regressors = [create_svm(opt) for opt in options.svr_options]
+        self.options = options
 
     def train(self, train_feature, train_label, train_response):
         assert train_response.shape[1] == self.num_channels
         print('Training classifier')
         train_feature_cv = train_feature.astype(np.float32)
         self.classifier.train(train_feature_cv, cv2.ml.ROW_SAMPLE, train_label)
-        predicted_train = self.classifier.predict(train_feature_cv)[1]
+        predicted_train = self.classifier.predict(train_feature_cv)[1].ravel()
         error_svm = accuracy_score(train_label, predicted_train)
-        print('Classifier trained. Training accuracy: %d' % error_svm)
+        print('Classifier trained. Training accuracy: %f' % error_svm)
         for cls in range(self.num_classes):
             feature_in_class = train_feature_cv[train_label == cls, :]
             for chn in range(self.num_channels):
@@ -100,14 +180,80 @@ class SVRCascade:
                       chn, r2, mse)
 
 
-def load_datalist(path, option):
+def write_model_to_file(path, model, suffix=''):
+    if not os.path.exists(path):
+        print('Folder {} not exist. Creating'.format(path))
+        os.makedirs(path)
+    model.options.write_to_file(path + '/option.txt')
+    model.classifier.save(path + '/classifier{}.yaml'.format(suffix))
+    for cls in range(model.num_classes):
+        for chn in range(model.num_channels):
+            model.regressors[cls * model.num_channels + chn].save(path +
+                                                                  '/regressor{}_{}_{}.yaml'.format(suffix, cls, chn))
+
+
+def load_model_from_file(path, suffix=''):
+    options = SVRCascadeOption()
+    options.load_from_file(path + '/option.txt')
+    model = SVRCascade(options)
+    model.classifier = cv2.ml.SVM_load(path + '/classifier{}.yaml'.format(suffix))
+    for cls in range(options.num_classes):
+        for chn in range(options.num_channels):
+            rid = cls * options.num_channels + chn
+            model.regressors[rid] = cv2.ml.SVM_load(path + '/regressor{}_{}_{}.yaml'.format(suffix, cls, chn))
+            assert model.regressors[rid]
+    return model
+
+
+def get_best_option(train_feature, train_label, train_response, svm_search_dict=None, svr_search_dict=None,
+                    n_split=3, n_jobs=6, verbose=3):
+    if svm_search_dict is None:
+        svm_search_dict = {'C': [1.0],
+                           'gamma': [1.0 / train_feature.shape[1]]}
+    # First find best parameters for the classifier
+    svm_grid_searcher = GridSearchCV(svm.SVC(), svm_search_dict, cv=n_split, n_jobs=n_jobs, verbose=verbose)
+    svm_grid_searcher.fit(train_feature, train_label)
+    svm_best_param = svm_grid_searcher.best_params_
+    print('SVM fitted. Optimal parameters: ', svm_best_param)
+    svm_option = SVMOption()
+    svm_option.svm_type = cv2.ml.SVM_C_SVC
+    svm_option.kernel_type = cv2.ml.SVM_RBF
+    svm_option.C = svm_best_param['C']
+    svm_option.gamma = svm_best_param['gamma']
+    if svr_search_dict is None:
+        svr_search_dict = {'C': [0.01, 1.0],
+                           'epsilon': [0.01],
+                           'gamma': [1.0 / train_feature.shape[1]]}
+    svr_options = []
+    num_classes = max(train_label) + 1
+    num_channels = train_response.shape[1]
+    for cls in range(num_classes):
+        for chn in range(num_channels):
+            svr_grid_searcher = GridSearchCV(svm.SVR(), svr_search_dict, cv=n_split, n_jobs=n_jobs, verbose=verbose)
+            svr_grid_searcher.fit(train_feature[train_label == cls, :], train_response[train_label == cls, chn])
+            best_svr_param = svr_grid_searcher.best_params_
+            svr_option = SVMOption()
+            svr_option.svm_type = cv2.ml.SVM_EPS_SVR
+            svr_option.kernel_type = cv2.ml.SVM_RBF
+            svr_option.C = best_svr_param['C']
+            svr_option.e = best_svr_param['epsilon']
+            svr_option.gamma = best_svr_param['gamma']
+            svr_options.append(svr_option)
+    print('All done')
+    return SVRCascadeOption(num_classes, num_channels, svm_option, svr_options)
+
+
+def load_datalist(path, option, class_map=None):
     root_dir = os.path.dirname(path)
     with open(path) as f:
         dataset_list = [s.strip('\n') for s in f.readlines()]
     feature_all = []
     label_all = []
     responses_all = []
-    class_map = {}
+    build_classmap = False
+    if class_map is None:
+        class_map = {}
+        build_classmap = True
     imu_columns = ['gyro_x', 'gyro_y', 'gyro_z', 'linacce_x', 'linacce_y', 'linacce_z']
     for dataset in dataset_list:
         if len(dataset) > 0 and dataset[0] == '#':
@@ -122,7 +268,12 @@ def load_datalist(path, option):
             continue
         print('Loading dataset ' + data_path + ', type: ' + info[1])
         if info[1] not in class_map:
-            class_map[info[1]] = len(class_map)
+            if build_classmap:
+                class_map[info[1]] = len(class_map)
+            else:
+                warnings.warn('Class %s not found in the class map. Skipped' % info[1])
+                continue
+
         data_all = pandas.read_csv(data_path)
         extra_args = {'target_smooth_sigma': 30.0,
                       'feature_smooth_sigma': 2.0}
@@ -144,11 +295,22 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument('list')
+    parser.add_argument('--validation', default=None, type=str)
     args = parser.parse_args()
 
     option = td.TrainingDataOption()
     feature_all, label_all, responses_all, class_map = load_datalist(path=args.list, option=option)
     responses_all = responses_all[:, [0, 2]]
+
+    validation_feature = None
+    validation_label = None
+    validation_responses = None
+    if args.validation is not None:
+        validation_feature, validation_label, validation_responses, class_map = load_datalist(path=args.validation,
+                                                                                              option=option,
+                                                                                              class_map=class_map)
+        validation_responses = validation_responses[:, [0, 2]]
+
     print('Data loaded. Total number of samples: ', feature_all.shape[0])
 
     for key, value in class_map.items():
@@ -159,10 +321,22 @@ if __name__ == '__main__':
     num_channels = responses_all.shape[1]
     svm_option = SVMOption()
     svm_option.gamma = gamma
+    svm_option.C = 1.0
     svm_option.svm_type = cv2.ml.SVM_C_SVC
     svr_option = [SVMOption() for _ in range(len(class_map) * responses_all.shape[1])]
     for opt in svr_option:
         opt.gamma = gamma
         opt.svm_type = cv2.ml.SVM_EPS_SVR
-    model = SVRCascade(num_classes, svm_option, svr_option, num_channels)
+    model = SVRCascade(SVRCascadeOption(num_classes, num_channels, svm_option, svr_option))
     model.train(feature_all, label_all, responses_all)
+
+    if validation_feature and validation_label and validation_responses:
+        pass
+
+    # best_option = get_best_option(feature_all, label_all, responses_all)
+    # model = SVRCascade(best_option)
+    # model.train(feature_all, label_all, responses_all)
+
+    write_model_to_file('/tmp/svr_cascade_model', model)
+    # model_reload = load_model_from_file('/tmp/svr_cascade_model')
+    # print('Model loaded: classifier: ', model_reload.classifier)
