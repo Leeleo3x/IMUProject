@@ -2,19 +2,18 @@ import time
 import argparse
 import warnings
 import os
-
+import sys
 from sklearn import svm
 from sklearn.metrics import r2_score, mean_squared_error
-from sklearn.externals import joblib
 from sklearn.model_selection import GridSearchCV
 import numpy as np
 import pandas
 import cv2
 
-# from speed_regression import training_data as td
-# from speed_regression import grid_search
+sys.path.append('/home/yanhang/Documents/research/IMUProject/code/python')
+sys.path.append('/Users/yanhang/Documents/research/IMUProject/code/python')
+import speed_regression.training_data as td
 
-from . import training_data
 args = None
 
 
@@ -94,6 +93,11 @@ if __name__ == '__main__':
 
     best_C = [5.0, 5.0, 5.0]
     best_e = [0.01, 0.01, 0.01]
+
+    if args.C is not None:
+        best_C = [args.C, args.C, args.C]
+    if args.e is not None:
+        best_e = [args.e, args.e, args.e]
 
     for chn in [0, 2]:
         print('Training SVM for target ', chn)

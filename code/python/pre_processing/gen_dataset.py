@@ -67,9 +67,11 @@ def interpolate_3dvector_linear(input, input_timestamp, output_timestamp):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('list')
-    parser.add_argument('--skip', default=400)
+    parser.add_argument('--skip', default=500)
     parser.add_argument('--recompute', action='store_true')
     parser.add_argument('--no_trajectory', action='store_true')
+    parser.add_argument('--no_magnet', action='store_true')
+    parser.add_argument('--no_remove_duplicate', action='store_true')
 
     args = parser.parse_args()
 
@@ -101,6 +103,12 @@ if __name__ == '__main__':
             pose_data = np.genfromtxt(data_root+'/pose.txt')
             # swap tango's orientation from [x,y,z,w] to [w,x,y,z]
             pose_data[:, [-4, -3, -2, -1]] = pose_data[:, [-1, -4, -3, -2]]
+            # For some reason there might be a few duplicated records...
+            # TODO(yanhang): Why?
+            if not args.no_remove_duplicate:
+                unique_ts, unique_inds = np.unique(pose_data[:, 0], return_index=True)
+                print('Portion of unique records: ', unique_inds.shape[0] / pose_data.shape[0])
+                pose_data = pose_data[unique_inds, :]
 
             acce_data = np.genfromtxt(data_root+'/acce.txt')
             print('Acceleration found. Sample rate:{:2f} Hz'
@@ -138,7 +146,9 @@ if __name__ == '__main__':
                                                                 output_timestamp)
             output_gravity_linear = interpolate_3dvector_linear(gravity_data[:, 1:], gravity_data[:, 0],
                                                                 output_timestamp)
-            output_magnet_linear = interpolate_3dvector_linear(magnet_data[:, 1:], magnet_data[:, 0], output_timestamp)
+            output_magnet_linear = np.zeros([output_timestamp.shape[0], 3])
+            if not args.no_magnet:
+                output_magnet_linear = interpolate_3dvector_linear(magnet_data[:, 1:], magnet_data[:, 0], output_timestamp)
             # convert gyro, accelerometer and linear acceleration to stablized IMU frame
             gyro_stab = geometry.align_eular_rotation_with_gravity(output_gyro_linear, output_gravity_linear)
             acce_stab = geometry.align_3dvector_with_gravity(output_accelerometer_linear, output_gravity_linear)
@@ -204,7 +214,7 @@ if __name__ == '__main__':
 
         length = (data_pandas['time'].values[-1] - data_pandas['time'].values[0]) / nano_to_sec
         hertz = data_pandas.shape[0] / length
-        print(info[0] + ', length: {}s, sample rate: {:.2f}Hz'.format(length, hertz))
+        print(info[0] + ', length: {:.2f}s, sample rate: {:.2f}Hz'.format(length, hertz))
         if motion_type not in length_dict:
             length_dict[motion_type] = length
         else:

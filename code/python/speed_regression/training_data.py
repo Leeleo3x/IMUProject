@@ -73,8 +73,7 @@ def compute_speed(time_stamp, position, sample_points=None):
     if sample_points is None:
         sample_points = np.arange(0, time_stamp.shape[0], dtype=int)
     sample_points[-1] = min(sample_points[-1], time_stamp.shape[0] - 2)
-    speed = (position[sample_points+1] - position[sample_points]) \
-            / (time_stamp[sample_points+1] - time_stamp[sample_points])[:, None]
+    speed = (position[sample_points+1] - position[sample_points]) / (time_stamp[sample_points+1] - time_stamp[sample_points])[:, None]
     return speed
 
 
@@ -158,7 +157,6 @@ def get_training_data(data_all, imu_columns, option, sample_points=None, extra_a
                                   option.sample_step_,
                                   dtype=int)
     assert sample_points[-1] < N
-
     pose_data = data_all[['pos_x', 'pos_y', 'pos_z']].values
     orientation = data_all[['ori_w', 'ori_x', 'ori_y', 'ori_z']].values
     data_used = data_all[imu_columns].values
