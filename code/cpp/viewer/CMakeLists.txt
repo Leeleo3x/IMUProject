@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.0)
 
-set(CMAKE_PREFIX_PATH /opt/Qt5/5.8/gcc_64)
+set(CMAKE_PREFIX_PATH /opt/Qt/5.8/gcc_64)
 
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
