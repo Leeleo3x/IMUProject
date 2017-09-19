@@ -110,13 +110,6 @@ def align_eular_rotation_with_gravity(data, gravity, local_g_direction=np.array(
         if np.linalg.norm(rotor.vec) > 1e-3 and rotor.w < 0.999:
             q = rotor * quaternion.from_euler_angles(*data[i]) * rotor.conj()
             output[i] = adjust_eular_angle(quaternion.as_euler_angles(q))
-        # if np.linalg.norm(output[i] - data[i]) > 0.1:
-        #     print('--------------------\n')
-        #     print('ori: {:.6f}, {:.6f}, {:.6f}\nout: {:.6f}, {:.6f}, {:.6f}\nrot: {:.6f}, {:.6f}, {:.6f}, {:.6f}\n'
-        #           'grv: {:.6f}, {:.6f}, {:.6f}'.format(data[i][0], data[i][1], data[i][2],
-        #                                                output[i][0], output[i][1], output[i][2],
-        #                                                rotor.w, rotor.x, rotor.y, rotor.z,
-        #        gravity[i][0], gravity[i][1], gravity[i][2]))
     return output
 
 
@@ -172,43 +165,58 @@ if __name__ == '__main__':
     from pre_processing import gen_dataset
 
     skip = 400
-    data_path = '../../../data/phab_body/cse8'
-    data_all = pandas.read_csv(data_path + '/processed/data.csv')[:-10]
+    data_path = '../../../data/test_gravity/gravity_rotate4'
+    data_all = pandas.read_csv(data_path + '/processed/data.csv')
 
-    magnet_data = np.genfromtxt(data_path + '/magnet.txt')
+    # magnet_data = np.genfromtxt(data_path + '/magnet.txt')
     ts = data_all['time'].values
+    gyro = data_all[['gyro_x', 'gyro_y', 'gyro_z']].values
     orientation = data_all[['ori_w', 'ori_x', 'ori_y', 'ori_z']].values
     position = data_all[['pos_x', 'pos_y', 'pos_z']].values
     gravity = data_all[['grav_x', 'grav_y', 'grav_z']].values
 
-    magnet = gen_dataset.interpolate_3dvector_linear(magnet_data, ts)[:, 1:]
+    # magnet = gen_dataset.interpolate_3dvector_linear(magnet_data, ts)[:, 1:]
 
-    for i in range(magnet.shape[0]):
-        q = quaternion.quaternion(*orientation[i])
-        magnet[i] = (q * quaternion.quaternion(0.0, *magnet[i]) * q.conj()).vec
+    # for i in range(magnet.shape[0]):
+    #     q = quaternion.quaternion(*orientation[i])
+    #     magnet[i] = (q * quaternion.quaternion(0.0, *magnet[i]) * q.conj()).vec
+    #
+    # # magnet = gaussian_filter1d(magnet, sigma=2.0, axis=0)
+    # magnet_mag = np.linalg.norm(magnet, axis=1)
+    # max_mag = np.max(magnet_mag)
+    #
+    # # test with complmentary filter
+    # rv = data_all[['rv_w', 'rv_x', 'rv_y', 'rv_z']].values
+    # rv_filtered, fused = correct_gyro_drifting(rv, magnet, gravity, alpha=0.01,
+    #                                            global_orientation=quaternion.quaternion(*orientation[0]))
+    #
+    # write_trajectory_to_ply.write_ply_to_file(data_path + '/processed/comp_filter.ply', position, rv_filtered,
+    #                                           interval=200)
+    #
+    # plt.figure('Magnet direction')
+    # plt.plot(position[0:-1:10, 0], position[0:-1:10, 1], color='r')
+    #
+    # interval = 100
+    # mag_ratio = 10.0 / max_mag
+    # for i in range(0, magnet.shape[0], interval):
+    #     vtx = np.array([position[i, :2], position[i, :2] + magnet[i, :2] * mag_ratio])
+    #     plt.plot(vtx[:, 0], vtx[:, 1], color='r')
+    # plt.show()
 
-    # magnet = gaussian_filter1d(magnet, sigma=2.0, axis=0)
-    magnet_mag = np.linalg.norm(magnet, axis=1)
-    max_mag = np.max(magnet_mag)
+    eular_array = np.empty(gyro.shape, dtype=np.float)
+    for i in range(ts.shape[0]):
+        q = quaternion.from_euler_angles(*gyro[i])
+        eular_array[i] = adjust_eular_angle(quaternion.as_euler_angles(q))
+        if np.linalg.norm(eular_array[i] - gyro[i]) > 1.0:
+            print(gyro[i], eular_array[i], gyro[i] - eular_array[i], gyro[i] + eular_array[i])
 
-    # test with complmentary filter
-    rv = data_all[['rv_w', 'rv_x', 'rv_y', 'rv_z']].values
-    rv_filtered, fused = correct_gyro_drifting(rv, magnet, gravity, alpha=0.01,
-                                               global_orientation=quaternion.quaternion(*orientation[0]))
-
-    write_trajectory_to_ply.write_ply_to_file(data_path + '/processed/comp_filter.ply', position, rv_filtered,
-                                              interval=200)
-
-    plt.figure('Magnet direction')
-    plt.plot(position[0:-1:10, 0], position[0:-1:10, 1], color='r')
-
-    interval = 100
-    mag_ratio = 10.0 / max_mag
-    for i in range(0, magnet.shape[0], interval):
-        vtx = np.array([position[i, :2], position[i, :2] + magnet[i, :2] * mag_ratio])
-        plt.plot(vtx[:, 0], vtx[:, 1], color='r')
+    plt.figure('Quaternion conversion')
+    for i in range(3):
+        plt.subplot(311 + i)
+        plt.plot(ts, gyro[:, i])
+        plt.plot(ts, eular_array[:, i])
+        plt.legend(['gyro', 'reconstructed'])
     plt.show()
-
 
 
 
