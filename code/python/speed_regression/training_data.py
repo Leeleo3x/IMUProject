@@ -55,7 +55,11 @@ def compute_direct_features(data, samples_points, window_size, sigma=-1):
 
 
 def compute_direct_feature_gravity(gyro, linacce, gravity, samples, window_size, sigma=-1):
-    # gyro_gravity = geometry.align_eular_rotation_with_gravity(gyro, gravity)
+    # We scale the gyro data by 0.1, such that it's guaranteed to lie within Pi/2. This prevents some problems when
+    # converting between the Euler angle and quaternion representation.
+    # gyro_scaled = gyro / 10.
+    # gyro_gravity = geometry.align_eular_rotation_with_gravity(gyro_scaled, gravity)
+    # gyro_gravity = gyro_scaled
     gyro_gravity = gyro
     linacce_gravity = geometry.align_3dvector_with_gravity(linacce, gravity)
     return compute_direct_features(np.concatenate([gyro_gravity, linacce_gravity], axis=1), samples_points=samples,

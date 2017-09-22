@@ -248,7 +248,8 @@ def get_best_option(train_feature, train_label, train_response, svm_search_dict=
     num_channels = train_response.shape[1]
     for cls in range(num_classes):
         for chn in range(num_channels):
-            svr_grid_searcher = GridSearchCV(svm.SVR(), svr_search_dict, cv=n_split, n_jobs=n_jobs, verbose=verbose)
+            svr_grid_searcher = GridSearchCV(svm.SVR(), svr_search_dict, cv=n_split,
+                                             scoring='neg_mean_squared_error', n_jobs=n_jobs, verbose=verbose)
             svr_grid_searcher.fit(train_feature[train_label == cls, :], train_response[train_label == cls, chn])
             best_svr_param = svr_grid_searcher.best_params_
             svr_option = SVMOption()
