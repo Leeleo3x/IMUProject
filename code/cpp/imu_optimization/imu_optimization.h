@@ -15,8 +15,6 @@
 
 namespace IMUProject {
 
-
-
 	class SparseGrid{
 	public:
 		SparseGrid(const double* time_stamp, const int N, const int variable_count,
