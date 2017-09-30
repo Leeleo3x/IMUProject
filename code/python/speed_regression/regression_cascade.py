@@ -242,7 +242,7 @@ def get_best_option(train_feature, train_label, train_response, svm_search_dict=
     svm_option.gamma = 1. / train_feature.shape[1]
     if svr_search_dict is None:
         svr_search_dict = {'C': [0.1, 1.0, 10.0],
-                           'epsilon': [0.001, 0.01, 0.1]}
+                           'epsilon': [0.001, 0.01]}
     svr_options = []
     num_classes = max(train_label) + 1
     num_channels = train_response.shape[1]
@@ -278,6 +278,7 @@ def get_best_option_analytical(train_feature, train_label, train_response):
             svr_option.kernel_type = cv2.ml.SVM_RBF
             svr_option.C = max(abs(mean_response + 3 * dev_response), abs(mean_response - 3 * dev_response))
             pass
+
 
 def load_datalist(path, option, class_map=None):
     root_dir = os.path.dirname(path)

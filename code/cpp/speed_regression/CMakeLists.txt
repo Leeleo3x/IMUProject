@@ -9,7 +9,8 @@ find_package(Gflags REQUIRED)
 
 include_directories(${EIGEN_INCLUDE_DIRS})
 
-add_library(SpeedRegression speed_regression.h speed_regression.cpp)
+add_library(SpeedRegression speed_regression.h speed_regression.cpp
+        svr_cascade.h svr_cascade.cpp)
 target_link_libraries(SpeedRegression ${OpenCV_LIBS} ${GLOG_LIBRARY})
 
 add_executable(SpeedRegression_cli main.cpp)
