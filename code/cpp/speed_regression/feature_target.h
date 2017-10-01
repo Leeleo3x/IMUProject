@@ -1,0 +1,68 @@
+//
+// Created by Yan Hang on 3/4/17.
+//
+
+#ifndef PROJECT_SPEED_REGRESSION_H
+#define PROJECT_SPEED_REGRESSION_H
+
+#include <vector>
+#include <string>
+
+#include <opencv2/opencv.hpp>
+#include <Eigen/Eigen>
+#include <Eigen/Geometry>
+#include <glog/logging.h>
+
+namespace IMUProject {
+
+enum TargetType {
+  LOCAL_SPEED,
+  LOCAL_SPEED_GRAVITY_ALIGNED,
+  SPEED_MAGNITUDE,
+};
+
+enum FeatureType {
+  DIRECT,
+  DIRECT_GRAVITY_ALIGNED,
+  FOURIER
+};
+
+struct TrainingDataOption {
+  explicit TrainingDataOption(const int step = 10, const int window = 200,
+                              const FeatureType feature = DIRECT_GRAVITY_ALIGNED,
+                              const TargetType target = LOCAL_SPEED_GRAVITY_ALIGNED) :
+      step_size(step), window_size(window), feature_type(feature), target_type(target) {}
+  int step_size;
+  int window_size;
+
+  FeatureType feature_type;
+  TargetType target_type;
+};
+
+cv::Mat ComputeLocalSpeedTarget(const std::vector<double> &time_stamp,
+                                const std::vector<Eigen::Vector3d> &position,
+                                const std::vector<Eigen::Quaterniond> &orientation,
+                                const std::vector<int> &sample_points,
+                                const int smooth_size);
+
+cv::Mat ComputeLocalSpeedTargetGravityAligned(const std::vector<double>& time_stamp,
+                                              const std::vector<Eigen::Vector3d>& position,
+                                              const std::vector<Eigen::Vector3d>& orientation,
+                                              const std::vector<Eigen::Vector3d>& gravity,
+                                              const std::vector<int>& sample_points,
+                                              const int smooth_size);
+
+cv::Mat ComputeDirectFeature(const Eigen::Vector3d *gyro,
+                             const Eigen::Vector3d *linacce,
+                             const int N);
+
+Eigen::Vector3d AdjustEulerAngle(const Eigen::Vector3d &input);
+
+cv::Mat ComputeDirectFeatureGravity(const Eigen::Vector3d *gyro,
+                                    const Eigen::Vector3d *linacce,
+                                    const Eigen::Vector3d *gravity,
+                                    const int N, const Eigen::Vector3d local_gravity = Eigen::Vector3d(0, 1, 0));
+
+} // namespace IMUProject
+
+#endif //PROJECT_SPEED_REGRESSION_H

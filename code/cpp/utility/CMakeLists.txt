@@ -10,8 +10,8 @@ find_package(OpenMesh REQUIRED)
 
 include_directories(${EIGEN_INCLUDE_DIRS})
 
-add_library(IMUUtility data_io.cpp data_io.h utility.h utility.cpp)
+add_library(IMUUtility utility.h utility.cc data_io.h data_io.cc)
 target_link_libraries(IMUUtility ${OpenCV_LIBS} ${GLOG_LIBRARIES} ${GFLAGS_LIBRARIES} ${OPENMESH_LIBRARIES})
 
-add_executable(IMUUtility_cli main.cpp)
+add_executable(IMUUtility_cli main.cc)
 target_link_libraries(IMUUtility_cli IMUUtility)

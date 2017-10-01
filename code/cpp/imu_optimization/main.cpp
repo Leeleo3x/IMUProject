@@ -14,7 +14,7 @@
 
 #include <utility/data_io.h>
 #include <utility/utility.h>
-#include <speed_regression/speed_regression.h>
+#include <speed_regression/feature_target.h>
 
 #include "imu_optimization.h"
 

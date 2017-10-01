@@ -9,9 +9,9 @@ find_package(Gflags REQUIRED)
 
 include_directories(${EIGEN_INCLUDE_DIRS})
 
-add_library(SpeedRegression speed_regression.h speed_regression.cpp
-        model_wrapper.h model_wrapper.cpp)
+add_library(SpeedRegression feature_target.h feature_target.cc
+        model_wrapper.h model_wrapper.cc speed_regression_cli.cc)
 target_link_libraries(SpeedRegression ${OpenCV_LIBS} ${GLOG_LIBRARY})
 
-add_executable(SpeedRegression_cli main.cpp)
+add_executable(SpeedRegression_cli speed_regression_cli.cc)
 target_link_libraries(SpeedRegression_cli SpeedRegression ${GFLAGS_LIBRARY} IMUUtility)

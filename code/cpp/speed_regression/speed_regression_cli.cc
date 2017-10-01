@@ -1,0 +1,40 @@
+//
+// Created by Hang Yan on 10/1/17.
+//
+
+#include <vector>
+#include <memory>
+
+#include <glog/logging.h>
+#include <gflags/gflags.h>
+
+#include "speed_regression/feature_target.h"
+#include "speed_regression/model_wrapper.h"
+#include "utility/data_io.h"
+
+DEFINE_string(model_path, "", "Path to the model");
+DEFINE_string(model_type, "cascade", "Type of the model: cascade or single");
+DEFINE_string(data_path, "", "Path to the csv file containing the data");
+DEFINE_string(output_path, "", "Path to the output file. If empty, the output file will be named regressed.txt"
+    " and saved to the data folder");
+
+using IMUProject::ModelWrapper;
+using IMUProject::SVRCascade;
+using IMUProject::TrainingDataOption;
+
+int main(int argc, char** argv){
+  if (argc < 3){
+    std::cerr << "Usage: ./SpeedRegression_cli <path-to-data> <path-to-model> [<output-path>]" << std::endl;
+    return 1;
+  }
+
+  google::InitGoogleLogging(argv[0]);
+  google::ParseCommandLineFlags(&argc, &argv, true);
+
+  std::unique_ptr<ModelWrapper> model(new SVRCascade());
+  CHECK(model->LoadFromFile(FLAGS_model_path)) << "Load model failed: " << FLAGS_model_path;
+  auto model_cast = dynamic_cast<SVRCascade*>(model.get());
+  auto classifier = model_cast->GetClassifier();
+  printf("Number of SV in the classifier: %d\n", classifier->getSupportVectors().rows);
+  return 0;
+}
