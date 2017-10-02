@@ -180,7 +180,6 @@ def get_training_data(data_all, imu_columns, option, sample_points=None, extra_a
 
     if extra_args is not None:
         if 'target_smooth_sigma' in extra_args:
-            print('Smoothing target with sigma: ', extra_args['target_smooth_sigma'])
             targets = gaussian_filter1d(targets, sigma=extra_args['target_smooth_sigma'], axis=0)
 
     targets = targets[sample_points]
