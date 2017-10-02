@@ -44,12 +44,13 @@ struct DataLayout {
   const int accelerometer = 4;
   const int linear_acceleration = 7;
   const int gravity = 10;
-  const int position = 13;
-  const int orientation = 16;
-  const int rotation_vector = 20;
-  const int gyro_stab = 24;
-  const int acce_stab = 27;
-  const int linacce_stab = 30;
+  const int magnet = 13;
+  const int position = 16;
+  const int orientation = 19;
+  const int rotation_vector = 23;
+  const int gyro_stab = 27;
+  const int acce_stab = 30;
+  const int linacce_stab = 33;
 };
 
 class IMUDataset {
@@ -122,9 +123,10 @@ class IMUDataset {
   static constexpr unsigned char IMU_ACCELEROMETER = 2;
   static constexpr unsigned char IMU_LINEAR_ACCELERATION = 4;
   static constexpr unsigned char IMU_GRAVITY = 8;
-  static constexpr unsigned char IMU_ROTATION_VECTOR = 16;
-  static constexpr unsigned char IMU_POSITION = 32;
-  static constexpr unsigned char IMU_ORIENTATION = 64;
+  static constexpr unsigned char IMU_MAGNETOMETER = 16;
+  static constexpr unsigned char IMU_ROTATION_VECTOR = 32;
+  static constexpr unsigned char IMU_POSITION = 64;
+  static constexpr unsigned char IMU_ORIENTATION = 128;
 
   static constexpr double kNanoToSec = 1000000000.0;
 
@@ -138,6 +140,7 @@ class IMUDataset {
   std::vector<Eigen::Vector3d> accelerometer_;
   std::vector<Eigen::Vector3d> linear_acceleration_;
   std::vector<Eigen::Vector3d> gravity_;
+  std::vector<Eigen::Vector3d> magnet_;
   std::vector<Eigen::Quaterniond> rotation_vector_;
 
   // data from tango

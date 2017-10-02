@@ -21,20 +21,37 @@ DEFINE_string(output_path, "", "Path to the output file. If empty, the output fi
 using IMUProject::ModelWrapper;
 using IMUProject::SVRCascade;
 using IMUProject::TrainingDataOption;
+using IMUProject::IMUDataset;
+using cv::Mat;
 
 int main(int argc, char** argv){
   if (argc < 3){
     std::cerr << "Usage: ./SpeedRegression_cli <path-to-data> <path-to-model> [<output-path>]" << std::endl;
     return 1;
   }
-
   google::InitGoogleLogging(argv[0]);
   google::ParseCommandLineFlags(&argc, &argv, true);
 
-  std::unique_ptr<ModelWrapper> model(new SVRCascade());
-  CHECK(model->LoadFromFile(FLAGS_model_path)) << "Load model failed: " << FLAGS_model_path;
-  auto model_cast = dynamic_cast<SVRCascade*>(model.get());
-  auto classifier = model_cast->GetClassifier();
-  printf("Number of SV in the classifier: %d\n", classifier->getSupportVectors().rows);
+  TrainingDataOption td_option;
+  td_option.feature_smooth_sigma = 2.0;
+  IMUDataset data(FLAGS_data_path);
+  const std::vector<double>& ts = data.GetTimeStamp();
+  printf("Number of records: %d\n", (int)ts.size());
+  Mat feature;
+  printf("Compute features...\n");
+  IMUProject::CreateFeatureMat(td_option, data, &feature);
+
+  for (int i=0; i<20; ++i){
+    for (int j=0; j<15; ++j){
+      printf("%f\t", feature.at<float>(i, j));
+    }
+    printf("\n");
+  }
+
+//  std::unique_ptr<ModelWrapper> model(new SVRCascade());
+//  CHECK(model->LoadFromFile(FLAGS_model_path)) << "Load model failed: " << FLAGS_model_path;
+//  auto model_cast = dynamic_cast<SVRCascade*>(model.get());
+//  auto classifier = model_cast->GetClassifier();
+//  printf("Number of SV in the classifier: %d\n", classifier->getSupportVectors().rows);
   return 0;
 }

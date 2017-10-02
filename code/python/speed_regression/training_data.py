@@ -187,13 +187,8 @@ def get_training_data(data_all, imu_columns, option, sample_points=None, extra_a
 
     gaussian_sigma = -1
     if extra_args is not None:
-        if 'feature_smooth_alpha' in extra_args:
-            print('Smoothing the signal by low pass filter: alpha = ', extra_args['feature_smooth_alpha'])
-            data_used = low_pass_filter(data_used, extra_args['feature_smooth_alpha'])
         if 'feature_smooth_sigma' in extra_args:
-            print('Smoothing the signal by gaussian filter: sigma = ', extra_args['feature_smooth_sigma'])
             gaussian_sigma = extra_args['feature_smooth_sigma']
-            data_used = gaussian_filter1d(data_used, extra_args['feature_smooth_sigma'], axis=0)
 
     if option.feature_ == 'direct':
         features = compute_direct_features(data_used, sample_points, option.window_size_, gaussian_sigma)

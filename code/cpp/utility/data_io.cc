@@ -23,13 +23,14 @@ IMUDataset::IMUDataset(const std::string &directory, unsigned char load_control)
   timestamp_.resize((size_t) kSamples, 0);
 
   for (int i = 0; i < kSamples; ++i) {
-    Eigen::Vector3d gyro, acce, linacce, gravity, pos;
+    Eigen::Vector3d gyro, acce, linacce, gravity, magnet, pos;
     Eigen::Quaterniond ori, rv;
     double un_used = 0.0;
     fin >> timestamp_[i] >> gyro[0] >> gyro[1] >> gyro[2];
     fin >> acce[0] >> acce[1] >> acce[2];
     fin >> linacce[0] >> linacce[1] >> linacce[2];
     fin >> gravity[0] >> gravity[1] >> gravity[2];
+    fin >> magnet[0] >> magnet[1] >> magnet[2];
     fin >> pos[0] >> pos[1] >> pos[2];
     fin >> ori.w() >> ori.x() >> ori.y() >> ori.z();
     fin >> rv.w() >> rv.x() >> rv.y() >> rv.z();
@@ -54,6 +55,9 @@ IMUDataset::IMUDataset(const std::string &directory, unsigned char load_control)
     }
     if (load_control & IMU_GRAVITY) {
       gravity_.push_back(gravity);
+    }
+    if (load_control & IMU_MAGNETOMETER){
+      magnet_.push_back(magnet);
     }
     if (load_control & IMU_ROTATION_VECTOR) {
       rotation_vector_.push_back(rv);

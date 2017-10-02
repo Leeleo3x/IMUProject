@@ -2,6 +2,8 @@
 // Created by Yan Hang on 3/4/17.
 //
 
+#include <thread>
+
 #include "feature_target.h"
 
 using namespace std;
@@ -13,7 +15,7 @@ cv::Mat ComputeLocalSpeedTarget(const std::vector<double> &time_stamp,
                                 const std::vector<Eigen::Vector3d> &position,
                                 const std::vector<Eigen::Quaterniond> &orientation,
                                 const std::vector<int> &sample_points,
-                                const int smooth_size) {
+                                const double sigma) {
   LOG(ERROR) << "The C++ code is only for testing. This function shouldn't be called.";
   const auto N = (int) time_stamp.size();
   CHECK_EQ(position.size(), N);
@@ -34,13 +36,10 @@ cv::Mat ComputeLocalSpeedTarget(const std::vector<double> &time_stamp,
     ls_ptr[i * 3 + 2] = (float) local_speed[2];
   }
 
-//		Mat local_speed_filtered(N, 3, CV_32FC1, cv::Scalar::all(0));
-//		for(int i=0; i<3; ++i) {
-//			//cv::blur(local_speed_all.col(i), local_speed_filtered.col(i), cv::Size(smooth_size, 1));
-//			cv::GaussianBlur(local_speed_all.col(i), local_speed_filtered.col(i), cv::Size(0, 0), (double)smooth_size);
-//		}
-  Mat local_speed_filtered = local_speed_all;
-
+  Mat local_speed_filtered = local_speed_all.clone();
+  if (sigma > 0){
+    cv::GaussianBlur(local_speed_all, local_speed_filtered, cv::Size(0, 0), 0, sigma);
+  }
   Mat local_speed((int) sample_points.size(), 3, CV_32FC1, cv::Scalar::all(0));
   for (auto i = 0; i < sample_points.size(); ++i) {
     const int ind = sample_points[i];
@@ -63,20 +62,24 @@ cv::Mat ComputeLocalSpeedTargetGravityAligned(const std::vector<double>& time_st
 }
 
 
-cv::Mat ComputeDirectFeature(const Eigen::Vector3d *gyro,
-                             const Eigen::Vector3d *linacce,
-                             const int N) {
-  Mat feature(1, 6 * N, CV_32FC1, cv::Scalar::all(0));
+cv::Mat ComputeDirectFeature(const Eigen::Vector3d* gyro,
+                             const Eigen::Vector3d* linacce,
+                             const int N, const double sigma) {
+  Mat feature(N, 6, CV_32FC1, cv::Scalar::all(0));
   for (int i = 0; i < N; ++i) {
-    feature.at<float>(0, i * 6 + 0) = (float) gyro[i][0];
-    feature.at<float>(0, i * 6 + 1) = (float) gyro[i][1];
-    feature.at<float>(0, i * 6 + 2) = (float) gyro[i][2];
-    feature.at<float>(0, i * 6 + 3) = (float) linacce[i][0];
-    feature.at<float>(0, i * 6 + 4) = (float) linacce[i][1];
-    feature.at<float>(0, i * 6 + 5) = (float) linacce[i][2];
+    feature.at<float>(i, 0) = (float) gyro[i][0];
+    feature.at<float>(i, 1) = (float) gyro[i][1];
+    feature.at<float>(i, 2) = (float) gyro[i][2];
+    feature.at<float>(i, 3) = (float) linacce[i][0];
+    feature.at<float>(i, 4) = (float) linacce[i][1];
+    feature.at<float>(i, 5) = (float) linacce[i][2];
   }
-
-  return feature;
+  cv::Mat feature_filtered = feature.clone();
+  if (sigma > 0){
+    cv::GaussianBlur(feature, feature_filtered, cv::Size(1, 0), 0, sigma, cv::BORDER_REFLECT);
+  }
+  // Flatten the feature matrix to a row vector
+  return feature_filtered.reshape(1, 1);
 }
 
 Eigen::Vector3d AdjustEulerAngle(const Eigen::Vector3d &input) {
@@ -103,32 +106,80 @@ Eigen::Vector3d AdjustEulerAngle(const Eigen::Vector3d &input) {
   return output;
 }
 
-cv::Mat ComputeDirectFeatureGravity(const Eigen::Vector3d *gyro,
-                                    const Eigen::Vector3d *linacce,
-                                    const Eigen::Vector3d *gravity,
-                                    const int N, const Eigen::Vector3d local_gravity) {
-  Mat feature(1, 6 * N, CV_32FC1, cv::Scalar::all(0));
-
+cv::Mat ComputeDirectFeatureGravity(const Eigen::Vector3d* gyro,
+                                    const Eigen::Vector3d* linacce,
+                                    const Eigen::Vector3d* gravity,
+                                    const int N, const double sigma,
+                                    const Eigen::Vector3d local_gravity) {
+  Mat feature(N, 6, CV_32FC1, cv::Scalar::all(0));
   for (auto i = 0; i < N; ++i) {
     Eigen::Quaterniond rotor = Eigen::Quaterniond::FromTwoVectors(gravity[i], local_gravity);
-    Eigen::Vector3d aligned_linacce = rotor * linacce[i];
-
+    Eigen::Vector3d aligned_linacce = linacce[i];
+    // TODO(yanhang): Is setting a slack (0.99) reasonable here?
+    if (rotor.w() < 0.99) {
+      aligned_linacce = rotor * linacce[i];
+    }
     // TODO(yanhang): Aligning the gyroscope w.r.t. gravity is still buggy. Omit it for the moment.
 //    Eigen::Quaterniond gyro_quat = rotor * Eigen::AngleAxis<double>(gyro[i][0], Eigen::Vector3d::UnitX()) *
 //        Eigen::AngleAxis<double>(gyro[i][1], Eigen::Vector3d::UnitY()) *
 //        Eigen::AngleAxis<double>(gyro[i][2], Eigen::Vector3d::UnitZ());
 //    Eigen::Vector3d aligned_gyro = AdjustEulerAngle(gyro_quat.toRotationMatrix().eulerAngles(0, 1, 2));
-    LOG(WARNING) << "Since the gyroscope transformation is still buggy, we use direct feature here.";
+    // LOG(WARNING) << "Since the gyroscope transformation is still buggy, we use direct feature here.";
     const Eigen::Vector3d& aligned_gyro = gyro[i];
 
-    feature.at<float>(0, i * 6 + 0) = (float) aligned_gyro[0];
-    feature.at<float>(0, i * 6 + 1) = (float) aligned_gyro[1];
-    feature.at<float>(0, i * 6 + 2) = (float) aligned_gyro[2];
-    feature.at<float>(0, i * 6 + 3) = (float) aligned_linacce[0];
-    feature.at<float>(0, i * 6 + 4) = (float) aligned_linacce[1];
-    feature.at<float>(0, i * 6 + 5) = (float) aligned_linacce[2];
+    feature.at<float>(i, 0) = (float) aligned_gyro[0];
+    feature.at<float>(i, 1) = (float) aligned_gyro[1];
+    feature.at<float>(i, 2) = (float) aligned_gyro[2];
+    feature.at<float>(i, 3) = (float) aligned_linacce[0];
+    feature.at<float>(i, 4) = (float) aligned_linacce[1];
+    feature.at<float>(i, 5) = (float) aligned_linacce[2];
   }
-  return feature;
+  cv::Mat feature_filtered = feature.clone();
+  if (sigma > 0){
+    cv::GaussianBlur(feature, feature_filtered, cv::Size(1, 0), 0, sigma, cv::BORDER_REFLECT);
+  }
+  // Flatten the matrix to a row vector
+  return feature_filtered.reshape(1, 1);
 }
 
+void CreateFeatureMat(const TrainingDataOption& option, const IMUDataset& data, cv::Mat* feature){
+  const std::vector<double>& ts = data.GetTimeStamp();
+  const std::vector<Eigen::Vector3d>& gyro = data.GetGyro();
+  const std::vector<Eigen::Vector3d>& linacce = data.GetLinearAcceleration();
+  const std::vector<Eigen::Vector3d>& gravity = data.GetGravity();
+  const int kSamples = ts.size();
+  CHECK_NOTNULL(feature)->create((kSamples - option.window_size) / option.step_size,
+                                 6 * option.window_size, CV_32FC1);
+  auto thread_func = [&](const int tid) {
+    for (int i = tid; i < feature->rows; i += option.kThreads){
+      cv::Mat feat;
+      const int sid = i * option.step_size;
+      if (option.feature_type == DIRECT) {
+        feat = ComputeDirectFeature(&gyro[sid], &linacce[sid], option.window_size, option.feature_smooth_sigma);
+      } else {
+        feat = ComputeDirectFeatureGravity(&gyro[sid], &linacce[sid], &gravity[sid], option.window_size,
+                                           option.feature_smooth_sigma);
+      }
+      feat.copyTo(feature->row(i));
+    }
+  };
+
+  // Parallel execution
+  if (option.kThreads == 1){
+    thread_func(0);
+  } else {
+    std::vector<std::thread> threads;
+    for (int i=0; i<option.kThreads; ++i){
+      std::thread t(thread_func, i);
+      threads.push_back(std::move(t));
+    }
+
+    for (auto& t: threads){
+      if (t.joinable()){
+        t.join();
+      }
+    }
+  }
 }
+
+}  // namespace IMUProject

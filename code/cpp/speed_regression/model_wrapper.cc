@@ -61,7 +61,7 @@ bool SVRCascade::LoadFromFile(const std::string &path) {
   }
   LOG(INFO) << "Classifier " << path + "/classifier.yaml loaded";
 
-  regressors_.resize(static_cast<size_t>(GetNumChannels() * GetNumClasses()));
+  regressors_.resize(GetNumChannels() * GetNumClasses());
   char buffer[128] = {};
   for (int cls = 0; cls < GetNumClasses(); ++cls) {
     for (int chn = 0; chn < GetNumChannels(); ++chn) {
@@ -84,10 +84,30 @@ void SVRCascade::Predict(const cv::Mat &feature, cv::Mat *predicted) const {
 }
 
 void SVRCascade::Predict(const cv::Mat &feature, cv::Mat *label, cv::Mat *response) const {
+  // Predict the label
+  CHECK(label) << "The provided output label matrix is empty";
+  CHECK_NOTNULL(classifier_.get())->predict(feature, *label);
 
+  printf("label->rows: %d", label->rows);
+  std::vector<int> num_sample_in_class(GetNumClasses());
+  for (int i=0; i<label->rows; ++i){
+
+  }
+  // For each class, copy the corresponding samples to a seperate Mat.
+  for (int cls = 0; cls < GetNumClasses(); ++cls){
+
+    for (int chn = 0; chn < GetNumChannels(); ++chn){
+
+    }
+  }
 }
 
 bool CVModel::LoadFromFile(const std::string &path) {
+  regressor_ = cv::ml::SVM::load(path);
+  if (!regressor_.get()){
+    LOG(ERROR) << "Can not open regressioni model: " << path;
+    return false;
+  }
   return true;
 }
 

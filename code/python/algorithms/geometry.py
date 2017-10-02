@@ -65,6 +65,7 @@ def align_3dvector_with_gravity(data, gravity, local_g_direction=np.array([0, 1,
     output = np.copy(data)
     for i in range(data.shape[0]):
         q = quaternion_from_two_vectors(gravity[i], local_g_direction)
+        # TODO(yanhang): Is setting a a slack (0.99) reasonable here?
         if q.w < 0.99:
             output[i] = (q * quaternion.quaternion(1.0, *data[i]) * q.conj()).vec
     return output
