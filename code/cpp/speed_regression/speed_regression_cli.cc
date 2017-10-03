@@ -51,6 +51,9 @@ int main(int argc, char** argv){
   printf("Number of SV in the classifier: %d\n", classifier->getSupportVectors().rows);
 
   for (int i=0; i<10; ++i){
+
+  }
+  for (int i=0; i<10; ++i){
     int label;
     Eigen::VectorXd response(2);
     model_cast->Predict(feature.row(i), &response, &label);

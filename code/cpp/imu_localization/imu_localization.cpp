@@ -11,22 +11,23 @@
 using namespace std;
 namespace IMUProject {
 
-using Functor600 = LocalSpeedFunctor<FunctorSize::kVar_600_, FunctorSize::kCon_600_>;
-using Functor800 = LocalSpeedFunctor<FunctorSize::kVar_800_, FunctorSize::kCon_800_>;
-using Functor1000 = LocalSpeedFunctor<FunctorSize::kVar_1000_, FunctorSize::kCon_1000_>;
-using Functor5000 = LocalSpeedFunctor<FunctorSize::kVar_5000_, FunctorSize::kCon_5000_>;
-using FunctorLarge = LocalSpeedFunctor<FunctorSize::kVar_large_, FunctorSize::kCon_large_>;
+using Functor600 = LocalSpeedFunctor<FunctorSize::kVar_600, FunctorSize::kCon_600>;
+using Functor800 = LocalSpeedFunctor<FunctorSize::kVar_800, FunctorSize::kCon_800>;
+using Functor1000 = LocalSpeedFunctor<FunctorSize::kVar_1000, FunctorSize::kCon_1000>;
+using Functor5000 = LocalSpeedFunctor<FunctorSize::kVar_5000, FunctorSize::kCon_5000>;
+using FunctorLarge = LocalSpeedFunctor<FunctorSize::kVar_large, FunctorSize::kCon_large>;
 
 const Eigen::Vector3d IMUTrajectory::local_gravity_dir_ = Eigen::Vector3d(0, 1, 0);
 
-IMUTrajectory::IMUTrajectory(const Eigen::Vector3d &init_speed,
+IMUTrajectory::IMUTrajectory(const IMULocalizationOption option,
+                             const TrainingDataOption td_option,
+                             const Eigen::Vector3d &init_speed,
                              const Eigen::Vector3d &init_position,
-                             const std::vector<cv::Ptr<cv::ml::SVM> > &regressors,
-                             const double sigma,
-                             const IMULocalizationOption option) :
+                             const ModelWrapper* model):
+    option_(option), td_option_(td_option),
     init_speed_(init_speed), init_position_(init_position), num_frames_(0),
-    regressors_(regressors), last_constraint_ind_(option.reg_window_ - option.reg_interval_),
-    option_(option), sigma_(sigma) {
+    last_constraint_ind_(td_option_.window_size - option.reg_interval),
+    model_(model){
   ts_.reserve(kInitCapacity_);
   gyro_.reserve(kInitCapacity_);
   linacce_.reserve(kInitCapacity_);
@@ -55,8 +56,8 @@ void IMUTrajectory::AddRecord(const double t, const Eigen::Vector3d &gyro, const
   std::lock_guard<std::mutex> guard(mt_);
   if (num_frames_ > 1) {
     const double dt = ts_[num_frames_ - 1] - ts_[num_frames_ - 2];
-    speed_.push_back(orientation * linacce * dt);
-    position_.push_back(speed_[num_frames_ - 1] * dt);
+    speed_.emplace_back(orientation * linacce * dt);
+    position_.emplace_back(speed_[num_frames_ - 1] * dt);
   } else {
     speed_.push_back(init_speed_);
     position_.push_back(init_position_);
@@ -76,35 +77,33 @@ void IMUTrajectory::CommitOptimizationResult(const SparseGrid *grid, const int s
 }
 
 int IMUTrajectory::RegressSpeed(const int end_ind) {
-  for (int i = last_constraint_ind_ + option_.reg_interval_; i < end_ind; i += option_.reg_interval_) {
-    std::vector<Eigen::Vector3d> gyro_slice(gyro_.begin() + i - option_.reg_window_, gyro_.begin() + i);
-    std::vector<Eigen::Vector3d> linacce_slice(linacce_.begin() + i - option_.reg_window_,
+  for (int i = last_constraint_ind_ + option_.reg_interval; i < end_ind; i += option_.reg_interval) {
+    std::vector<Eigen::Vector3d> gyro_slice(gyro_.begin() + i - td_option_.window_size, gyro_.begin() + i);
+    std::vector<Eigen::Vector3d> linacce_slice(linacce_.begin() + i - td_option_.window_size,
                                                linacce_.begin() + i);
-    std::vector<Eigen::Vector3d> gravity_slice(gravity_.begin() + i - option_.reg_window_,
+    std::vector<Eigen::Vector3d> gravity_slice(gravity_.begin() + i - td_option_.window_size,
                                                gravity_.begin() + i);
-    GaussianFilter(gyro_slice.data(), (int) gyro_slice.size(), sigma_);
-    GaussianFilter(linacce_slice.data(), (int) linacce_slice.size(), sigma_);
-
     cv::Mat feature = ComputeDirectFeatureGravity(gyro_slice.data(), linacce_slice.data(), gravity_slice.data(),
-                                                  (int) gyro_slice.size());
+                                                  (int) gyro_slice.size(), td_option_.feature_smooth_sigma);
 
+    Eigen::VectorXd regressed(2);
+    model_->Predict(feature, &regressed);
     // cv::Mat feature = ComputeDirectFeature(gyro_slice.data(), linacce_slice.data(), (int)gyro_slice.size());
 
-    // TODO: remove the redundant Y axis
-    const double ls_x = static_cast<double>(regressors_[0]->predict(feature));
-    const double ls_z = static_cast<double>(regressors_[2]->predict(feature));
+    const double ls_x = regressed[0];
+    const double ls_z = regressed[1];
 
     constraint_ind_.push_back(i);
 
-    if (option_.reg_option_ == FULL) {
+    if (option_.reg_option == FULL) {
       local_speed_.emplace_back(ls_x, 0, ls_z);
-    } else if (option_.reg_option_ == CONST) {
-      local_speed_.emplace_back(0, 0, -1 * option_.const_speed_);
-    } else if (option_.reg_option_ == MAG) {
+    } else if (option_.reg_option == CONST) {
+      local_speed_.emplace_back(0, 0, -1 * option_.const_speed);
+    } else if (option_.reg_option == MAG) {
       local_speed_.emplace_back(0, 0, -1 * std::sqrt(ls_x * ls_x + ls_z * ls_z));
-    } else if (option_.reg_option_ == ORI) {
+    } else if (option_.reg_option == ORI) {
       double ang = std::atan2(ls_z, ls_x);
-      local_speed_.emplace_back(option_.const_speed_ * std::cos(ang), 0, option_.const_speed_ * std::sin(ang));
+      local_speed_.emplace_back(option_.const_speed * std::cos(ang), 0, option_.const_speed * std::sin(ang));
     } else if (Z_ONLY) {
       local_speed_.emplace_back(ls_x, 0, 0);
     } else {
@@ -121,7 +120,6 @@ void IMUTrajectory::RunOptimization(const int start_id, const int N) {
   CHECK_GE(start_id, 0);
   CHECK_GE(N, 600);
   // Complete the speed regression up to this point
-
   RegressSpeed(start_id + N);
 
   ceres::Problem problem;
@@ -155,29 +153,29 @@ void IMUTrajectory::RunOptimization(const int start_id, const int N) {
   };
 
   if (N >= 600 && N < 800) {
-    ConstructConstraint(FunctorSize::kCon_600_);
-    CHECK_EQ(cur_constraint_id.size(), FunctorSize::kCon_600_);
-    grid = ConstructProblem<Functor600, FunctorSize::kVar_600_, FunctorSize::kCon_600_>
+    ConstructConstraint(FunctorSize::kCon_600);
+    CHECK_EQ(cur_constraint_id.size(), FunctorSize::kCon_600);
+    grid = ConstructProblem<Functor600, FunctorSize::kVar_600, FunctorSize::kCon_600>
         (start_id, N, problem, cur_constraint_id.data(), cur_local_speed.data(), cur_init_speed, bx, by, bz);
   } else if (N >= 800 && N < 1000) {
-    ConstructConstraint(FunctorSize::kCon_800_);
-    CHECK_EQ(cur_constraint_id.size(), FunctorSize::kCon_800_);
-    grid = ConstructProblem<Functor800, FunctorSize::kVar_800_, FunctorSize::kCon_800_>
+    ConstructConstraint(FunctorSize::kCon_800);
+    CHECK_EQ(cur_constraint_id.size(), FunctorSize::kCon_800);
+    grid = ConstructProblem<Functor800, FunctorSize::kVar_800, FunctorSize::kCon_800>
         (start_id, N, problem, cur_constraint_id.data(), cur_local_speed.data(), cur_init_speed, bx, by, bz);
   } else if (N >= 1000 && N < 5000) {
-    ConstructConstraint(FunctorSize::kCon_1000_);
-    CHECK_EQ(cur_constraint_id.size(), FunctorSize::kCon_1000_);
-    grid = ConstructProblem<Functor1000, FunctorSize::kVar_1000_, FunctorSize::kCon_1000_>
+    ConstructConstraint(FunctorSize::kCon_1000);
+    CHECK_EQ(cur_constraint_id.size(), FunctorSize::kCon_1000);
+    grid = ConstructProblem<Functor1000, FunctorSize::kVar_1000, FunctorSize::kCon_1000>
         (start_id, N, problem, cur_constraint_id.data(), cur_local_speed.data(), cur_init_speed, bx, by, bz);
   } else if (N >= 5000 && N < 10100) {
-    ConstructConstraint(FunctorSize::kCon_5000_);
-    CHECK_EQ(cur_constraint_id.size(), FunctorSize::kCon_5000_);
-    grid = ConstructProblem<Functor5000, FunctorSize::kVar_5000_, FunctorSize::kCon_5000_>
+    ConstructConstraint(FunctorSize::kCon_5000);
+    CHECK_EQ(cur_constraint_id.size(), FunctorSize::kCon_5000);
+    grid = ConstructProblem<Functor5000, FunctorSize::kVar_5000, FunctorSize::kCon_5000>
         (start_id, N, problem, cur_constraint_id.data(), cur_local_speed.data(), cur_init_speed, bx, by, bz);
   } else {
-    ConstructConstraint(FunctorSize::kCon_large_);
-    CHECK_EQ(cur_constraint_id.size(), FunctorSize::kCon_large_);
-    grid = ConstructProblem<FunctorLarge, FunctorSize::kVar_large_, FunctorSize::kCon_large_>
+    ConstructConstraint(FunctorSize::kCon_large);
+    CHECK_EQ(cur_constraint_id.size(), FunctorSize::kCon_large);
+    grid = ConstructProblem<FunctorLarge, FunctorSize::kVar_large, FunctorSize::kCon_large>
         (start_id, N, problem, cur_constraint_id.data(), cur_local_speed.data(), cur_init_speed, bx, by, bz);
   }
 

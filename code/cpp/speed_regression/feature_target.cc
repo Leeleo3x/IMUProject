@@ -30,10 +30,10 @@ cv::Mat ComputeLocalSpeedTarget(const std::vector<double> &time_stamp,
   Mat local_speed_all(N, 3, CV_32FC1, cv::Scalar::all(0));
   auto *ls_ptr = (float *) local_speed_all.data;
   for (auto i = 0; i < N; ++i) {
-    Eigen::Vector3d local_speed = orientation[i].conjugate() * global_speed[i];
-    ls_ptr[i * 3] = (float) local_speed[0];
-    ls_ptr[i * 3 + 1] = (float) local_speed[1];
-    ls_ptr[i * 3 + 2] = (float) local_speed[2];
+    Eigen::Vector3d ls = orientation[i].conjugate() * global_speed[i];
+    ls_ptr[i * 3] = (float) ls[0];
+    ls_ptr[i * 3 + 1] = (float) ls[1];
+    ls_ptr[i * 3 + 2] = (float) ls[2];
   }
 
   Mat local_speed_filtered = local_speed_all.clone();
@@ -51,14 +51,48 @@ cv::Mat ComputeLocalSpeedTarget(const std::vector<double> &time_stamp,
   return local_speed;
 }
 
+// This function is mostly the replicate of the ComputeLocalSpeedTarget function.
 cv::Mat ComputeLocalSpeedTargetGravityAligned(const std::vector<double>& time_stamp,
                                               const std::vector<Eigen::Vector3d>& position,
-                                              const std::vector<Eigen::Vector3d>& orientation,
+                                              const std::vector<Eigen::Quaterniond>& orientation,
                                               const std::vector<Eigen::Vector3d>& gravity,
                                               const std::vector<int>& sample_points,
-                                              const int smooth_size) {
-  CHECK(true) << "Not implemented";
-  return cv::Mat();
+                                              const double sigma, const Eigen::Vector3d local_gravity){
+  LOG(ERROR) << "The C++ code is only for testing. This function shouldn't be called.";
+  const auto N = (int) time_stamp.size();
+  CHECK_EQ(position.size(), N);
+  CHECK_EQ(orientation.size(), N);
+
+  std::vector<Eigen::Vector3d> global_speed(position.size(), Eigen::Vector3d(0, 0, 0));
+  for (auto i = 0; i < N - 1; ++i) {
+    global_speed[i] = (position[i + 1] - position[i]) / (time_stamp[i + 1] - time_stamp[i]);
+  }
+  global_speed[global_speed.size() - 2] = global_speed[global_speed.size() - 1];
+
+  Mat local_speed_all(N, 3, CV_32FC1, cv::Scalar::all(0));
+  auto *ls_ptr = (float *) local_speed_all.data;
+  for (auto i = 0; i < N; ++i) {
+    Eigen::Quaterniond rotor = Eigen::Quaterniond::FromTwoVectors(gravity[i], local_gravity);
+    Eigen::Vector3d ls = rotor * orientation[i].conjugate() * global_speed[i];
+    ls_ptr[i * 3] = (float) ls[0];
+    ls_ptr[i * 3 + 1] = (float) ls[1];
+    ls_ptr[i * 3 + 2] = (float) ls[2];
+  }
+
+  Mat local_speed_filtered = local_speed_all.clone();
+  if (sigma > 0){
+    cv::GaussianBlur(local_speed_all, local_speed_filtered, cv::Size(1, 0), 0, sigma);
+  }
+
+  Mat local_speed_gravity((int) sample_points.size(), 3, CV_32FC1, cv::Scalar::all(0));
+  for (auto i = 0; i < sample_points.size(); ++i) {
+    const int ind = sample_points[i];
+    local_speed_gravity.at<float>(i, 0) = local_speed_filtered.at<float>(ind, 0);
+    local_speed_gravity.at<float>(i, 1) = local_speed_filtered.at<float>(ind, 1);
+    local_speed_gravity.at<float>(i, 2) = local_speed_filtered.at<float>(ind, 2);
+  }
+
+  return local_speed_gravity;
 }
 
 

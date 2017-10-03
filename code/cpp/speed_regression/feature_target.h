@@ -53,10 +53,11 @@ cv::Mat ComputeLocalSpeedTarget(const std::vector<double> &time_stamp,
 
 cv::Mat ComputeLocalSpeedTargetGravityAligned(const std::vector<double>& time_stamp,
                                               const std::vector<Eigen::Vector3d>& position,
-                                              const std::vector<Eigen::Vector3d>& orientation,
+                                              const std::vector<Eigen::Quaterniond>& orientation,
                                               const std::vector<Eigen::Vector3d>& gravity,
                                               const std::vector<int>& sample_points,
-                                              const double sigma = -1);
+                                              const double sigma = -1,
+                                              const Eigen::Vector3d local_gravity = Eigen::Vector3d(0, 1, 0));
 
 cv::Mat ComputeDirectFeature(const Eigen::Vector3d* gyro,
                              const Eigen::Vector3d* linacce,

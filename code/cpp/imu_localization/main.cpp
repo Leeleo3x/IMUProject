@@ -14,7 +14,7 @@
 
 #include "imu_localization.h"
 
-DEFINE_string(model_path, "../../../../models/model_0326_full_w200_s20", "Path to model");
+DEFINE_string(model_path, "../../../../models/svr_cascade1002_c1e001", "Path to model");
 DEFINE_string(mapinfo_path, "default", "path to map info");
 DEFINE_int32(log_interval, 1000, "logging interval");
 DEFINE_string(color, "blue", "color");
@@ -45,12 +45,8 @@ int main(int argc, char **argv) {
   IMUProject::IMUDataset dataset(argv[1]);
 
   // load regressor
-  std::vector<cv::Ptr<cv::ml::SVM> > regressors(3);
-  for (int chn: {0, 2}) {
-    sprintf(buffer, "%s_%d.yml", FLAGS_model_path.c_str(), chn);
-    regressors[chn] = cv::ml::SVM::load(std::string(buffer));
-    LOG(INFO) << buffer << " loaded";
-  }
+  std::unique_ptr<IMUProject::ModelWrapper> model(new IMUProject::SVRCascade(FLAGS_model_path));
+  LOG(INFO) << "Model " << FLAGS_model_path << " loaded";
 
   // Run the system
   const int N = (int) dataset.GetTimeStamp().size();
@@ -80,29 +76,30 @@ int main(int argc, char **argv) {
   }
 
   // crete trajectory instance
-  IMUProject::IMULocalizationOption option;
-  const double sigma = 0.2;
-  option.weight_ls_ = FLAGS_weight_ls;
-  option.weight_vs_ = FLAGS_weight_vs;
+  IMUProject::IMULocalizationOption loc_option;
+  loc_option.weight_ls = FLAGS_weight_ls;
+  loc_option.weight_vs = FLAGS_weight_vs;
   if (FLAGS_preset == "full") {
-    option.reg_option_ = IMUProject::FULL;
+    loc_option.reg_option = IMUProject::FULL;
     FLAGS_id = "full";
     traj_color = Eigen::Vector3d(0, 0, 255);
   } else if (FLAGS_preset == "ori_only") {
-    option.reg_option_ = IMUProject::ORI;
+    loc_option.reg_option = IMUProject::ORI;
     FLAGS_id = "ori_only";
     traj_color = Eigen::Vector3d(0, 200, 0);
   } else if (FLAGS_preset == "mag_only") {
-    option.reg_option_ = IMUProject::MAG;
+    loc_option.reg_option = IMUProject::MAG;
     FLAGS_id = "mag_only";
     traj_color = Eigen::Vector3d(139, 0, 139);
   } else if (FLAGS_preset == "const") {
-    option.reg_option_ = IMUProject::CONST;
+    loc_option.reg_option = IMUProject::CONST;
     FLAGS_id = "const";
     traj_color = Eigen::Vector3d(150, 150, 0);
   }
 
-  IMUProject::IMUTrajectory trajectory(Eigen::Vector3d(0, 0, 0), dataset.GetPosition()[0], regressors, sigma, option);
+  IMUProject::TrainingDataOption td_option;
+  IMUProject::IMUTrajectory trajectory(loc_option, td_option, Eigen::Vector3d(0, 0, 0),
+                                       dataset.GetPosition()[0], model.get());
 
   float start_t = (float) cv::getTickCount();
 
@@ -115,8 +112,8 @@ int main(int argc, char **argv) {
   for (int i = 0; i < N; ++i) {
     trajectory.AddRecord(ts[i], gyro[i], linacce[i], gravity[i], orientation[i]);
 
-    if (i > option.local_opt_window_) {
-      if (i % option.global_opt_interval_ == 0) {
+    if (i > loc_option.local_opt_window) {
+      if (i % loc_option.global_opt_interval == 0) {
 //                LOG(INFO) << "Running global optimzation at frame " << i;
 ////                trajectory.RunOptimization(0, trajectory.GetNumFrames());
 //
@@ -127,14 +124,14 @@ int main(int argc, char **argv) {
 //                    }
 //                }
 //                trajectory.ScheduleOptimization(0, trajectory.GetNumFrames());
-      } else if (i % option.local_opt_interval_ == 0) {
+      } else if (i % loc_option.local_opt_interval == 0) {
         LOG(INFO) << "Running local optimzation at frame " << i;
         while (true) {
           if (trajectory.CanAdd()) {
             break;
           }
         }
-        trajectory.ScheduleOptimization(i - option.local_opt_window_, option.local_opt_window_);
+        trajectory.ScheduleOptimization(i - loc_option.local_opt_window, loc_option.local_opt_window);
 //	            trajectory.RunOptimization(i  - option.local_opt_window_, option.local_opt_window_);
       }
     }

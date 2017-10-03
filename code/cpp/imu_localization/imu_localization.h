@@ -16,59 +16,67 @@
 
 #include <opencv2/opencv.hpp>
 
-#include <imu_optimization/imu_optimization.h>
+#include "imu_optimization/imu_optimization.h"
+#include "speed_regression/model_wrapper.h"
+#include "speed_regression/feature_target.h"
 
 namespace IMUProject {
 
 enum RegressionOption {
+  // Use the full local speed (with gravity).
   FULL,
+  // Use only the magnitude of the speed.
   MAG,
+  // Use only the orientation of the speed.
   ORI,
+  // Only constraints the speed along the local Z direction.
   Z_ONLY,
+  // Assume constant speed.
   CONST
 };
 
 struct IMULocalizationOption {
-  int local_opt_interval_ = 400;
-  int local_opt_window_ = 1000;
+  // Number of frames between two consecutive optimizations.
+  int local_opt_interval = 400;
+  // Temporal window size (in frames) for each optimization.
+  int local_opt_window = 1000;
 
-  int global_opt_interval_ = 2000;
-  double weight_ls_ = 1.0;
-  double weight_vs_ = 1.0;
+  int global_opt_interval = 2000;
+  double weight_ls = 1.0;
+  double weight_vs = 1.0;
 
-  RegressionOption reg_option_ = FULL;
+  RegressionOption reg_option = FULL;
 
-  double const_speed_ = 1.0;
+  double const_speed = 1.0;
 
-  static constexpr int reg_interval_ = 50;
-  static constexpr int reg_window_ = 200;
+  static constexpr int reg_interval = 50;
 };
 
 struct FunctorSize {
-  static constexpr int kVar_600_ = 12;
-  static constexpr int kCon_600_ = 8;
+  static constexpr int kVar_600 = 12;
+  static constexpr int kCon_600 = 8;
 
-  static constexpr int kVar_800_ = 16;
-  static constexpr int kCon_800_ = 12;
+  static constexpr int kVar_800 = 16;
+  static constexpr int kCon_800 = 12;
 
-  static constexpr int kVar_1000_ = 20;
-  static constexpr int kCon_1000_ = 16;
+  static constexpr int kVar_1000 = 20;
+  static constexpr int kCon_1000 = 16;
 
-  static constexpr int kVar_5000_ = 100;
-  static constexpr int kCon_5000_ = 96;
+  static constexpr int kVar_5000 = 100;
+  static constexpr int kCon_5000 = 96;
 
-  static constexpr int kVar_large_ = 100;
-  static constexpr int kCon_large_ = 200;
+  static constexpr int kVar_large = 100;
+  static constexpr int kCon_large = 200;
 };
 
 class IMUTrajectory {
  public:
 
-  IMUTrajectory(const Eigen::Vector3d &init_speed,
+  IMUTrajectory(const IMULocalizationOption option,
+                const TrainingDataOption td_option,
+                const Eigen::Vector3d &init_speed,
                 const Eigen::Vector3d &init_position,
-                const std::vector<cv::Ptr<cv::ml::SVM> > &regressors,
-                const double sigma = 0.2,
-                const IMULocalizationOption option = IMULocalizationOption());
+                const IMUProject::ModelWrapper* model);
 
   ~IMUTrajectory() {
     terminate_flag_.store(true);
@@ -100,7 +108,7 @@ class IMUTrajectory {
 
   template<class FunctorType, int kVar, int kCon>
   const SparseGrid *ConstructProblem(const int start_id, const int N, ceres::Problem &problem,
-                                     const int *constraint_ind, const Eigen::Vector3d *local_speed,
+                                     const int* constraint_ind, const Eigen::Vector3d *local_speed,
                                      const Eigen::Vector3d init_speed,
                                      std::vector<double> &bx, std::vector<double> &by, std::vector<double> &bz) {
     CHECK_GE(constraint_ind_.size(), kCon);
@@ -108,7 +116,7 @@ class IMUTrajectory {
     FunctorType *functor = new FunctorType(&ts_[start_id], N, &linacce_[start_id],
                                            &orientation_[start_id], &R_GW_[start_id],
                                            constraint_ind, local_speed, init_speed,
-                                           option_.weight_ls_, option_.weight_vs_);
+                                           option_.weight_ls, option_.weight_vs);
     bx.resize((size_t) kVar, 0.0);
     by.resize((size_t) kVar, 0.0);
     bz.resize((size_t) kVar, 0.0);
@@ -212,7 +220,7 @@ class IMUTrajectory {
   std::vector<Eigen::Vector3d> local_speed_;
   int last_constraint_ind_;
 
-  const std::vector<cv::Ptr<cv::ml::SVM> > &regressors_;
+  const IMUProject::ModelWrapper* model_;
 
   Eigen::Vector3d init_speed_;
   Eigen::Vector3d init_position_;
@@ -221,9 +229,10 @@ class IMUTrajectory {
 
   int num_frames_;
 
-  const double sigma_;
-
+  // Options for localization
   const IMULocalizationOption option_;
+  // Options for extracting feature
+  const TrainingDataOption td_option_;
 
   mutable std::mutex mt_;
   mutable std::mutex queue_lock_;
