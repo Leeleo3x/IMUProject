@@ -2,6 +2,9 @@
 // Created by Hang Yan on 10/1/17.
 //
 
+// This file is for debugging purpose.
+
+#include <fstream>
 #include <vector>
 #include <memory>
 
@@ -40,18 +43,18 @@ int main(int argc, char** argv){
   Mat feature;
   printf("Compute features...\n");
   IMUProject::CreateFeatureMat(td_option, data, &feature);
+  printf("Num samples: %d\n", feature.rows);
+  std::unique_ptr<ModelWrapper> model(new SVRCascade());
+  CHECK(model->LoadFromFile(FLAGS_model_path)) << "Load model failed: " << FLAGS_model_path;
+  auto model_cast = dynamic_cast<SVRCascade*>(model.get());
+  auto classifier = model_cast->GetClassifier();
+  printf("Number of SV in the classifier: %d\n", classifier->getSupportVectors().rows);
 
-  for (int i=0; i<20; ++i){
-    for (int j=0; j<15; ++j){
-      printf("%f\t", feature.at<float>(i, j));
-    }
-    printf("\n");
+  for (int i=0; i<10; ++i){
+    int label;
+    Eigen::VectorXd response(2);
+    model_cast->Predict(feature.row(i), &response, &label);
+    printf("%d: %d\t%f\t%f\n", i, label, response[0], response[1]);
   }
-
-//  std::unique_ptr<ModelWrapper> model(new SVRCascade());
-//  CHECK(model->LoadFromFile(FLAGS_model_path)) << "Load model failed: " << FLAGS_model_path;
-//  auto model_cast = dynamic_cast<SVRCascade*>(model.get());
-//  auto classifier = model_cast->GetClassifier();
-//  printf("Number of SV in the classifier: %d\n", classifier->getSupportVectors().rows);
   return 0;
 }

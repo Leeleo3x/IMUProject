@@ -7,6 +7,8 @@
 
 #include <string>
 #include <glog/logging.h>
+#include <Eigen/Eigen>
+
 #include <opencv2/opencv.hpp>
 
 // This class provide unified predicting interface for regression model. The training of these models are done through
@@ -16,7 +18,7 @@ namespace IMUProject{
 class ModelWrapper{
  public:
   virtual bool LoadFromFile(const std::string& path) = 0;
-  virtual void Predict(const cv::Mat& feature, cv::Mat* predicted) const = 0;
+  virtual void Predict(const cv::Mat& feature, Eigen::VectorXd* response) const = 0;
 };
 
 struct SVRCascadeOption{
@@ -35,8 +37,8 @@ class SVRCascade: public ModelWrapper{
     CHECK(LoadFromFile(path)) << "Can not load SVRCascade model from " << path;
   }
   bool LoadFromFile(const std::string& path) override;
-  void Predict(const cv::Mat& feature, cv::Mat* predicted) const override;
-  void Predict(const cv::Mat& feature, cv::Mat* label, cv::Mat* response) const;
+  void Predict(const cv::Mat& feature, Eigen::VectorXd* response) const override;
+  void Predict(const cv::Mat& feature, Eigen::VectorXd* response, int* label) const;
 
   inline int GetNumClasses() const{
     return option_.num_classes;
@@ -74,9 +76,9 @@ class SVRCascade: public ModelWrapper{
 class CVModel: public ModelWrapper{
  public:
   bool LoadFromFile(const std::string& path) override;
-  void Predict(const cv::Mat& feature, cv::Mat* predicted) const override;
+  void Predict(const cv::Mat& feature, Eigen::VectorXd* response) const override;
  private:
-  cv::Ptr<cv::ml::SVM> regressor_;
+  std::vector<cv::Ptr<cv::ml::SVM>> regressor_;
 };
 
 }  // namespace IMUProject

@@ -78,40 +78,28 @@ bool SVRCascade::LoadFromFile(const std::string &path) {
   return true;
 }
 
-void SVRCascade::Predict(const cv::Mat &feature, cv::Mat *predicted) const {
-  cv::Mat label;
-  Predict(feature, &label, predicted);
+void SVRCascade::Predict(const cv::Mat &feature, Eigen::VectorXd* response) const {
+  int label;
+  return Predict(feature, response, &label);
 }
 
-void SVRCascade::Predict(const cv::Mat &feature, cv::Mat *label, cv::Mat *response) const {
+void SVRCascade::Predict(const cv::Mat &feature, Eigen::VectorXd* response, int *label) const {
   // Predict the label
-  CHECK(label) << "The provided output label matrix is empty";
-  CHECK_NOTNULL(classifier_.get())->predict(feature, *label);
-
-  printf("label->rows: %d", label->rows);
-  std::vector<int> num_sample_in_class(GetNumClasses());
-  for (int i=0; i<label->rows; ++i){
-
-  }
-  // For each class, copy the corresponding samples to a seperate Mat.
-  for (int cls = 0; cls < GetNumClasses(); ++cls){
-
-    for (int chn = 0; chn < GetNumChannels(); ++chn){
-
-    }
+  CHECK(response) << "The provided output response is empty";
+  CHECK_EQ(response->rows(), GetNumChannels());
+  CHECK(label) << "The output label is empty";
+  *label = static_cast<int>(CHECK_NOTNULL(classifier_.get())->predict(feature));
+  CHECK_LT(*label, GetNumClasses()) << "The predicted label is unknown: " << *label;
+  for (int chn = 0; chn < GetNumChannels(); ++chn){
+    (*response)[chn] = regressors_[(*label) * GetNumChannels() + chn]->predict(feature);
   }
 }
 
 bool CVModel::LoadFromFile(const std::string &path) {
-  regressor_ = cv::ml::SVM::load(path);
-  if (!regressor_.get()){
-    LOG(ERROR) << "Can not open regressioni model: " << path;
-    return false;
-  }
-  return true;
+
 }
 
-void CVModel::Predict(const cv::Mat &feature, cv::Mat *predicted) const {
+void CVModel::Predict(const cv::Mat &feature, Eigen::VectorXd *predicted) const {
 
 }
 

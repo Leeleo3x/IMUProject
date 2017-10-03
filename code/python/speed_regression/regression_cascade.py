@@ -221,7 +221,6 @@ def load_model_from_file(path, suffix=''):
         for chn in range(options.num_channels):
             rid = cls * options.num_channels + chn
             model.regressors[rid] = cv2.ml.SVM_load(path + '/regressor{}_{}_{}.yaml'.format(suffix, cls, chn))
-            assert model.regressors[rid]
     return model
 
 
