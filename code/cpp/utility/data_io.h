@@ -48,9 +48,6 @@ struct DataLayout {
   const int position = 16;
   const int orientation = 19;
   const int rotation_vector = 23;
-  const int gyro_stab = 27;
-  const int acce_stab = 30;
-  const int linacce_stab = 33;
 };
 
 class IMUDataset {

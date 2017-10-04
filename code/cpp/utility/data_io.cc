@@ -19,13 +19,12 @@ IMUDataset::IMUDataset(const std::string &directory, unsigned char load_control)
 
   int kSamples, kColumns;
   fin >> kSamples >> kColumns;
-  CHECK_EQ(kColumns, layout_.linacce_stab + 3);
+  CHECK_EQ(kColumns, layout_.rotation_vector + 4);
   timestamp_.resize((size_t) kSamples, 0);
 
   for (int i = 0; i < kSamples; ++i) {
     Eigen::Vector3d gyro, acce, linacce, gravity, magnet, pos;
     Eigen::Quaterniond ori, rv;
-    double un_used = 0.0;
     fin >> timestamp_[i] >> gyro[0] >> gyro[1] >> gyro[2];
     fin >> acce[0] >> acce[1] >> acce[2];
     fin >> linacce[0] >> linacce[1] >> linacce[2];
@@ -34,10 +33,6 @@ IMUDataset::IMUDataset(const std::string &directory, unsigned char load_control)
     fin >> pos[0] >> pos[1] >> pos[2];
     fin >> ori.w() >> ori.x() >> ori.y() >> ori.z();
     fin >> rv.w() >> rv.x() >> rv.y() >> rv.z();
-    // skip the fields suffixed with 'stab'
-    for (auto j = 0; j < 9; ++j) {
-      fin >> un_used;
-    }
     if (load_control & IMU_ORIENTATION) {
       orientation_.push_back(ori);
     }

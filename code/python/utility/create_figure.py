@@ -114,24 +114,24 @@ if __name__ == '__main__':
     # #               loc='upper center', ncol=3, labelspacing=0.)
     # fig_gs.savefig(output_path + '/fig_gs.png', bbox_inches='tight')
 
-    ylabels = ['X Speed (m/s)', 'Z Speed (m/s)']
-    fig_ls = plt.figure('Local speed', figsize=(24, 18))
-    linewidth = 1.8
-
-    for i in range(0, 2):
-        plt.subplot(211+i)
-        if i == 0:
-            plt.xlabel('Time(s)')
-        plt.ylabel(ylabels[i])
-        plt.locator_params(nbins=5, axis='y')
-        lines_imu += plt.plot(ts[constraint_ind], local_speed[:, axes_local[i]], color=(0, 0, 1.0), lw=linewidth)
-        lines_tango += plt.plot(ts[constraint_ind], ls_gt[:, axes_local[i]], 'r', lw=linewidth)
-        lines_raw += plt.plot(ts[constraint_ind], ls_raw[:, axes_local[i]], color=(0., .5, 0.5), lw=linewidth)
-        lines_const += plt.plot(ts[constraint_ind], ls_const[:, axes_local[i]], color=(.5, .5, 0.), lw=linewidth)
-    # plt.figlegend([lines_imu[-1], lines_tango[-1]],
-    #               ['Our method', 'Tango (Ground truth)'],
-    #               loc='upper center', ncol=2, labelspacing=0.)
-    fig_ls.savefig(output_path + '/fig_ls.png', bbox_inches='tight')
+    # ylabels = ['X Speed (m/s)', 'Z Speed (m/s)']
+    # fig_ls = plt.figure('Local speed', figsize=(24, 18))
+    # linewidth = 1.8
+    #
+    # for i in range(0, 2):
+    #     plt.subplot(211+i)
+    #     if i == 0:
+    #         plt.xlabel('Time(s)')
+    #     plt.ylabel(ylabels[i])
+    #     plt.locator_params(nbins=5, axis='y')
+    #     lines_imu += plt.plot(ts[constraint_ind], local_speed[:, axes_local[i]], color=(0, 0, 1.0), lw=linewidth)
+    #     lines_tango += plt.plot(ts[constraint_ind], ls_gt[:, axes_local[i]], 'r', lw=linewidth)
+    #     lines_raw += plt.plot(ts[constraint_ind], ls_raw[:, axes_local[i]], color=(0., .5, 0.5), lw=linewidth)
+    #     lines_const += plt.plot(ts[constraint_ind], ls_const[:, axes_local[i]], color=(.5, .5, 0.), lw=linewidth)
+    # # plt.figlegend([lines_imu[-1], lines_tango[-1]],
+    # #               ['Our method', 'Tango (Ground truth)'],
+    # #               loc='upper center', ncol=2, labelspacing=0.)
+    # fig_ls.savefig(output_path + '/fig_ls.png', bbox_inches='tight')
 
     # fig_bias = plt.figure('Bias', figsize=(12, 10))
     # ylabels = ['X Bias (m/s2)', 'Y Bias (m/s2)', 'Z Bias (m/s2)']

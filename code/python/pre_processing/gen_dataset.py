@@ -67,7 +67,7 @@ def interpolate_3dvector_linear(input, input_timestamp, output_timestamp):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('list')
-    parser.add_argument('--skip', default=500)
+    parser.add_argument('--skip', default=600)
     parser.add_argument('--recompute', action='store_true')
     parser.add_argument('--no_trajectory', action='store_true')
     parser.add_argument('--no_magnet', action='store_true')
@@ -100,7 +100,7 @@ if __name__ == '__main__':
         else:
             print('------------------\nProcessing ' + data_root, ', type: ' + motion_type)
             # drop the head and tail
-            pose_data = np.genfromtxt(data_root+'/pose.txt')
+            pose_data = np.genfromtxt(data_root+'/pose.txt')[args.skip:-args.skip, :]
             # swap tango's orientation from [x,y,z,w] to [w,x,y,z]
             pose_data[:, [-4, -3, -2, -1]] = pose_data[:, [-1, -4, -3, -2]]
             # For some reason there might be a few duplicated records...
@@ -148,11 +148,12 @@ if __name__ == '__main__':
                                                                 output_timestamp)
             output_magnet_linear = np.zeros([output_timestamp.shape[0], 3])
             if not args.no_magnet:
-                output_magnet_linear = interpolate_3dvector_linear(magnet_data[:, 1:], magnet_data[:, 0], output_timestamp)
+                output_magnet_linear = interpolate_3dvector_linear(magnet_data[:, 1:], magnet_data[:, 0],
+                                                                   output_timestamp)
             # convert gyro, accelerometer and linear acceleration to stablized IMU frame
-            gyro_stab = geometry.align_eular_rotation_with_gravity(output_gyro_linear, output_gravity_linear)
-            acce_stab = geometry.align_3dvector_with_gravity(output_accelerometer_linear, output_gravity_linear)
-            linacce_stab = geometry.align_3dvector_with_gravity(output_linacce_linear, output_gravity_linear)
+            # gyro_stab = geometry.align_eular_rotation_with_gravity(output_gyro_linear, output_gravity_linear)
+            # acce_stab = geometry.align_3dvector_with_gravity(output_accelerometer_linear, output_gravity_linear)
+            # linacce_stab = geometry.align_3dvector_with_gravity(output_linacce_linear, output_gravity_linear)
 
             # swap from x,y,z,w to w,x,y,z
             orientation_data[:, [1, 2, 3, 4]] = orientation_data[:, [4, 1, 2, 3]]
@@ -164,19 +165,16 @@ if __name__ == '__main__':
             column_list = 'time,gyro_x,gyro_y,gyro_z,acce_x'.split(',') + \
                           'acce_y,acce_z,linacce_x,linacce_y,linacce_z,grav_x,grav_y,grav_z'.split(',') + \
                           'magnet_x,magnet_y,magnet_z'.split(',') + \
-                          'pos_x,pos_y,pos_z,ori_w,ori_x,ori_y,ori_z,rv_w,rv_x,rv_y,rv_z'.split(',') + \
-                          'gyro_stab_x,gyro_stab_y,gyro_stab_z,acce_stab_x,acce_stab_y,acce_stab_z'.split(',') + \
-                          'linacce_stab_x,linacce_stab_y,linacce_stab_z'.split(',')
+                          'pos_x,pos_y,pos_z,ori_w,ori_x,ori_y,ori_z,rv_w,rv_x,rv_y,rv_z'.split(',')
 
-            data_mat = np.concatenate([output_timestamp[:, np.newaxis], output_gyro_linear,
+            data_mat = np.concatenate([output_timestamp[:, None], output_gyro_linear,
                                        output_accelerometer_linear,
                                        output_linacce_linear,
                                        output_gravity_linear,
                                        output_magnet_linear,
                                        pose_data[:, 1:4],
                                        pose_data[:, -4:],
-                                       output_orientation,
-                                       gyro_stab, acce_stab, linacce_stab], axis=1)
+                                       output_orientation], axis=1)
 
             # write individual files for convenience
 
@@ -202,15 +200,14 @@ if __name__ == '__main__':
                 write_ply_to_file(path=output_folder + '/trajectory.ply', position=pose_data[:, 1:4],
                                   orientation=pose_data[:, -4:])
 
-                # q_device_tango = quaternion.quaternion(*pose_data[0, -4:])
-                # q_rv_tango = q_device_tango * quaternion.quaternion(*output_orientation[0]).inverse()
-                # orientation_tango_frame = np.empty([output_orientation.shape[0], 4], dtype=float)
-                # for i in range(orientation_tango_frame.shape[0]):
-                #     orientation_tango_frame[i] = quaternion.as_float_array(q_rv_tango *
-                #                                                            quaternion.quaternion(*output_orientation[i]))
-                # write_ply_to_file(output_folder + '/trajectory_rv.ply', position=pose_data[:, -7:-4],
-                #                   acceleration=output_gravity_linear,
-                #                   orientation=orientation_tango_frame, length=5.0, kpoints=100, interval=200)
+                q_device_tango = quaternion.quaternion(*pose_data[0, -4:])
+                q_rv_tango = q_device_tango * quaternion.quaternion(*output_orientation[0]).inverse()
+                orientation_tango_frame = np.empty([output_orientation.shape[0], 4], dtype=float)
+                for i in range(orientation_tango_frame.shape[0]):
+                    orientation_tango_frame[i] = quaternion.as_float_array(q_rv_tango *
+                                                                           quaternion.quaternion(*output_orientation[i]))
+                write_ply_to_file(output_folder + '/trajectory_rv.ply', position=pose_data[:, 1:4],
+                                  orientation=orientation_tango_frame)
 
         length = (data_pandas['time'].values[-1] - data_pandas['time'].values[0]) / nano_to_sec
         hertz = data_pandas.shape[0] / length
