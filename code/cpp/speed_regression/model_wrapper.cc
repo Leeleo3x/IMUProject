@@ -96,7 +96,7 @@ void SVRCascade::Predict(const cv::Mat &feature, Eigen::VectorXd* response, int 
 }
 
 bool CVModel::LoadFromFile(const std::string &path) {
-
+  return true;
 }
 
 void CVModel::Predict(const cv::Mat &feature, Eigen::VectorXd *predicted) const {

@@ -26,7 +26,7 @@ IMUTrajectory::IMUTrajectory(const IMULocalizationOption option,
                              const ModelWrapper* model):
     option_(option), td_option_(td_option),
     init_speed_(init_speed), init_position_(init_position), num_frames_(0),
-    last_constraint_ind_(td_option_.window_size - option.reg_interval),
+    last_constraint_ind_(td_option.window_size - option.reg_interval),
     model_(model){
   ts_.reserve(kInitCapacity_);
   gyro_.reserve(kInitCapacity_);
