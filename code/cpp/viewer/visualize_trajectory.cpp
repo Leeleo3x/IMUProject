@@ -20,11 +20,9 @@
 #include <QSurfaceFormat>
 #endif
 
-#include <utility/data_io.h>
-
 int main(int argc, char** argv) {
 	google::InitGoogleLogging(argv[0]);
-	CHECK_GE(argc, 2) << "Usage: ./VisualizeTrajectory <path-to-csv-file>";
+	CHECK_GE(argc, 2) << "Usage: ./VisualizeTrajectory <path-to-data>";
 	google::ParseCommandLineFlags(&argc, &argv, true);
 
 	QApplication app(argc, argv);
@@ -35,7 +33,7 @@ int main(int argc, char** argv) {
 	main_window.resize(1280, 720);
 
 	IMUProject::MainWidget *main_widget = new IMUProject::MainWidget(std::string(argv[1]));
-	QHBoxLayout *layout = new QHBoxLayout();
+	auto layout = new QHBoxLayout();
 	layout->addWidget(main_widget);
 
 	main_window.setLayout(layout);

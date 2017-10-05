@@ -4,8 +4,6 @@
 
 #include "main_widget.h"
 
-using namespace std;
-
 namespace IMUProject {
 
 MainWidget::MainWidget(const std::string &path,
@@ -85,11 +83,11 @@ void MainWidget::InitializeTrajectories(const std::string &path) {
     ori = imu_to_tango * ori;
   }
 
-  string line;
+  std::string line;
 
   {
     sprintf(buffer, "%s/result_full.csv", path.c_str());
-    ifstream full_in(buffer);
+    std::ifstream full_in(buffer);
     if (full_in.is_open()) {
       printf("Loading %s\n", buffer);
       std::vector<Eigen::Vector3d> traj;
@@ -108,7 +106,7 @@ void MainWidget::InitializeTrajectories(const std::string &path) {
 
   {
     sprintf(buffer, "%s/result_step.csv", path.c_str());
-    ifstream step_in(buffer);
+    std::ifstream step_in(buffer);
     if (step_in.is_open()) {
       printf("Loading %s\n", buffer);
       std::vector<Eigen::Vector3d> traj;
@@ -127,7 +125,7 @@ void MainWidget::InitializeTrajectories(const std::string &path) {
 
   {
     sprintf(buffer, "%s/result_const.csv", path.c_str());
-    ifstream const_in(buffer);
+    std::ifstream const_in(buffer);
     if (const_in.is_open()) {
       printf("Loading %s\n", buffer);
       std::vector<Eigen::Vector3d> traj;

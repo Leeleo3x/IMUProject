@@ -9,14 +9,13 @@
 
 #include <memory>
 
+#include <opencv2/opencv.hpp>
 #include <QTimerEvent>
 #include <QBasicTimer>
 #include <QKeyEvent>
 #include <QOpenGLWidget>
 
-#include <opencv2/opencv.hpp>
-
-#include <utility/data_io.h>
+#include "utility/data_io.h"
 
 namespace IMUProject {
 
