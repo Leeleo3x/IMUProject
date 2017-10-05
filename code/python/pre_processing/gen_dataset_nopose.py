@@ -14,22 +14,22 @@ from algorithms import geometry
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('dir', type=str)
-    parser.add_argument('--skip', default=1700, type=int)
-    parser.add_argument('--skip_end', default=1600, type=int)
+    parser.add_argument('--skip', default=1000, type=int)
+    parser.add_argument('--skip_end', default=600, type=int)
     args = parser.parse_args()
 
-    rv_mag = 100
-
-    gyro_input = np.genfromtxt(args.dir + '/gyro.txt')[args.skip:-args.skip_end]
-    acce_input = np.genfromtxt(args.dir + '/acce.txt')[args.skip:-args.skip_end]
-    linacce_input = np.genfromtxt(args.dir + '/linacce.txt')[args.skip:-args.skip_end]
-    gravity_input = np.genfromtxt(args.dir + '/gravity.txt')[args.skip:-args.skip_end]
-    rv_input = np.genfromtxt(args.dir + '/orientation.txt')[args.skip+rv_mag:-args.skip_end-rv_mag]
+    gyro_input = np.genfromtxt(args.dir + '/gyro.txt')
+    acce_input = np.genfromtxt(args.dir + '/acce.txt')
+    linacce_input = np.genfromtxt(args.dir + '/linacce.txt')
+    gravity_input = np.genfromtxt(args.dir + '/gravity.txt')
+    magnet_input = np.genfromtxt(args.dir + '/magnet.txt')
+    rv_input = np.genfromtxt(args.dir + '/orientation.txt')[args.skip:-args.skip_end]
 
     rv_input[:, [1, 2, 3, 4]] = rv_input[:, [4, 1, 2, 3]]
 
     init_tango_quat = [math.sqrt(2.0)/2.0, math.sqrt(2.0)/2.0, 0.0, 0.0]
-    init_imu_quat = quaternion.quaternion(0.567463, 0.436472, 0.411796, 0.563828) * quaternion.quaternion(*rv_input[0, 1:]).conj()
+    # init_imu_quat = quaternion.quaternion(0.567463, 0.436472, 0.411796, 0.563828) * quaternion.quaternion(*rv_input[0, 1:]).conj()
+    init_imu_quat = quaternion.quaternion(1.0, 0.0, 0.0, 0.0)
 
     for i in range(rv_input.shape[0]):
         q = init_imu_quat * quaternion.quaternion(*rv_input[i, 1:])
@@ -41,27 +41,28 @@ if __name__ == '__main__':
 
     output_timestamp = rv_input[:, 0]
     print('Processing gyro...')
-    gyro_output = gen_dataset.interpolate_3dvector_linear(gyro_input, output_timestamp)
+    gyro_output = gen_dataset.interpolate_3dvector_linear(gyro_input[:, 1:], gyro_input[:, 0], output_timestamp)
     print('Processing accelerometer...')
-    acce_output = gen_dataset.interpolate_3dvector_linear(acce_input, output_timestamp)
+    acce_output = gen_dataset.interpolate_3dvector_linear(acce_input[:, 1:], acce_input[:, 0], output_timestamp)
     print('Processing linear acceleration...')
-    linacce_output = gen_dataset.interpolate_3dvector_linear(linacce_input, output_timestamp)
+    linacce_output = gen_dataset.interpolate_3dvector_linear(linacce_input[:, 1:], linacce_input[:, 0],
+                                                             output_timestamp)
     print('Processing gravity...')
-    gravity_output = gen_dataset.interpolate_3dvector_linear(gravity_input, output_timestamp)
+    gravity_output = gen_dataset.interpolate_3dvector_linear(gravity_input[:, 1:], gravity_input[:, 0],
+                                                             output_timestamp)
+    print('Processing magnetometer...')
+    magnet_output = gen_dataset.interpolate_3dvector_linear(magnet_input[:, 1:], magnet_input[:, 0], output_timestamp)
 
     fake_pose_data = np.zeros([rv_input.shape[0], 7], dtype=float)
     fake_pose_data[:, -4:] = init_tango_quat
 
     column_list = 'time,gyro_x,gyro_y,gyro_z,acce_x'.split(',') + \
                   'acce_y,acce_z,linacce_x,linacce_y,linacce_z,grav_x,grav_y,grav_z'.split(',') + \
+                  'magnet_x,magnet_y,magnet_z'.split(',') + \
                   'pos_x,pos_y,pos_z,ori_w,ori_x,ori_y,ori_z,rv_w,rv_x,rv_y,rv_z'.split(',')
 
-    data_mat = np.concatenate([gyro_output,
-                               acce_output[:, 1:],
-                               linacce_output[:, 1:],
-                               gravity_output[:, 1:],
-                               fake_pose_data,
-                               rv_input[:, 1:]], axis=1)
+    data_mat = np.concatenate([output_timestamp[:, None], gyro_output, acce_output, linacce_output, gravity_output,
+                               magnet_output, fake_pose_data, rv_input[:, 1:]], axis=1)
 
     data_csv = pandas.DataFrame(data_mat, columns=column_list)
 
