@@ -19,8 +19,10 @@ DEFINE_string(model_path, "../../../../models/svr_cascade1004_c1e001", "Path to 
 DEFINE_string(mapinfo_path, "default", "path to map info");
 DEFINE_int32(log_interval, 1000, "logging interval");
 DEFINE_string(color, "blue", "color");
-DEFINE_double(weight_vs, 1.0, "weight_vs");
-DEFINE_double(weight_ls, 1.0, "weight_ls");
+DEFINE_double(weight_vs, 1.0, "The weight parameter for vertical speed. Larger weight_vs imposes more penalty for"
+    " the vertical speed not being 0.");
+DEFINE_double(weight_ls, 1.0, "The weight parameter for the local speed. Larger weight_ls imposes more penalty for"
+    " the integrated local speed being different than the regressed speed.");
 DEFINE_string(suffix, "full", "suffix");
 DEFINE_string(preset, "none", "preset mode");
 
