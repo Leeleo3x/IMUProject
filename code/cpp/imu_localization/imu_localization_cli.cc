@@ -4,8 +4,6 @@
 
 #include "imu_localization.h"
 
-#include <experimental/filesystem>
-
 #include <vector>
 #include <string>
 
@@ -15,6 +13,7 @@
 
 #include "utility/data_io.h"
 #include "utility/utility.h"
+#include "utility/stlplus3/file_system.hpp"
 
 DEFINE_string(model_path, "../../../../models/svr_cascade1004_c1e001", "Path to model");
 DEFINE_string(mapinfo_path, "default", "path to map info");
@@ -22,7 +21,7 @@ DEFINE_int32(log_interval, 1000, "logging interval");
 DEFINE_string(color, "blue", "color");
 DEFINE_double(weight_vs, 1.0, "weight_vs");
 DEFINE_double(weight_ls, 1.0, "weight_ls");
-DEFINE_string(id, "full", "suffix");
+DEFINE_string(suffix, "full", "suffix");
 DEFINE_string(preset, "none", "preset mode");
 
 DEFINE_bool(run_global, true, "Run global optimization at the end");
@@ -83,19 +82,19 @@ int main(int argc, char **argv) {
   loc_option.weight_vs = FLAGS_weight_vs;
   if (FLAGS_preset == "full") {
     loc_option.reg_option = IMUProject::FULL;
-    FLAGS_id = "full";
+    FLAGS_suffix = "full";
     traj_color = Eigen::Vector3d(0, 0, 255);
   } else if (FLAGS_preset == "ori_only") {
     loc_option.reg_option = IMUProject::ORI;
-    FLAGS_id = "ori_only";
+    FLAGS_suffix = "ori_only";
     traj_color = Eigen::Vector3d(0, 200, 0);
   } else if (FLAGS_preset == "mag_only") {
     loc_option.reg_option = IMUProject::MAG;
-    FLAGS_id = "mag_only";
+    FLAGS_suffix = "mag_only";
     traj_color = Eigen::Vector3d(139, 0, 139);
   } else if (FLAGS_preset == "const") {
     loc_option.reg_option = IMUProject::CONST;
-    FLAGS_id = "const";
+    FLAGS_suffix = "const";
     traj_color = Eigen::Vector3d(150, 150, 0);
   }
 
@@ -159,17 +158,18 @@ int main(int argc, char **argv) {
 
   // Create output directory
   char result_dir_path[128];
-  sprintf(result_dir_path, "%s/result/", argv[1]);
-  std::experimental::filesystem::path result_dir(result_dir_path);
-  if (!std::experimental::filesystem::exists(result_dir)){
-    CHECK(std::experimental::filesystem::create_directory(result_dir))
-    << "Can not create output directory: " << result_dir_path;
-  } else {
-    CHECK(std::experimental::filesystem::is_directory(result_dir))
-    << "Path " << result_dir << " exists, but is not a directory.";
+  sprintf(result_dir_path, "%s/result_%s/", argv[1], FLAGS_suffix.c_str());
+  if (stlplus::file_exists(result_dir_path)){
+    LOG(ERROR) << "Path " << result_dir_path << " is the name of an existing file.";
+    return 1;
   }
 
-  sprintf(buffer, "%s/result_trajectory_%s.ply", result_dir_path, FLAGS_id.c_str());
+  if (!stlplus::folder_exists(result_dir_path)){
+    LOG(INFO) << "Creating folder: " << result_dir_path;
+    CHECK(stlplus::folder_create(result_dir_path)) << "Can not create folder " << result_dir_path << " for output.";
+  }
+
+  sprintf(buffer, "%s/result_trajectory_%s.ply", result_dir_path, FLAGS_suffix.c_str());
   IMUProject::WriteToPly(std::string(buffer), dataset.GetTimeStamp().data(), trajectory.GetPositions().data(),
                          trajectory.GetOrientations().data(), trajectory.GetNumFrames(),
                          true, traj_color, 0.8, 100, 300);
@@ -209,7 +209,7 @@ int main(int argc, char **argv) {
 
   {
     // Write the trajectory and bias as txt
-    sprintf(buffer, "%s/result_%s.csv", result_dir_path, FLAGS_id.c_str());
+    sprintf(buffer, "%s/result_%s.csv", result_dir_path, FLAGS_suffix.c_str());
     ofstream traj_out(buffer);
     CHECK(traj_out.is_open());
     traj_out << ",time,pos_x,pos_y,pos_z,speed_x,speed_y,speed_z,bias_x,bias_y,bias_z" << endl;
@@ -223,7 +223,7 @@ int main(int argc, char **argv) {
       traj_out << buffer;
     }
 
-    sprintf(buffer, "%s/regression_%s.txt", argv[1], FLAGS_id.c_str());
+    sprintf(buffer, "%s/regression_%s.txt", argv[1], FLAGS_suffix.c_str());
     ofstream reg_out(buffer);
     const std::vector<int> &cids = trajectory.GetConstraintInd();
     const std::vector<Eigen::Vector3d> &lss = trajectory.GetLocalSpeed();
@@ -264,7 +264,7 @@ int main(int argc, char **argv) {
 
     IMUProject::TrajectoryOverlay(pixel_length, start_pix, op2 - op1, dataset.GetPosition(),
                                   Eigen::Vector3d(0, 0, 255), map_img);
-    sprintf(buffer, "%s/overlay_%s.png", result_dir_path, FLAGS_id.c_str());
+    sprintf(buffer, "%s/overlay_%s.png", result_dir_path, FLAGS_suffix.c_str());
     cv::imwrite(buffer, map_img);
   }
 
