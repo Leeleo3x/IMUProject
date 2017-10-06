@@ -11,10 +11,10 @@ find_package(Gflags REQUIRED)
 
 include_directories(${EIGEN_INCLUDE_DIRS})
 
-add_library(IMUOptimization imu_optimization.h imu_optimization.cpp)
+add_library(IMUOptimization imu_optimization.h imu_optimization.cc)
 target_link_libraries(IMUOptimization ${CERES_LIBRARIES} ${GLOG_LIBRARY})
 
-add_executable(IMUOptimization_cli main.cpp imu_optimization.cpp imu_optimization.h)
+add_executable(IMUOptimization_cli imu_optimization_cli.cc imu_optimization.cc imu_optimization.h)
 target_link_libraries(IMUOptimization_cli IMUOptimization SpeedRegression IMUUtility ${OpenCV_LIBS}
         ${GLOG_LIBRARIES} ${GFLAGS_LIBRARIES} ${OPENMESH_LIBRARIES})
 

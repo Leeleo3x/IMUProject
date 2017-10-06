@@ -14,7 +14,7 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 include_directories(${EIGEN_INCLUDE_DIRS})
 
-add_executable(VisualizeTrajectory visualize_trajectory.cpp
+add_executable(VisualizeTrajectory viewer_cli.cc
         main_widget.cpp main_widget.h
         renderable.h renderable.cpp
         navigation.h navigation.cpp

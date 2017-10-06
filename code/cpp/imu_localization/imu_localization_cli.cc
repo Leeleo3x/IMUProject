@@ -2,6 +2,9 @@
 // Created by yanhang on 3/5/17.
 //
 
+#include "imu_localization.h"
+
+#include <experimental/filesystem>
 #include <vector>
 #include <string>
 
@@ -9,10 +12,8 @@
 #include <Eigen/Eigen>
 #include <gflags/gflags.h>
 
-#include <utility/data_io.h>
-#include <utility/utility.h>
-
-#include "imu_localization.h"
+#include "utility/data_io.h"
+#include "utility/utility.h"
 
 DEFINE_string(model_path, "../../../../models/svr_cascade1004_c1e001", "Path to model");
 DEFINE_string(mapinfo_path, "default", "path to map info");
@@ -155,12 +156,24 @@ int main(int argc, char **argv) {
       (float) trajectory.GetNumFrames() / (((float) cv::getTickCount() - start_t) / (float) cv::getTickFrequency());
   printf("Overall framerate: %.3f\n", fps_all);
 
-  sprintf(buffer, "%s/result_trajectory_%s.ply", argv[1], FLAGS_id.c_str());
+  // Create output directory
+  char result_dir_path[128];
+  sprintf(result_dir_path, "%s/result/", argv[1]);
+  std::experimental::filesystem::path result_dir(result_dir_path);
+  if (!std::experimental::filesystem::exists(result_dir)){
+    CHECK(std::experimental::filesystem::create_directory(result_dir))
+    << "Can not create output directory: " << result_dir_path;
+  } else {
+    CHECK(std::experimental::filesystem::is_directory(result_dir))
+    << "Path " << result_dir << " exists, but is not a directory.";
+  }
+
+  sprintf(buffer, "%s/result_trajectory_%s.ply", result_dir_path, FLAGS_id.c_str());
   IMUProject::WriteToPly(std::string(buffer), dataset.GetTimeStamp().data(), trajectory.GetPositions().data(),
                          trajectory.GetOrientations().data(), trajectory.GetNumFrames(),
                          true, traj_color, 0.8, 100, 300);
 
-  sprintf(buffer, "%s/tango_trajectory.ply", argv[1]);
+  sprintf(buffer, "%s/tango_trajectory.ply", result_dir_path);
   IMUProject::WriteToPly(std::string(buffer), dataset.GetTimeStamp().data(), dataset.GetPosition().data(),
                          dataset.GetOrientation().data(), (int) dataset.GetPosition().size(),
                          true, Eigen::Vector3d(255, 0, 0), 0.8, 100, 300);
@@ -174,11 +187,11 @@ int main(int argc, char **argv) {
       raw_speed[i] = raw_speed[i - 1] + acce * (ts[i] - ts[i - 1]);
       raw_traj[i] = raw_traj[i - 1] + raw_speed[i - 1] * (ts[i] - ts[i - 1]);
     }
-    sprintf(buffer, "%s/raw.ply", argv[1]);
+    sprintf(buffer, "%s/raw.ply", result_dir_path);
     IMUProject::WriteToPly(std::string(buffer), ts.data(), raw_traj.data(), orientation.data(),
                            (int) raw_traj.size(), true, Eigen::Vector3d(0, 128, 128));
 
-    sprintf(buffer, "%s/result_raw.csv", argv[1]);
+    sprintf(buffer, "%s/result_raw.csv", result_dir_path);
     ofstream raw_out(buffer);
     CHECK(raw_out.is_open());
     raw_out << ",time,pos_x,pos_y,pos_z,speed_x,speed_y,speed_z,bias_x,bias_y,bias_z" << endl;
@@ -195,7 +208,7 @@ int main(int argc, char **argv) {
 
   {
     // Write the trajectory and bias as txt
-    sprintf(buffer, "%s/result_%s.csv", argv[1], FLAGS_id.c_str());
+    sprintf(buffer, "%s/result_%s.csv", result_dir_path, FLAGS_id.c_str());
     ofstream traj_out(buffer);
     CHECK(traj_out.is_open());
     traj_out << ",time,pos_x,pos_y,pos_z,speed_x,speed_y,speed_z,bias_x,bias_y,bias_z" << endl;
@@ -250,7 +263,7 @@ int main(int argc, char **argv) {
 
     IMUProject::TrajectoryOverlay(pixel_length, start_pix, op2 - op1, dataset.GetPosition(),
                                   Eigen::Vector3d(0, 0, 255), map_img);
-    sprintf(buffer, "%s/overlay_%s.png", argv[1], FLAGS_id.c_str());
+    sprintf(buffer, "%s/overlay_%s.png", result_dir_path, FLAGS_id.c_str());
     cv::imwrite(buffer, map_img);
   }
 
