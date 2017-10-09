@@ -159,6 +159,7 @@ def correct_gyro_drifting(rv, magnet, gravity, alpha=0.98,
     return quaternion.as_float_array(rv_filtered), fused
 
 
+
 if __name__ == '__main__':
     import pandas
     import matplotlib.pyplot as plt

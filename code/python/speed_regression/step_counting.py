@@ -9,6 +9,7 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) + '/../')
 
+from algorithms import icp
 from pre_processing import gen_dataset
 
 nano_to_sec = 1e09
@@ -26,35 +27,48 @@ if __name__ == '__main__':
 
     ts = data_all['time'].values / nano_to_sec
     positions = data_all[['pos_x', 'pos_y', 'pos_z']].values
-    orientations = data_all[['ori_w', 'ori_x', 'ori_y', 'ori_z']].values
+    # orientations = data_all[['ori_w', 'ori_x', 'ori_y', 'ori_z']].values
+    orientations = data_all[['rv_w', 'rv_x', 'rv_y', 'rv_z']].values
+    ori_tango = data_all[['ori_w', 'ori_x', 'ori_y', 'ori_z']].values
     track_length = np.sum(np.linalg.norm(positions[1:] - positions[:-1], axis=1))
-    stride = track_length / step_data[-1][1]
-    print('Track length: {:.3f}m, stride length: {:.3f}m'.format(track_length, stride))
+    step_stride = track_length / step_data[-1][1]
+    print('Track length: {:.3f}m, stride length: {:.3f}m'.format(track_length, step_stride))
 
-    ori_at_step = gen_dataset.interpolate_quaternion_linear(np.concatenate([ts[:, None], orientations], axis=1),
-                                                            step_data[:, 0])
-    pos_at_step = np.empty([step_data.shape[0], 3], dtype=float)
-    pos_at_step[0] = positions[0]
-    for i in range(1, pos_at_step.shape[0]):
-        q = quaternion.quaternion(*ori_at_step[i, 1:])
-        offset = np.array([0, 0, -stride * (step_data[i, 1] - step_data[i - 1, 1])])
-        pos_at_step[i] = pos_at_step[i-1] + (q * quaternion.quaternion(1.0, *offset) * q.conj()).vec
+    # Interpolate step counts to Tango's sample rate.
+    step_data = np.concatenate([np.array([[ts[0] - 1, 0]]), step_data, np.array([[ts[-1] + 1, step_data[-1][1]]])],
+                               axis=0)
+    step_func = interpolate.interp1d(step_data[:, 0], step_data[:, 1])
+    step_interpolated = step_func(ts)
 
-    # insert one rwo at the beginning and ending
-    step_ts = np.concatenate([[ts[0]-1], step_data[:, 0], [ts[-1]+1]], axis=0)
-    pos_at_step = np.concatenate([[pos_at_step[0]], pos_at_step, [pos_at_step[-1]]], axis=0)
-    pos_inte = gen_dataset.interpolate_3dvector_linear(np.concatenate([step_ts[:, None], pos_at_step], axis=1), ts)
-    pos_inte = pos_inte[:, 1:]
-    pos_inte[:, 2] = 0.0
+    # Compute positions by dead-reckoning
+    step_length = step_stride * (step_interpolated[1:] - step_interpolated[:-1])
+    position_from_step = np.zeros(positions.shape)
+    position_from_step[0] = positions[0]
+    forward_dir = quaternion.quaternion(0., 0., 0., -1.)
+    for i in range(1, positions.shape[0]):
+        q = quaternion.quaternion(*orientations[i - 1])
+        segment = (q * forward_dir * q.conj()).vec * step_length[i - 1]
+        position_from_step[i] = position_from_step[i-1] + segment
+
+    # Find a 2D rotation transformation to align the start portion of estimated track and the ground truth track.
+    start_length = 2000
+    _, rotation_to_gt, _ = icp.fit_transformation(position_from_step[:start_length, :2], positions[:start_length, :2])
+    # Rotation in 2D plane and set Z to 0
+    for i in range(position_from_step.shape[0]):
+        position_from_step[i, :2] = np.dot(rotation_to_gt, position_from_step[i, :2])
+    position_from_step[:, -1] = 0
 
     print('Writing to csv')
     data_mat = np.zeros([ts.shape[0], 10], dtype=float)
     column_list = ['time', 'pos_x', 'pos_y', 'pos_z', 'speed_x', 'speed_y', 'speed_z', 'bias_x', 'bias_y', 'bias_z']
     data_mat[:, 0] = ts
-    data_mat[:, 1:4] = pos_inte
+    data_mat[:, 1:4] = position_from_step
 
+    out_dir = args.dir + '/result_step/'
+    if not os.path.isdir(out_dir):
+        os.makedirs(out_dir)
     data_pandas = pandas.DataFrame(data_mat, columns=column_list)
-    data_pandas.to_csv(args.dir + '/result_step.csv')
+    data_pandas.to_csv(out_dir + '/result_step.csv')
 
-    gen_dataset.write_ply_to_file(args.dir + '/result_trajectory_step.ply', pos_inte, orientations)
+    gen_dataset.write_ply_to_file(out_dir + '/result_trajectory_step.ply', position_from_step, orientations)
     print('All done')

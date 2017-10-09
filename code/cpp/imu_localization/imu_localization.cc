@@ -104,12 +104,9 @@ int IMUTrajectory::RegressSpeed(const int end_ind) {
     } else if (option_.reg_option == ORI) {
       double ang = std::atan2(ls_z, ls_x);
       local_speed_.emplace_back(option_.const_speed * std::cos(ang), 0, option_.const_speed * std::sin(ang));
-    } else if (Z_ONLY) {
+    } else { // Z_ONLY
       local_speed_.emplace_back(ls_x, 0, 0);
-    } else {
-      CHECK(true) << "Unrecognized regression type";
     }
-
   }
   last_constraint_ind_ = constraint_ind_.back();
 
