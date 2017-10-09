@@ -146,7 +146,6 @@ int main(int argc, char **argv) {
     }
 
   }
-
   trajectory.EndTrajectory();
   if (FLAGS_run_global) {
     printf("Running global optimization on the whole sequence...\n");

@@ -2,13 +2,13 @@
 // Created by yanhang on 3/5/17.
 //
 
+#include "imu_localization.h"
+
 #include <chrono>
 
-#include <utility/utility.h>
-#include <speed_regression/feature_target.h>
+#include "algorithm/geometry.h"
+#include "speed_regression/feature_target.h"
 
-#include "imu_localization.h"
-using namespace std;
 namespace IMUProject {
 
 using Functor600 = LocalSpeedFunctor<FunctorSize::kVar_600, FunctorSize::kCon_600>;

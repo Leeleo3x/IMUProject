@@ -14,11 +14,16 @@ if(OPENMP_FOUND)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_C_FLAGS}")
 endif()
-include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
+add_subdirectory(googletest)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR} googletest/include ${EIGEN_INCLUDE_DIR})
+
+set(PROJECT_ROOT ${CMAKE_CURRENT_SOURCE_DIR})
+add_subdirectory(algorithm)
 add_subdirectory(utility)
 add_subdirectory(imu_optimization)
 add_subdirectory(speed_regression)
 add_subdirectory(imu_localization)
-add_subdirectory(visualization)
 add_subdirectory(viewer)
+
+enable_testing()

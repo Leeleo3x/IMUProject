@@ -4,8 +4,6 @@
 
 #include "imu_optimization.h"
 
-using namespace std;
-
 namespace IMUProject {
 
 SparseGrid::SparseGrid(const double *time_stamp, const int N,

@@ -12,10 +12,10 @@
 
 #include <opencv2/opencv.hpp>
 
-#include <utility/data_io.h>
-#include <utility/utility.h>
-#include <speed_regression/feature_target.h>
-#include <speed_regression/model_wrapper.h>
+#include "algorithm/geometry.h"
+#include "utility/data_io.h"
+#include "speed_regression/feature_target.h"
+#include "speed_regression/model_wrapper.h"
 
 #include "imu_optimization.h"
 

@@ -1,0 +1,77 @@
+//
+// Created by yanhang on 10/9/17.
+//
+
+#ifndef ALGORITHM_GEOMETRY_H_
+#define ALGORITHM_GEOMETRY_H_
+
+#include <Eigen/Eigen>
+#include <glog/logging.h>
+
+namespace IMUProject {
+
+std::vector<Eigen::Vector3d> Rotate3DVector(const std::vector<Eigen::Vector3d> &input,
+                                            const std::vector<Eigen::Quaterniond> &orientation);
+
+std::vector<Eigen::Vector3d> Rotate3DVector(const std::vector<Eigen::Vector3d> &input,
+                                            const std::vector<Eigen::Matrix3d> &orientation);
+
+std::vector<Eigen::Vector3d> Integration(const std::vector<double> &ts,
+                                         const std::vector<Eigen::Vector3d> &input,
+                                         const Eigen::Vector3d &initial = Eigen::Vector3d(0, 0, 0));
+
+// This function estimates the rigid transformation from source to target. The source and target array should contain
+// the same number of points. A homogenous representation of the transformation will be returned. In addition,
+// the rotation and/or translation part of the transformation can be required separately.
+template<int DIM>
+void EstimateTransformation(const std::vector<Eigen::Matrix<double, DIM, 1>> &source,
+                            const std::vector<Eigen::Matrix<double, DIM, 1>> &target,
+                            Eigen::Matrix<double, DIM + 1, DIM + 1> *transformation_homo,
+                            Eigen::Matrix<double, DIM, DIM> *rotation = nullptr,
+                            Eigen::Matrix<double, DIM, 1> *translation = nullptr);
+
+
+//////////////////////////////////////
+// Implementation
+
+template<int DIM>
+void EstimateTransformation(const std::vector<Eigen::Matrix<double, DIM, 1>> &source,
+                            const std::vector<Eigen::Matrix<double, DIM, 1>> &target,
+                            Eigen::Matrix<double, DIM + 1, DIM + 1> *transformation_homo,
+                            Eigen::Matrix<double, DIM, DIM> *rotation,
+                            Eigen::Matrix<double, DIM, 1> *translation) {
+  CHECK_EQ(source.size(), target.size());
+  const auto kPoints = source.size();
+  Eigen::Matrix<double, DIM, 1> source_center =
+      std::accumulate(source.begin(), source.end(), Eigen::Matrix<double, DIM, 1>::Zero())
+          / static_cast<double>(kPoints);
+  Eigen::Matrix<double, DIM, 1> target_center =
+      std::accumulate(target.begin(), target.end(), Eigen::Matrix<double, DIM, 1>::Zero())
+          / static_cast<double>(kPoints);
+  Eigen::MatrixXd source_zeromean(kPoints, DIM);
+  Eigen::MatrixXd target_zeromean(kPoints, DIM);
+  for (int i=0; i<kPoints; ++i){
+    source_zeromean.block<1, DIM>(i, 0) = source[i] - source_center;
+    target_zeromean.block<1, DIM>(i, 0) = target[i] - target_center;
+  }
+
+  Eigen::Matrix<double, DIM, DIM> covariance = source_zeromean.transpose() * target_zeromean;
+  Eigen::JacobiSVD<Eigen::Matrix<double, DIM, DIM>> svd(covariance, Eigen::ComputeFullU|Eigen::ComputeFullV);
+  auto V = svd.matrixV();
+  auto U = svd.matrixU();
+  auto R = V * U.transpose();
+  auto t = target_center - R * source_center;
+  CHECK_NOTNULL(transformation_homo)->setIdentity();
+  transformation_homo->block<DIM, DIM>(0, 0) = R;
+  transformation_homo->block(DIM, 1>(0, DIM)) = t;
+  if (rotation != nullptr){
+    *rotation = R;
+  }
+  if (translation != nullptr){
+    *translation = t;
+  }
+}
+
+}  // namespace IMUProject
+
+#endif //ALGORITHM_GEOMETRY_H_
