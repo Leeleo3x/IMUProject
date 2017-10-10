@@ -11,6 +11,7 @@
 #include <Eigen/Eigen>
 #include <gflags/gflags.h>
 
+#include "algorithm/geometry.h"
 #include "utility/data_io.h"
 #include "utility/utility.h"
 #include "utility/stlplus3/file_system.hpp"
@@ -26,6 +27,13 @@ DEFINE_double(weight_ls, 1.0, "The weight parameter for the local speed. Larger 
 DEFINE_string(suffix, "full", "suffix");
 DEFINE_string(preset, "none", "preset mode");
 
+DEFINE_bool(estimate_global_transformation, false, "If the ground truth trajectory is provided and this term is set"
+    " to true, a global transformation will be estimated that aligns the start portion of the estimated trajectory "
+    "to the ground truth.");
+DEFINE_int32(start_portion_length, -1, "The length (in frames) of the start portion. These frames will be used to "
+    "estimate the global transformation from the estimated trajectory to the ground truth. Set to -1 to use the "
+    "entire trajectory");
+
 DEFINE_bool(run_global, true, "Run global optimization at the end");
 DEFINE_bool(tango_ori, false, "Use ground truth orientation");
 
@@ -39,7 +47,6 @@ int main(int argc, char **argv) {
 
   google::InitGoogleLogging(argv[0]);
   google::ParseCommandLineFlags(&argc, &argv, true);
-  FLAGS_logtostderr = true;
 
   char buffer[256] = {};
 
@@ -109,24 +116,12 @@ int main(int argc, char **argv) {
   constexpr int init_capacity = 20000;
   std::vector<Eigen::Vector3d> positions_opt;
   std::vector<Eigen::Quaterniond> orientations_opt;
-//    positions_opt.reserve(init_capacity);
-//    orientations_opt.reserve(init_capacity);
 
+  printf("Start adding records...\n");
   for (int i = 0; i < N; ++i) {
     trajectory.AddRecord(ts[i], gyro[i], linacce[i], gravity[i], orientation[i]);
-
     if (i > loc_option.local_opt_window) {
       if (i % loc_option.global_opt_interval == 0) {
-//                LOG(INFO) << "Running global optimzation at frame " << i;
-////                trajectory.RunOptimization(0, trajectory.GetNumFrames());
-//
-//                //block the execution is there are too many tasks in the background thread
-//                while(true) {
-//                    if(trajectory.CanAdd()){
-//                        break;
-//                    }
-//                }
-//                trajectory.ScheduleOptimization(0, trajectory.GetNumFrames());
       } else if (i % loc_option.local_opt_interval == 0) {
         LOG(INFO) << "Running local optimzation at frame " << i;
         while (true) {
@@ -135,7 +130,6 @@ int main(int argc, char **argv) {
           }
         }
         trajectory.ScheduleOptimization(i - loc_option.local_opt_window, loc_option.local_opt_window);
-//	            trajectory.RunOptimization(i  - option.local_opt_window_, option.local_opt_window_);
       }
     }
     if (FLAGS_log_interval > 0 && i > 0 && i % FLAGS_log_interval == 0) {
@@ -157,28 +151,49 @@ int main(int argc, char **argv) {
       (float) trajectory.GetNumFrames() / (((float) cv::getTickCount() - start_t) / (float) cv::getTickFrequency());
   printf("Overall framerate: %.3f\n", fps_all);
 
+  std::vector<Eigen::Vector3d> output_positions = trajectory.GetPositions();
+  if (FLAGS_estimate_global_transformation){
+    printf("Estimating global transformation...\n");
+    if (FLAGS_start_portion_length < 0){
+      FLAGS_start_portion_length = static_cast<int>(output_positions.size());
+    }
+    CHECK_GT(FLAGS_start_portion_length, 3) << "The start portion length must be larger than 3";
+    const std::vector<Eigen::Vector3d>& gt_positions = dataset.GetPosition();
+    std::vector<Eigen::Vector3d> source(output_positions.begin(),
+                                        output_positions.begin() + FLAGS_start_portion_length);
+    std::vector<Eigen::Vector3d> target(gt_positions.begin(), gt_positions.begin() + FLAGS_start_portion_length);
+    Eigen::Matrix4d global_transform;
+    Eigen::Matrix3d global_rotation;
+    Eigen::Vector3d global_translation;
+    IMUProject::EstimateTransformation<3>(source, target, &global_transform, &global_rotation, &global_translation);
+    for (int i=0; i<output_positions.size(); ++i){
+      output_positions[i] = global_rotation * output_positions[i] + global_translation;
+    }
+  }
+
+
   // Create output directory
   char result_dir_path[128];
   sprintf(result_dir_path, "%s/result_%s/", argv[1], FLAGS_suffix.c_str());
-  if (stlplus::file_exists(result_dir_path)){
+  if (stlplus::file_exists(result_dir_path)) {
     LOG(ERROR) << "Path " << result_dir_path << " is the name of an existing file.";
     return 1;
   }
 
-  if (!stlplus::folder_exists(result_dir_path)){
+  if (!stlplus::folder_exists(result_dir_path)) {
     LOG(INFO) << "Creating folder: " << result_dir_path;
     CHECK(stlplus::folder_create(result_dir_path)) << "Can not create folder " << result_dir_path << " for output.";
   }
 
   sprintf(buffer, "%s/result_trajectory_%s.ply", result_dir_path, FLAGS_suffix.c_str());
-  IMUProject::WriteToPly(std::string(buffer), dataset.GetTimeStamp().data(), trajectory.GetPositions().data(),
+  IMUProject::WriteToPly(std::string(buffer), dataset.GetTimeStamp().data(), output_positions.data(),
                          trajectory.GetOrientations().data(), trajectory.GetNumFrames(),
-                         true, traj_color, 0.8, 100, 300);
+                         false, traj_color, 0.8, 100, 300);
 
   sprintf(buffer, "%s/tango_trajectory.ply", result_dir_path);
   IMUProject::WriteToPly(std::string(buffer), dataset.GetTimeStamp().data(), dataset.GetPosition().data(),
                          dataset.GetOrientation().data(), (int) dataset.GetPosition().size(),
-                         true, Eigen::Vector3d(255, 0, 0), 0.8, 100, 300);
+                         false, Eigen::Vector3d(255, 0, 0), 0.8, 100, 300);
 
   {
     // Write trajectory with double integration
@@ -215,7 +230,7 @@ int main(int argc, char **argv) {
     CHECK(traj_out.is_open());
     traj_out << ",time,pos_x,pos_y,pos_z,speed_x,speed_y,speed_z,bias_x,bias_y,bias_z" << endl;
     for (auto i = 0; i < trajectory.GetNumFrames(); ++i) {
-      const Eigen::Vector3d &pos = trajectory.GetPositions()[i];
+      const Eigen::Vector3d &pos = output_positions[i];
       const Eigen::Vector3d &acce = trajectory.GetLinearAcceleration()[i];
       const Eigen::Vector3d &spd = trajectory.GetSpeed()[i];
       sprintf(buffer, "%d,%.9f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f\n",
@@ -224,7 +239,7 @@ int main(int argc, char **argv) {
       traj_out << buffer;
     }
 
-    sprintf(buffer, "%s/regression_%s.txt", argv[1], FLAGS_suffix.c_str());
+    sprintf(buffer, "%s/regression_%s.txt", result_dir_path, FLAGS_suffix.c_str());
     ofstream reg_out(buffer);
     const std::vector<int> &cids = trajectory.GetConstraintInd();
     const std::vector<Eigen::Vector3d> &lss = trajectory.GetLocalSpeed();
@@ -260,7 +275,7 @@ int main(int argc, char **argv) {
 
     const double pixel_length = scale_length / (sp2 - sp1).norm();
 
-    IMUProject::TrajectoryOverlay(pixel_length, start_pix, op2 - op1, trajectory.GetPositions(),
+    IMUProject::TrajectoryOverlay(pixel_length, start_pix, op2 - op1, output_positions,
                                   Eigen::Vector3d(255, 0, 0), map_img);
 
     IMUProject::TrajectoryOverlay(pixel_length, start_pix, op2 - op1, dataset.GetPosition(),

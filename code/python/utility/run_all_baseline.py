@@ -2,21 +2,50 @@ import sys
 import os
 import subprocess
 import argparse
+import warnings
 
 sys.path.append('/home/yanhang/Documents/research/IMUProject/code/python')
 sys.path.append('/Users/yanhang/Documents/research/IMUProject/code/python')
 
 parser = argparse.ArgumentParser()
+parser.add_argument('list', type=str)
 parser.add_argument('--recompute', action='store_true')
 args = parser.parse_args()
 
 exec_path = '../../cpp/cmake-build-relwithdebinfo/imu_localization/IMULocalization_cli'
 model_path = '../../../models/svr_cascade1004_c1e001'
-data_root1 = '../../../data2/'
-data_root2 = '../../../data/phab_body/'
-data_list1 = ['hang_handheld_normal2', 'hang_handheld_speed2', 'hang_handheld_side2', 'hang_leg_normal2', 'hang_leg_speed2', 'hang_leg_side2',
-              'hang_bag_normal2', 'hang_bag_speed2', 'hang_bag_side2', 'chen_handheld2', 'chen_body2', 'chen_bag2', 'yajie_handheld1', 'yajie_leg1',
-              'yajie_bag1', 'yajie_body1', 'huayi_handheld2', 'huayi_leg2']
-data_list2 = ['lopata2', 'library1', 'cse1', 'huayi_cse1', 'huayi_cse3']
+preset_list = ['full', 'const', 'mag_only', 'ori_only']
 
-preset_list = ['full', 'const']
+
+root_dir = os.path.dirname(args.list)
+data_list = []
+with open(args.list) as f:
+    for line in f.readlines():
+        if line[0] == '#':
+            continue
+        info = line.split(',')
+        if len(info) > 0:
+            data_list.append(info[0].strip('\n'))
+
+# Sanity check
+all_good = True
+for data in data_list:
+    data_path = root_dir + '/' + data
+    if not os.path.isdir(data_path):
+        print(data_path + 'does not exist')
+        all_good = False
+
+assert all_good, 'Some datasets do not exist. Please fix the data list.'
+
+for data in data_list:
+    data_path = root_dir + '/' + data
+    if not os.path.isdir(data_path):
+        warnings.warn(data_path + ' does not exist. Skip.')
+        continue
+    for preset in preset_list:
+        command = "%s %s --model_path %s --preset %s" % (exec_path, data_path, model_path, preset)
+        print(command)
+        subprocess.call(command, shell=True)
+    command = 'python3 ../speed_regression/step_counting.py %s' % data_path
+    print(command)
+    subprocess.call(command, shell=True)

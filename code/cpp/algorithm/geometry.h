@@ -42,12 +42,15 @@ void EstimateTransformation(const std::vector<Eigen::Matrix<double, DIM, 1>> &so
                             Eigen::Matrix<double, DIM, 1> *translation) {
   CHECK_EQ(source.size(), target.size());
   const auto kPoints = source.size();
-  Eigen::Matrix<double, DIM, 1> source_center =
-      std::accumulate(source.begin(), source.end(), Eigen::Matrix<double, DIM, 1>::Zero())
-          / static_cast<double>(kPoints);
-  Eigen::Matrix<double, DIM, 1> target_center =
-      std::accumulate(target.begin(), target.end(), Eigen::Matrix<double, DIM, 1>::Zero())
-          / static_cast<double>(kPoints);
+  Eigen::Matrix<double, DIM, 1> source_center = Eigen::Matrix<double, DIM, 1>::Zero();
+  Eigen::Matrix<double, DIM, 1> target_center = Eigen::Matrix<double, DIM, 1>::Zero();
+  for (int i=0; i<kPoints; ++i){
+    source_center += source[i];
+    target_center += target[i];
+  }
+  source_center /= static_cast<double>(kPoints);
+  target_center /= static_cast<double>(kPoints);
+
   Eigen::MatrixXd source_zeromean(kPoints, DIM);
   Eigen::MatrixXd target_zeromean(kPoints, DIM);
   for (int i=0; i<kPoints; ++i){
@@ -57,13 +60,13 @@ void EstimateTransformation(const std::vector<Eigen::Matrix<double, DIM, 1>> &so
 
   Eigen::Matrix<double, DIM, DIM> covariance = source_zeromean.transpose() * target_zeromean;
   Eigen::JacobiSVD<Eigen::Matrix<double, DIM, DIM>> svd(covariance, Eigen::ComputeFullU|Eigen::ComputeFullV);
-  auto V = svd.matrixV();
-  auto U = svd.matrixU();
-  auto R = V * U.transpose();
-  auto t = target_center - R * source_center;
+  Eigen::Matrix<double, DIM, DIM> V = svd.matrixV();
+  Eigen::Matrix<double, DIM, DIM> U = svd.matrixU();
+  Eigen::Matrix<double, DIM, DIM> R = V * U.transpose();
+  Eigen::Matrix<double, DIM, 1> t = target_center - R * source_center;
   CHECK_NOTNULL(transformation_homo)->setIdentity();
-  transformation_homo->block<DIM, DIM>(0, 0) = R;
-  transformation_homo->block(DIM, 1>(0, DIM)) = t;
+  transformation_homo->block(0, 0, DIM, DIM) = R;
+  transformation_homo->block(0, DIM, DIM, 1) = t;
   if (rotation != nullptr){
     *rotation = R;
   }
