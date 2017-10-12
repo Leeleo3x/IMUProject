@@ -16,7 +16,7 @@
 #include "utility/utility.h"
 #include "utility/stlplus3/file_system.hpp"
 
-DEFINE_string(model_path, "../../../../models/svr_cascade1004_c1e001", "Path to model");
+DEFINE_string(model_path, "../../../../models/svr_cascade1011", "Path to model");
 DEFINE_string(mapinfo_path, "default", "path to map info");
 DEFINE_int32(log_interval, 1000, "logging interval");
 DEFINE_string(color, "blue", "color");

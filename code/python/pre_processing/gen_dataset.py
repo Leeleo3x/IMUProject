@@ -101,6 +101,9 @@ if __name__ == '__main__':
             print('------------------\nProcessing ' + data_root, ', type: ' + motion_type)
             # drop the head and tail
             pose_data = np.genfromtxt(data_root+'/pose.txt')[args.skip:-args.skip, :]
+            output_timestamp = pose_data[:, 0]
+            print('Pose sample rate: {:2f}Hz'.format((output_timestamp.shape[0] - 1.0) * nano_to_sec /
+                                                     (output_timestamp[-1] - output_timestamp[0])))
             # swap tango's orientation from [x,y,z,w] to [w,x,y,z]
             pose_data[:, [-4, -3, -2, -1]] = pose_data[:, [-1, -4, -3, -2]]
             # For some reason there might be a few duplicated records...
@@ -137,7 +140,7 @@ if __name__ == '__main__':
                 os.makedirs(output_folder)
 
             # Generate dataset
-            output_timestamp = pose_data[:, 0]
+
             # output_gyro_linear = interpolateAngularRateLinear(gyro_data, output_timestamp)
             output_gyro_linear = interpolate_3dvector_linear(gyro_data[:, 1:], gyro_data[:, 0], output_timestamp)
             output_accelerometer_linear = interpolate_3dvector_linear(acce_data[:, 1:], acce_data[:, 0],

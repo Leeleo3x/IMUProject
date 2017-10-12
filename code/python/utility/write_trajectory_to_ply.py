@@ -67,21 +67,21 @@ if __name__ == '__main__':
     import pandas
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('dir', type=str)
+    parser.add_argument('pose_file', type=str)
     parser.add_argument('output', type=str)
 
     args = parser.parse_args()
 
-    data_all = pandas.read_csv(args.dir + '/processed/data.csv')
-    orientation = data_all[['ori_w', 'ori_x', 'ori_y', 'ori_z']].values
-    linacce = data_all[['linacce_x', 'linacce_y', 'linacce_z']].values
-    gravity = data_all[['grav_x', 'grav_y', 'grav_z']].values
-    position = data_all[['pos_x', 'pos_y', 'pos_z']].values
-    gravity *= -1
+    nano_to_sec = 1e09
+    pose_data = np.genfromtxt(args.pose_file)
+    assert pose_data.shape[1] == 8
+    ts = pose_data[:, 0]
+    print('Pose sample rate: {:2f}Hz'.format((ts.shape[0] - 1.0) * nano_to_sec / (ts[-1] - ts[0])))
+    orientation = pose_data[:, [-1, -4, -3, -2]]
+    position = pose_data[:, [1, 2, 3]]
 
-    print(linacce[0:500:20])
-    print(np.linalg.norm(linacce[0:500:20], axis=1))
-
+    position[:, [0, 1, 2]] = position[:, [0, 2, 1]]
+    position[:, 1] *= -1
     print('Writing ply file')
-    write_ply_to_file(path=args.output, position=position, orientation=orientation, acceleration=linacce, interval=20)
+    write_ply_to_file(path=args.output, position=position, orientation=orientation)
     print('File writing to ' + args.output)
