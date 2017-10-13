@@ -1,13 +1,14 @@
-import math
 import os
+import sys
 import numpy as np
 import pandas
 import quaternion
 import cv2
-import pre_processing.gen_dataset as gen_dataset
-from utility.write_trajectory_to_ply import write_ply_to_file
 from scipy.ndimage.filters import gaussian_filter1d
 from scipy.interpolate import interp1d
+
+import pre_processing.gen_dataset as gen_dataset
+from utility.write_trajectory_to_ply import write_ply_to_file
 
 nano_to_sec = 1e09
 
@@ -49,34 +50,31 @@ if __name__ == '__main__':
     import matplotlib.pyplot as plt
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('dir', type=str, default=None)
+    parser.add_argument('source', type=str)
+    parser.add_argument('target', type=str)
     parser.add_argument('--margin', type=int, default=100)
     parser.add_argument('--no_trajectory', action='store_true')
-    parser.add_argument('--device', type=str, default='iphone')
-    parser.add_argument('--sync', type=bool, default=True)
+    parser.add_argument('--device', type=str, default='pixel')
+    parser.add_argument('--sync', action='store_true')
     args = parser.parse_args()
-
-    device_dir = args.dir + '/' + args.device
 
     # read raw data from two devices
     print('Reading')
-    gyro_device = np.genfromtxt(device_dir + '/gyro.txt')[args.margin:-args.margin]
-    gyro_tango = np.genfromtxt(args.dir + '/phab/gyro.txt')[args.margin:-args.margin]
-    acce_tango = np.genfromtxt(args.dir + '/phab/acce.txt')[args.margin:-args.margin]
+    gyro_source = np.genfromtxt(args.source + '/gyro.txt')[args.margin:-args.margin]
+    gyro_target = np.genfromtxt(args.target + '/phab/gyro.txt')[args.margin:-args.margin]
+    acce_target = np.genfromtxt(args.target + '/phab/acce.txt')[args.margin:-args.margin]
 
     print('---------------\nUsing gyroscope')
-    sync_source = np.copy(gyro_device)
-    # sync_source[:, 1:] -= np.average(sync_source[:, 1:], axis=0)
-    sync_target = np.copy(gyro_tango)
-    # sync_target[:, 1:] -= np.average(sync_target[:, 1:], axis=0)
+    sync_source = np.copy(gyro_source)
+    sync_target = np.copy(gyro_target)
 
     time_offset = compute_time_offset(sync_source, sync_target)
 
     print('Time offset between two devices: ', time_offset)
-    print('original: {}, corrected: {}, target: {}'.format(gyro_device[0, 0], gyro_device[0, 0] + time_offset,
-                                                           gyro_tango[0, 0]))
+    print('original: {}, corrected: {}, target: {}'.format(gyro_source[0, 0], gyro_source[0, 0] + time_offset,
+                                                           gyro_target[0, 0]))
     print('Time difference between two device: {:.2f}s'.format(
-        (gyro_tango[0, 0] - gyro_device[0, 0] - time_offset) / nano_to_sec))
+        (gyro_target[0, 0] - gyro_source[0, 0] - time_offset) / nano_to_sec))
 
     sync_source[:, 0] = (sync_source[:, 0] + time_offset - sync_target[0, 0]) / nano_to_sec
     sync_target[:, 0] = (sync_target[:, 0] - sync_target[0, 0]) / nano_to_sec
@@ -92,82 +90,68 @@ if __name__ == '__main__':
     else:
         # Interpolation
         sample_rate = lambda x: x.shape[0] / (x[-1, 0] - x[0, 0]) * nano_to_sec
-        print('Gyroscope: {:.2f}Hz'.format(sample_rate(gyro_device)))
-        acce_device = np.genfromtxt(device_dir + '/acce.txt')[args.margin:-args.margin]
-        print('Accelerometer: {:.2f}Hz'.format(sample_rate(acce_device)))
-        linacce_device = np.genfromtxt(device_dir + '/linacce.txt')[args.margin:-args.margin]
-        print('Linear acceleration: {:.2f}Hz'.format(sample_rate(linacce_device)))
-        gravity_device = np.genfromtxt(device_dir + '/gravity.txt')[args.margin:-args.margin]
-        print('Gravity: {:.2f}Hz'.format(sample_rate(gravity_device)))
-        magnet_device = np.genfromtxt(device_dir + '/magnet.txt')[args.margin:-args.margin]
-        print('Magnetometer: {:.2f}Hz'.format(sample_rate(magnet_device)))
-        rv_device = np.genfromtxt(device_dir + '/orientation.txt')[args.margin:-args.margin]
-        print('Rotation vector: {:.2f}Hz'.format(sample_rate(rv_device)))
+        print('Gyroscope: {:.2f}Hz'.format(sample_rate(gyro_source)))
+        acce_source = np.genfromtxt(args.source + '/acce.txt')[args.margin:-args.margin]
+        print('Accelerometer: {:.2f}Hz'.format(sample_rate(acce_source)))
+        linacce_source = np.genfromtxt(args.source + '/linacce.txt')[args.margin:-args.margin]
+        print('Linear acceleration: {:.2f}Hz'.format(sample_rate(linacce_source)))
+        gravity_source = np.genfromtxt(args.source + '/gravity.txt')[args.margin:-args.margin]
+        print('Gravity: {:.2f}Hz'.format(sample_rate(gravity_source)))
+        magnet_source = np.genfromtxt(args.source + '/magnet.txt')[args.margin:-args.margin]
+        print('Magnetometer: {:.2f}Hz'.format(sample_rate(magnet_source)))
+        rv_source = np.genfromtxt(args.source + '/orientation.txt')[args.margin:-args.margin]
+        print('Rotation vector: {:.2f}Hz'.format(sample_rate(rv_source)))
 
-        pose_data = np.genfromtxt(args.dir + '/phab/pose.txt')[args.margin:-args.margin]
+        pose_data = np.genfromtxt(args.target + '/pose.txt')[args.margin:-args.margin]
         # reorder the quaternion representation
         pose_data[:, [-4, -3, -2, -1]] = pose_data[:, [-1, -4, -3, -2]]
 
-        gyro_device[:, 0] += time_offset
-        acce_device[:, 0] += time_offset
-        linacce_device[:, 0] += time_offset
-        gravity_device[:, 0] += time_offset
-        magnet_device[:, 0] += time_offset
-        rv_device[:, 0] += time_offset
-
-        # save synchronized raw data
-        gen_dataset.write_file(device_dir + '/gyro_sync.txt', gyro_device)
-        gen_dataset.write_file(device_dir + '/acce_sync.txt', acce_device)
-        gen_dataset.write_file(device_dir + '/linacce_sync.txt', linacce_device)
-        gen_dataset.write_file(device_dir + '/magnet_sync.txt', magnet_device)
-        gen_dataset.write_file(device_dir + '/orientation_sync.txt', rv_device)
-
-        # plt.figure('Accelerometer')
-        # for i in range(3):
-        #     plt.subplot(311 + i)
-        #     plt.plot((acce_device[:, 0]) / nano_to_sec, acce_device[:, i+1])
-        #     plt.plot((acce_tango[:, 0]) / nano_to_sec, acce_tango[:, i+1])
-        #     plt.legend([args.device, 'Tango'])
-        #
-        # plt.show()
+        gyro_source[:, 0] += time_offset
+        acce_source[:, 0] += time_offset
+        linacce_source[:, 0] += time_offset
+        gravity_source[:, 0] += time_offset
+        magnet_source[:, 0] += time_offset
+        rv_source[:, 0] += time_offset
 
         pose_truncate_ind = pose_data.shape[0] - 1
-        min_timestamp = min([gyro_device[-1, 0], acce_device[-1, 0], linacce_device[-1, 0],
-                             gravity_device[-1, 0], magnet_device[-1, 0], rv_device[-1, 0]])
+        min_timestamp = min([gyro_source[-1, 0], acce_source[-1, 0], linacce_source[-1, 0],
+                             gravity_source[-1, 0], magnet_source[-1, 0], rv_source[-1, 0]])
         while pose_data[pose_truncate_ind, 0] >= min_timestamp:
             pose_truncate_ind -= 1
         pose_data = pose_data[:pose_truncate_ind + 1]
 
         output_timestamp = pose_data[:, 0]
-        output_gyro = gen_dataset.interpolate_3dvector_linear(gyro_device, output_timestamp)
-        output_acce = gen_dataset.interpolate_3dvector_linear(acce_device, output_timestamp)
-        output_linacce = gen_dataset.interpolate_3dvector_linear(linacce_device, output_timestamp)
-        output_gravity = gen_dataset.interpolate_3dvector_linear(gravity_device, output_timestamp)
-
-        output_rv = gen_dataset.interpolate_quaternion_linear(rv_device, output_timestamp)
+        output_gyro = gen_dataset.interpolate_3dvector_linear(gyro_source[:, 1:], gyro_source[:, 0], output_timestamp)
+        output_acce = gen_dataset.interpolate_3dvector_linear(acce_source[:, 1:], acce_source[:, 0], output_timestamp)
+        output_linacce = gen_dataset.interpolate_3dvector_linear(linacce_source[:, 1:], linacce_source[:, 0],
+                                                                 output_timestamp)
+        output_gravity = gen_dataset.interpolate_3dvector_linear(gravity_source[:, 1:], gravity_source[:, 0],
+                                                                 output_timestamp)
+        output_magnet = gen_dataset.interpolate_3dvector_linear(magnet_source[:, 1:], magnet_source[:, 0],
+                                                                output_timestamp)
+        output_rv = gen_dataset.interpolate_quaternion_linear(rv_source[:, 1:], rv_source[:, 0], output_timestamp)
 
         column_list = 'time,gyro_x,gyro_y,gyro_z,acce_x'.split(',') + \
                       'acce_y,acce_z,linacce_x,linacce_y,linacce_z,grav_x,grav_y,grav_z'.split(',') + \
+                      'magnet_x,magnet_y,magnet_z'.split(',') + \
                       'pos_x,pos_y,pos_z,ori_w,ori_x,ori_y,ori_z,rv_w,rv_x,rv_y,rv_z'.split(',')
-        data_mat = np.concatenate([output_timestamp[:, None],
-                                   output_gyro[:, 1:], output_acce[:, 1:], output_linacce[:, 1:],
-                                   output_gravity[:, 1:], pose_data[:, -7:-4], pose_data[:, -4:],
-                                   output_rv[:, 1:]], axis=1)
+        data_mat = np.concatenate([output_timestamp[:, None], output_gyro, output_acce, output_linacce,
+                                   output_gravity, output_magnet, pose_data[:, -7:-4], pose_data[:, -4:],
+                                   output_rv], axis=1)
         output_data = pandas.DataFrame(data=data_mat, columns=column_list, dtype=float)
         print('Writing csv...')
-        output_dir = args.dir + '/processed'
+        output_dir = args.source + '/processed'
         os.makedirs(output_dir, exist_ok=True)
 
         output_data.to_csv(output_dir + '/data.csv')
 
-         # write data in plain text file for C++
+        # write data in plain text file for C++
         with open(output_dir + '/data_plain.txt', 'w') as f:
             f.write('{} {}\n'.format(data_mat.shape[0], data_mat.shape[1]))
             for i in range(data_mat.shape[0]):
                 for j in range(data_mat.shape[1]):
                     f.write('{}\t'.format(data_mat[i][j]))
                 f.write('\n')
-
 
         if not args.no_trajectory:
             import quaternion
