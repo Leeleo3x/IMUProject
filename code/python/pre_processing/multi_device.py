@@ -7,6 +7,9 @@ import cv2
 from scipy.ndimage.filters import gaussian_filter1d
 from scipy.interpolate import interp1d
 
+sys.path.append('/Users/yanhang/Documents/research/IMUProject/code/python')
+sys.path.append('/home/yanhang/Documents/research/IMUProject/code/python')
+
 import pre_processing.gen_dataset as gen_dataset
 from utility.write_trajectory_to_ply import write_ply_to_file
 
@@ -22,22 +25,9 @@ def compute_time_offset(source, target, search_range=200):
     :return: synchonized timestamp
     """
     assert source.shape[1] == target.shape[1]
-    best_score = np.inf
-    best_offset = 0
-    # for offset in range(0, search_range):
-    #     length = min(source.shape[0] - offset, target.shape[0])
-    #     diff = np.sum(np.fabs(source[offset:offset+length, 1:] - target[:length, 1:])) / float(length)
-    #     if diff < best_score:
-    #         best_score = diff
-    #         best_offset = -offset
-    #     length = min(target.shape[0] - offset, source.shape[0])
-    #     diff = np.sum(np.fabs((source[:length, 1:] - target[offset:offset+length, 1:]))) / float(length)
-    #     if diff < best_score:
-    #         best_score = diff
-    #         best_offset = offset
-    best_offset = -134
+    best_offset = 641
     time_offset = 0
-    if best_offset > 0:
+    if best_offset >= 0:
         time_offset = target[best_offset, 0] - source[0, 0]
     elif best_offset < 0:
         time_offset = target[0, 0] - source[-best_offset, 0]
@@ -61,12 +51,15 @@ if __name__ == '__main__':
     # read raw data from two devices
     print('Reading')
     gyro_source = np.genfromtxt(args.source + '/gyro.txt')[args.margin:-args.margin]
-    gyro_target = np.genfromtxt(args.target + '/phab/gyro.txt')[args.margin:-args.margin]
-    acce_target = np.genfromtxt(args.target + '/phab/acce.txt')[args.margin:-args.margin]
+    gyro_target = np.genfromtxt(args.target + '/gyro.txt')[args.margin:-args.margin]
+    acce_target = np.genfromtxt(args.target + '/acce.txt')[args.margin:-args.margin]
 
     print('---------------\nUsing gyroscope')
+    filter_sigma = 10.0
     sync_source = np.copy(gyro_source)
     sync_target = np.copy(gyro_target)
+    sync_source = gaussian_filter1d(sync_source, sigma=10.0, axis=0)
+    sync_target = gaussian_filter1d(sync_target, sigma=10.0, axis=0)
 
     time_offset = compute_time_offset(sync_source, sync_target)
 
@@ -91,18 +84,18 @@ if __name__ == '__main__':
         # Interpolation
         sample_rate = lambda x: x.shape[0] / (x[-1, 0] - x[0, 0]) * nano_to_sec
         print('Gyroscope: {:.2f}Hz'.format(sample_rate(gyro_source)))
-        acce_source = np.genfromtxt(args.source + '/acce.txt')[args.margin:-args.margin]
+        acce_source = np.genfromtxt(args.source + '/acce.txt')
         print('Accelerometer: {:.2f}Hz'.format(sample_rate(acce_source)))
-        linacce_source = np.genfromtxt(args.source + '/linacce.txt')[args.margin:-args.margin]
+        linacce_source = np.genfromtxt(args.source + '/linacce.txt')
         print('Linear acceleration: {:.2f}Hz'.format(sample_rate(linacce_source)))
-        gravity_source = np.genfromtxt(args.source + '/gravity.txt')[args.margin:-args.margin]
+        gravity_source = np.genfromtxt(args.source + '/gravity.txt')
         print('Gravity: {:.2f}Hz'.format(sample_rate(gravity_source)))
-        magnet_source = np.genfromtxt(args.source + '/magnet.txt')[args.margin:-args.margin]
+        magnet_source = np.genfromtxt(args.source + '/magnet.txt')
         print('Magnetometer: {:.2f}Hz'.format(sample_rate(magnet_source)))
-        rv_source = np.genfromtxt(args.source + '/orientation.txt')[args.margin:-args.margin]
+        rv_source = np.genfromtxt(args.source + '/orientation.txt')
         print('Rotation vector: {:.2f}Hz'.format(sample_rate(rv_source)))
 
-        pose_data = np.genfromtxt(args.target + '/pose.txt')[args.margin:-args.margin]
+        pose_data = np.genfromtxt(args.target + '/pose.txt')
         # reorder the quaternion representation
         pose_data[:, [-4, -3, -2, -1]] = pose_data[:, [-1, -4, -3, -2]]
 
@@ -113,12 +106,17 @@ if __name__ == '__main__':
         magnet_source[:, 0] += time_offset
         rv_source[:, 0] += time_offset
 
-        pose_truncate_ind = pose_data.shape[0] - 1
-        min_timestamp = min([gyro_source[-1, 0], acce_source[-1, 0], linacce_source[-1, 0],
+        min_pose_ind, max_pose_ind = 0, pose_data.shape[0] - 1
+        max_timestamp = min([gyro_source[-1, 0], acce_source[-1, 0], linacce_source[-1, 0],
                              gravity_source[-1, 0], magnet_source[-1, 0], rv_source[-1, 0]])
-        while pose_data[pose_truncate_ind, 0] >= min_timestamp:
-            pose_truncate_ind -= 1
-        pose_data = pose_data[:pose_truncate_ind + 1]
+        min_timestamp = max([gyro_source[0, 0], acce_source[0, 0], linacce_source[0, 0],
+                             gravity_source[0, 0], magnet_source[0, 0], rv_source[0, 0]])
+        while pose_data[min_pose_ind, 0] <= min_timestamp:
+            min_pose_ind += 1
+        while pose_data[max_pose_ind, 0] >= max_timestamp:
+            max_pose_ind -= 1
+
+        pose_data = pose_data[min_pose_ind + 1:max_pose_ind-1, :]
 
         output_timestamp = pose_data[:, 0]
         output_gyro = gen_dataset.interpolate_3dvector_linear(gyro_source[:, 1:], gyro_source[:, 0], output_timestamp)
@@ -136,7 +134,7 @@ if __name__ == '__main__':
                       'magnet_x,magnet_y,magnet_z'.split(',') + \
                       'pos_x,pos_y,pos_z,ori_w,ori_x,ori_y,ori_z,rv_w,rv_x,rv_y,rv_z'.split(',')
         data_mat = np.concatenate([output_timestamp[:, None], output_gyro, output_acce, output_linacce,
-                                   output_gravity, output_magnet, pose_data[:, -7:-4], pose_data[:, -4:],
+                                   output_gravity, output_magnet, pose_data[:, 1:4], pose_data[:, -4:],
                                    output_rv], axis=1)
         output_data = pandas.DataFrame(data=data_mat, columns=column_list, dtype=float)
         print('Writing csv...')

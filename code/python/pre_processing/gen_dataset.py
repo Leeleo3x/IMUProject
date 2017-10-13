@@ -101,9 +101,7 @@ if __name__ == '__main__':
             print('------------------\nProcessing ' + data_root, ', type: ' + motion_type)
             # drop the head and tail
             pose_data = np.genfromtxt(data_root+'/pose.txt')[args.skip:-args.skip, :]
-            output_timestamp = pose_data[:, 0]
-            print('Pose sample rate: {:2f}Hz'.format((output_timestamp.shape[0] - 1.0) * nano_to_sec /
-                                                     (output_timestamp[-1] - output_timestamp[0])))
+
             # swap tango's orientation from [x,y,z,w] to [w,x,y,z]
             pose_data[:, [-4, -3, -2, -1]] = pose_data[:, [-1, -4, -3, -2]]
             # For some reason there might be a few duplicated records...
@@ -112,6 +110,9 @@ if __name__ == '__main__':
                 unique_ts, unique_inds = np.unique(pose_data[:, 0], return_index=True)
                 print('Portion of unique records: ', unique_inds.shape[0] / pose_data.shape[0])
                 pose_data = pose_data[unique_inds, :]
+            output_timestamp = pose_data[:, 0]
+            print('Pose sample rate: {:2f}Hz'.format((output_timestamp.shape[0] - 1.0) * nano_to_sec /
+                                                     (output_timestamp[-1] - output_timestamp[0])))
 
             acce_data = np.genfromtxt(data_root+'/acce.txt')
             print('Acceleration found. Sample rate:{:2f} Hz'
@@ -169,7 +170,6 @@ if __name__ == '__main__':
                           'acce_y,acce_z,linacce_x,linacce_y,linacce_z,grav_x,grav_y,grav_z'.split(',') + \
                           'magnet_x,magnet_y,magnet_z'.split(',') + \
                           'pos_x,pos_y,pos_z,ori_w,ori_x,ori_y,ori_z,rv_w,rv_x,rv_y,rv_z'.split(',')
-
             data_mat = np.concatenate([output_timestamp[:, None], output_gyro_linear,
                                        output_accelerometer_linear,
                                        output_linacce_linear,
