@@ -39,7 +39,11 @@ if __name__ == '__main__':
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
+    nano_to_sec = 1e09
     output_timestamp = rv_input[:, 0]
+    output_samplerate = output_timestamp.shape[0] * nano_to_sec / (output_timestamp[-1] - output_timestamp[0])
+    assert 195 < output_samplerate < 205, 'Wrong output sample rate: %f' % output_samplerate
+
     print('Processing gyro...')
     gyro_output = gen_dataset.interpolate_3dvector_linear(gyro_input[:, 1:], gyro_input[:, 0], output_timestamp)
     print('Processing accelerometer...')

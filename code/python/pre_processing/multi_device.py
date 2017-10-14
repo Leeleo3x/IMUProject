@@ -25,12 +25,12 @@ def compute_time_offset(source, target, search_range=200):
     :return: synchonized timestamp
     """
     assert source.shape[1] == target.shape[1]
-    best_offset = 641
+    best_offset = 688
     time_offset = 0
     if best_offset >= 0:
         time_offset = target[best_offset, 0] - source[0, 0]
     elif best_offset < 0:
-        time_offset = target[0, 0] - source[-best_offset, 0]
+        time_offset = target[0, 0] - source[best_offset, 0]
     print('Best offset: {}, time_offset: {}'.format(best_offset, time_offset / nano_to_sec))
     return time_offset
 
@@ -42,17 +42,17 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('source', type=str)
     parser.add_argument('target', type=str)
-    parser.add_argument('--margin', type=int, default=100)
-    parser.add_argument('--no_trajectory', action='store_true')
+    parser.add_argument('--skip', type=int, default=800)
     parser.add_argument('--device', type=str, default='pixel')
     parser.add_argument('--sync', action='store_true')
+    parser.add_argument('--no_remove_duplicate', action='store_true')
     args = parser.parse_args()
 
     # read raw data from two devices
     print('Reading')
-    gyro_source = np.genfromtxt(args.source + '/gyro.txt')[args.margin:-args.margin]
-    gyro_target = np.genfromtxt(args.target + '/gyro.txt')[args.margin:-args.margin]
-    acce_target = np.genfromtxt(args.target + '/acce.txt')[args.margin:-args.margin]
+    gyro_source = np.genfromtxt(args.source + '/gyro.txt')
+    gyro_target = np.genfromtxt(args.target + '/gyro.txt')
+    acce_target = np.genfromtxt(args.target + '/acce.txt')
 
     print('---------------\nUsing gyroscope')
     filter_sigma = 10.0
@@ -69,8 +69,8 @@ if __name__ == '__main__':
     print('Time difference between two device: {:.2f}s'.format(
         (gyro_target[0, 0] - gyro_source[0, 0] - time_offset) / nano_to_sec))
 
-    sync_source[:, 0] = (sync_source[:, 0] + time_offset - sync_target[0, 0]) / nano_to_sec
-    sync_target[:, 0] = (sync_target[:, 0] - sync_target[0, 0]) / nano_to_sec
+    sync_source[:, 0] = (sync_source[:, 0] + time_offset) / nano_to_sec
+    sync_target[:, 0] = (sync_target[:, 0]) / nano_to_sec
 
     if args.sync:
         plt.figure('Gyroscope')
@@ -81,7 +81,7 @@ if __name__ == '__main__':
             plt.legend(['Tango', args.device])
         plt.show()
     else:
-        # Interpolation
+        # Interpolation the signal based on the timestamp of rotation vector
         sample_rate = lambda x: x.shape[0] / (x[-1, 0] - x[0, 0]) * nano_to_sec
         print('Gyroscope: {:.2f}Hz'.format(sample_rate(gyro_source)))
         acce_source = np.genfromtxt(args.source + '/acce.txt')
@@ -95,30 +95,35 @@ if __name__ == '__main__':
         rv_source = np.genfromtxt(args.source + '/orientation.txt')
         print('Rotation vector: {:.2f}Hz'.format(sample_rate(rv_source)))
 
-        pose_data = np.genfromtxt(args.target + '/pose.txt')
-        # reorder the quaternion representation
-        pose_data[:, [-4, -3, -2, -1]] = pose_data[:, [-1, -4, -3, -2]]
-
         gyro_source[:, 0] += time_offset
         acce_source[:, 0] += time_offset
         linacce_source[:, 0] += time_offset
         gravity_source[:, 0] += time_offset
         magnet_source[:, 0] += time_offset
         rv_source[:, 0] += time_offset
+        rv_source[:, [1, 2, 3, 4]] = rv_source[:, [4, 1, 2, 3]]
 
-        min_pose_ind, max_pose_ind = 0, pose_data.shape[0] - 1
+        # Interpolate to the reference pose timestamp
+        pose_ref = np.genfromtxt(args.target + '/pose.txt')
+        min_pose_ind, max_pose_ind = 0, pose_ref.shape[0] - 1
         max_timestamp = min([gyro_source[-1, 0], acce_source[-1, 0], linacce_source[-1, 0],
                              gravity_source[-1, 0], magnet_source[-1, 0], rv_source[-1, 0]])
         min_timestamp = max([gyro_source[0, 0], acce_source[0, 0], linacce_source[0, 0],
                              gravity_source[0, 0], magnet_source[0, 0], rv_source[0, 0]])
-        while pose_data[min_pose_ind, 0] <= min_timestamp:
+        while pose_ref[min_pose_ind, 0] <= min_timestamp:
             min_pose_ind += 1
-        while pose_data[max_pose_ind, 0] >= max_timestamp:
+        while pose_ref[max_pose_ind, 0] >= max_timestamp:
             max_pose_ind -= 1
+        pose_ref = pose_ref[min_pose_ind:max_pose_ind, :]
 
-        pose_data = pose_data[min_pose_ind + 1:max_pose_ind-1, :]
+        if not args.no_remove_duplicate:
+            unique_ts, unique_inds = np.unique(pose_ref[:, 0], return_index=True)
+            print('Portion of unique records: ', unique_inds.shape[0] / pose_ref.shape[0])
+            pose_ref = pose_ref[unique_inds, :]
+        output_timestamp = pose_ref[:, 0]
+        output_samplerate = output_timestamp.shape[0] * nano_to_sec / (output_timestamp[-1] - output_timestamp[0])
+        assert 195 < output_samplerate < 205, 'Wrong output sample rate: %f' % output_samplerate
 
-        output_timestamp = pose_data[:, 0]
         output_gyro = gen_dataset.interpolate_3dvector_linear(gyro_source[:, 1:], gyro_source[:, 0], output_timestamp)
         output_acce = gen_dataset.interpolate_3dvector_linear(acce_source[:, 1:], acce_source[:, 0], output_timestamp)
         output_linacce = gen_dataset.interpolate_3dvector_linear(linacce_source[:, 1:], linacce_source[:, 0],
@@ -129,12 +134,16 @@ if __name__ == '__main__':
                                                                 output_timestamp)
         output_rv = gen_dataset.interpolate_quaternion_linear(rv_source[:, 1:], rv_source[:, 0], output_timestamp)
 
+        # fake position and orientation data
+        fake_position = np.zeros([output_timestamp.shape[0], 3])
+        fake_orientation = output_rv
+
         column_list = 'time,gyro_x,gyro_y,gyro_z,acce_x'.split(',') + \
                       'acce_y,acce_z,linacce_x,linacce_y,linacce_z,grav_x,grav_y,grav_z'.split(',') + \
                       'magnet_x,magnet_y,magnet_z'.split(',') + \
                       'pos_x,pos_y,pos_z,ori_w,ori_x,ori_y,ori_z,rv_w,rv_x,rv_y,rv_z'.split(',')
         data_mat = np.concatenate([output_timestamp[:, None], output_gyro, output_acce, output_linacce,
-                                   output_gravity, output_magnet, pose_data[:, 1:4], pose_data[:, -4:],
+                                   output_gravity, output_magnet, fake_position, fake_orientation,
                                    output_rv], axis=1)
         output_data = pandas.DataFrame(data=data_mat, columns=column_list, dtype=float)
         print('Writing csv...')
@@ -150,20 +159,3 @@ if __name__ == '__main__':
                 for j in range(data_mat.shape[1]):
                     f.write('{}\t'.format(data_mat[i][j]))
                 f.write('\n')
-
-        if not args.no_trajectory:
-            import quaternion
-            print('Writing ply...')
-            write_ply_to_file(output_dir + '/trajectory.ply', position=pose_data[:, -7:-4],
-                              orientation=pose_data[:, -4:])
-
-            # q_device_tango = quaternion.quaternion(1.0 / math.sqrt(2.0), 1.0 / math.sqrt(2.0), 0., 0.)
-            q_device_tango = quaternion.quaternion(*pose_data[0, -4:])
-            # q_device_tango = quaternion.quaternion(1., 0., 0., 0.)
-            q_rv_tango = q_device_tango * quaternion.quaternion(*output_rv[0, 1:]).inverse()
-            orientation_tango_frame = np.empty([output_rv.shape[0], 4], dtype=float)
-            for i in range(orientation_tango_frame.shape[0]):
-                orientation_tango_frame[i] = quaternion.as_float_array(q_rv_tango *
-                                                                       quaternion.quaternion(*output_rv[i, 1:]))
-            write_ply_to_file(output_dir + '/trajectory_rv.ply', position=pose_data[:, -7:-4],
-                              orientation=orientation_tango_frame)

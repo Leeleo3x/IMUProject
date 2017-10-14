@@ -67,7 +67,7 @@ def interpolate_3dvector_linear(input, input_timestamp, output_timestamp):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('list')
-    parser.add_argument('--skip', default=600)
+    parser.add_argument('--skip', default=1000)
     parser.add_argument('--recompute', action='store_true')
     parser.add_argument('--no_trajectory', action='store_true')
     parser.add_argument('--no_magnet', action='store_true')
@@ -111,8 +111,10 @@ if __name__ == '__main__':
                 print('Portion of unique records: ', unique_inds.shape[0] / pose_data.shape[0])
                 pose_data = pose_data[unique_inds, :]
             output_timestamp = pose_data[:, 0]
-            print('Pose sample rate: {:2f}Hz'.format((output_timestamp.shape[0] - 1.0) * nano_to_sec /
-                                                     (output_timestamp[-1] - output_timestamp[0])))
+            output_samplerate = output_timestamp.shape[0] * nano_to_sec / (output_timestamp[-1] - output_timestamp[0])
+            assert 195 < output_samplerate < 205, 'Wrong output sample rate: %f' % output_samplerate
+
+            print('Pose sample rate: {:2f}Hz'.format(output_samplerate))
 
             acce_data = np.genfromtxt(data_root+'/acce.txt')
             print('Acceleration found. Sample rate:{:2f} Hz'
