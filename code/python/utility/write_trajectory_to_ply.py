@@ -62,6 +62,12 @@ def write_ply_to_file(path, position, orientation, acceleration=None,
     plyfile.PlyData([vertex_element], text=True).write(path)
 
 
+def read_trajectory_from_ply_file(path):
+    with open(path, 'rb') as f:
+        plydata = plyfile.PlyData.read(f)
+    return plydata.elements[0].data
+
+
 if __name__ == '__main__':
     import argparse
     import pandas
