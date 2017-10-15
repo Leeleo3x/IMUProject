@@ -67,7 +67,8 @@ def interpolate_3dvector_linear(input, input_timestamp, output_timestamp):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('list')
-    parser.add_argument('--skip', default=1000)
+    parser.add_argument('--skip_front', type=int, default=800)
+    parser.add_argument('--skip_end', type=int, default=800)
     parser.add_argument('--recompute', action='store_true')
     parser.add_argument('--no_trajectory', action='store_true')
     parser.add_argument('--no_magnet', action='store_true')
@@ -100,7 +101,7 @@ if __name__ == '__main__':
         else:
             print('------------------\nProcessing ' + data_root, ', type: ' + motion_type)
             # drop the head and tail
-            pose_data = np.genfromtxt(data_root+'/pose.txt')[args.skip:-args.skip, :]
+            pose_data = np.genfromtxt(data_root+'/pose.txt')[args.skip_front:-args.skip_end, :]
 
             # swap tango's orientation from [x,y,z,w] to [w,x,y,z]
             pose_data[:, [-4, -3, -2, -1]] = pose_data[:, [-1, -4, -3, -2]]
