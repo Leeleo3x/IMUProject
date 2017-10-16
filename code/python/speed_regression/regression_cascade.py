@@ -330,28 +330,21 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument('list')
-    parser.add_argument('--validation', default=None, type=str)
     parser.add_argument('--output_path', default=None, type=str)
     parser.add_argument('--subsample', default=1, type=int)
+    parser.add_argument('--step_size', default=10, type=int)
+    parser.add_argument('--cv', default=3, type=int)
     parser.add_argument('--option', default=None, type=str)
     args = parser.parse_args()
 
     option = td.TrainingDataOption()
+    option.sample_step_ = args.step_size
     feature_all, label_all, responses_all, class_map = load_datalist(path=args.list, option=option)
     responses_all = responses_all[:, [0, 2]]
 
     feature_all = feature_all[0:-1:args.subsample]
     label_all = label_all[0:-1:args.subsample]
     responses_all = responses_all[0:-1:args.subsample]
-
-    validation_feature = None
-    validation_label = None
-    validation_responses = None
-    if args.validation is not None:
-        validation_feature, validation_label, validation_responses, class_map = load_datalist(path=args.validation,
-                                                                                              option=option,
-                                                                                              class_map=class_map)
-        validation_responses = validation_responses[:, [0, 2]]
 
     print('Data loaded. Total number of samples: ', feature_all.shape[0])
 
@@ -364,7 +357,7 @@ if __name__ == '__main__':
         print('Options loaded from file: ', args.option)
     else:
         print('No option file is provided, running grid search')
-        best_option = get_best_option(feature_all, label_all, responses_all)
+        best_option = get_best_option(feature_all, label_all, responses_all, n_split=args.cv)
     model = SVRCascade(best_option, class_map)
     model.train(feature_all, label_all, responses_all)
 

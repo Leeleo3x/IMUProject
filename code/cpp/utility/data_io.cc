@@ -58,7 +58,6 @@ IMUDataset::IMUDataset(const std::string &directory, unsigned char load_control)
       rotation_vector_.push_back(rv);
     }
   }
-
   // Normalize the time stamp
   for (int i = 0; i < kSamples; ++i) {
     timestamp_[i] = timestamp_[i] / kNanoToSec;

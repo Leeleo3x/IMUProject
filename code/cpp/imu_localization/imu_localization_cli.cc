@@ -16,7 +16,7 @@
 #include "utility/utility.h"
 #include "utility/stlplus3/file_system.hpp"
 
-DEFINE_string(model_path, "../../../../models/svr_cascade1011", "Path to model");
+DEFINE_string(model_path, "../../../../models/svr_cascade1016", "Path to model");
 DEFINE_string(mapinfo_path, "default", "path to map info");
 DEFINE_int32(log_interval, 1000, "logging interval");
 DEFINE_string(color, "blue", "color");
@@ -67,8 +67,10 @@ int main(int argc, char **argv) {
 
   std::vector<Eigen::Quaterniond> orientation;
   if (FLAGS_tango_ori) {
+    LOG(WARNING) << "Use Tango orientation";
     orientation = dataset.GetOrientation();
   } else {
+    LOG(INFO) << "Use rotation vector";
     orientation = dataset.GetRotationVector();
     Eigen::Quaterniond rv_to_tango = dataset.GetOrientation()[0] * dataset.GetRotationVector()[0].conjugate();
     for (auto &v: orientation) {
