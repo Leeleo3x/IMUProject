@@ -13,7 +13,7 @@ parser.add_argument('--recompute', action='store_true')
 args = parser.parse_args()
 
 exec_path = '../../cpp/cmake-build-relwithdebinfo/imu_localization/IMULocalization_cli'
-model_path = '../../../models/svr_cascade1004_c1e001'
+model_path = '../../../models/svr_cascade1016'
 preset_list = ['full', 'const', 'mag_only', 'ori_only']
 
 
@@ -36,6 +36,7 @@ for data in data_list:
         all_good = False
 
 assert all_good, 'Some datasets do not exist. Please fix the data list.'
+print('Sanity check passed')
 
 for data in data_list:
     data_path = root_dir + '/' + data

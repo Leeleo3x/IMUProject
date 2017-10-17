@@ -63,6 +63,13 @@ void EstimateTransformation(const std::vector<Eigen::Matrix<double, DIM, 1>> &so
   Eigen::Matrix<double, DIM, DIM> V = svd.matrixV();
   Eigen::Matrix<double, DIM, DIM> U = svd.matrixU();
   Eigen::Matrix<double, DIM, DIM> R = V * U.transpose();
+  if (R.determinant() < 0){
+    for (int i=0; i<DIM; ++i){
+      V(i, DIM-1) *= -1;
+    }
+    R = V * U.transpose();
+  }
+
   Eigen::Matrix<double, DIM, 1> t = target_center - R * source_center;
   CHECK_NOTNULL(transformation_homo)->setIdentity();
   transformation_homo->block(0, 0, DIM, DIM) = R;

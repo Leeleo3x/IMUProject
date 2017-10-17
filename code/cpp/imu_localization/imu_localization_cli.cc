@@ -27,10 +27,13 @@ DEFINE_double(weight_ls, 1.0, "The weight parameter for the local speed. Larger 
 DEFINE_string(suffix, "full", "suffix");
 DEFINE_string(preset, "none", "preset mode");
 
-DEFINE_bool(estimate_global_transformation, false, "If the ground truth trajectory is provided and this term is set"
+DEFINE_bool(register_to_reference_global, true, "If the ground truth trajectory is provided and this term is set"
     " to true, a global transformation will be estimated that aligns the start portion of the estimated trajectory "
     "to the ground truth.");
-DEFINE_int32(start_portion_length, -1, "The length (in frames) of the start portion. These frames will be used to "
+DEFINE_bool(register_start_portion_2d, true,
+            "If set to true, estimate a 2D global transformation that aligns the start portion of the estimated "
+                "trajector with the ground truth. Only useful with FLAGS_estimate_global_transformation is true.");
+DEFINE_int32(start_portion_length, 2000, "The length (in frames) of the start portion. These frames will be used to "
     "estimate the global transformation from the estimated trajectory to the ground truth. Set to -1 to use the "
     "entire trajectory");
 
@@ -72,10 +75,6 @@ int main(int argc, char **argv) {
   } else {
     LOG(INFO) << "Use rotation vector";
     orientation = dataset.GetRotationVector();
-    Eigen::Quaterniond rv_to_tango = dataset.GetOrientation()[0] * dataset.GetRotationVector()[0].conjugate();
-    for (auto &v: orientation) {
-      v = rv_to_tango * v;
-    }
   }
 
   Eigen::Vector3d traj_color(0, 0, 255);
@@ -154,25 +153,41 @@ int main(int argc, char **argv) {
   printf("Overall framerate: %.3f\n", fps_all);
 
   std::vector<Eigen::Vector3d> output_positions = trajectory.GetPositions();
-  if (FLAGS_estimate_global_transformation){
-    printf("Estimating global transformation...\n");
-    if (FLAGS_start_portion_length < 0){
-      FLAGS_start_portion_length = static_cast<int>(output_positions.size());
-    }
-    CHECK_GT(FLAGS_start_portion_length, 3) << "The start portion length must be larger than 3";
+  if (FLAGS_register_to_reference_global){
+    printf("Estimating global transformation\n");
     const std::vector<Eigen::Vector3d>& gt_positions = dataset.GetPosition();
-    std::vector<Eigen::Vector3d> source(output_positions.begin(),
-                                        output_positions.begin() + FLAGS_start_portion_length);
-    std::vector<Eigen::Vector3d> target(gt_positions.begin(), gt_positions.begin() + FLAGS_start_portion_length);
     Eigen::Matrix4d global_transform;
     Eigen::Matrix3d global_rotation;
     Eigen::Vector3d global_translation;
-    IMUProject::EstimateTransformation<3>(source, target, &global_transform, &global_rotation, &global_translation);
+    IMUProject::EstimateTransformation(output_positions, gt_positions, &global_transform, &global_rotation,
+                                       &global_translation);
     for (int i=0; i<output_positions.size(); ++i){
       output_positions[i] = global_rotation * output_positions[i] + global_translation;
     }
-  }
 
+    if (FLAGS_register_start_portion_2d){
+      if (FLAGS_start_portion_length < 0){
+        FLAGS_start_portion_length = static_cast<int>(output_positions.size());
+      }
+      printf("Registring start portion. Length: %d\n", FLAGS_start_portion_length);
+      CHECK_GT(FLAGS_start_portion_length, 3) << "The start portion length must be larger than 3";
+      std::vector<Eigen::Vector2d> source;
+      std::vector<Eigen::Vector2d> target;
+      for (int i=0; i<FLAGS_start_portion_length; ++i){
+        source.push_back(output_positions[i].block<2, 1>(0, 0));
+        target.push_back(gt_positions[i].block<2, 1>(0, 0));
+      }
+      Eigen::Matrix3d transform_2d;
+      Eigen::Matrix2d rotation_2d;
+      Eigen::Vector2d translation_2d;
+      IMUProject::EstimateTransformation<2>(source, target, &transform_2d, &rotation_2d, &translation_2d);
+      for (int i=0; i<output_positions.size(); ++i){
+        Eigen::Vector2d transformed = rotation_2d * output_positions[i].block<2, 1>(0, 0) + translation_2d;
+        output_positions[i][0] = transformed[0];
+        output_positions[i][1] = transformed[1];
+      }
+    }
+  }
 
   // Create output directory
   char result_dir_path[128];
@@ -284,6 +299,7 @@ int main(int argc, char **argv) {
                                   Eigen::Vector3d(0, 0, 255), map_img);
     sprintf(buffer, "%s/overlay_%s.png", result_dir_path, FLAGS_suffix.c_str());
     cv::imwrite(buffer, map_img);
+    printf("Overlay image written to %s\n", buffer);
   }
 
   return 0;
