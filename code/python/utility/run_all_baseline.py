@@ -16,7 +16,6 @@ exec_path = '../../cpp/cmake-build-relwithdebinfo/imu_localization/IMULocalizati
 model_path = '../../../models/svr_cascade1016'
 preset_list = ['full', 'const', 'mag_only', 'ori_only']
 
-
 root_dir = os.path.dirname(args.list)
 data_list = []
 with open(args.list) as f:

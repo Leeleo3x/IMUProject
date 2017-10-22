@@ -86,7 +86,7 @@ void MainWidget::InitializeTrajectories(const std::string &path) {
   std::string line;
 
   {
-    sprintf(buffer, "%s/result_full.csv", path.c_str());
+    sprintf(buffer, "%s/result_full/result_full.csv", path.c_str());
     std::ifstream full_in(buffer);
     if (full_in.is_open()) {
       printf("Loading %s\n", buffer);
@@ -105,7 +105,7 @@ void MainWidget::InitializeTrajectories(const std::string &path) {
   }
 
   {
-    sprintf(buffer, "%s/result_step.csv", path.c_str());
+    sprintf(buffer, "%s/result_step/result_step.csv", path.c_str());
     std::ifstream step_in(buffer);
     if (step_in.is_open()) {
       printf("Loading %s\n", buffer);
@@ -124,7 +124,7 @@ void MainWidget::InitializeTrajectories(const std::string &path) {
   }
 
   {
-    sprintf(buffer, "%s/result_const.csv", path.c_str());
+    sprintf(buffer, "%s/result_const/result_const.csv", path.c_str());
     std::ifstream const_in(buffer);
     if (const_in.is_open()) {
       printf("Loading %s\n", buffer);
