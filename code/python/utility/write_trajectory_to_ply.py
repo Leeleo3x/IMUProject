@@ -5,7 +5,7 @@ import quaternion
 
 def write_ply_to_file(path, position, orientation, acceleration=None,
                       global_rotation=np.identity(3, float), local_axis=None,
-                      trajectory_color=None,
+                      trajectory_color=None, num_axis=3,
                       length=1.0, kpoints=100, interval=100):
     """
     Visualize camera trajectory as ply file
@@ -21,7 +21,6 @@ def write_ply_to_file(path, position, orientation, acceleration=None,
     num_cams = position.shape[0]
     assert orientation.shape[0] == num_cams
 
-    num_axis = 3
     max_acceleration = 1.0
     if acceleration is not None:
         assert acceleration.shape[0] == num_cams
@@ -40,7 +39,7 @@ def write_ply_to_file(path, position, orientation, acceleration=None,
                                [0.0, 0.0, 1.0, 0.0]])
     if trajectory_color is None:
         trajectory_color = [0, 255, 255]
-    axis_color = [[255, 0, 0], [0, 255, 0], [0, 0, 255], [255, 0, 255]]
+    axis_color = [[0, 255, 0], [255, 0, 0], [0, 0, 255], [255, 0, 255]]
     vertex_type = [('x', 'f4'), ('y', 'f4'), ('z', 'f4'), ('red', 'u1'), ('green', 'u1'), ('blue', 'u1')]
     positions_data = np.empty((position_transformed.shape[0],), dtype=vertex_type)
     positions_data[:] = [tuple([*i, *trajectory_color]) for i in position_transformed]

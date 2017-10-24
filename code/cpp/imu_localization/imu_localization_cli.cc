@@ -16,7 +16,7 @@
 #include "utility/utility.h"
 #include "utility/stlplus3/file_system.hpp"
 
-DEFINE_string(model_path, "../../../../models/svr_cascade1021_c1e001", "Path to model");
+DEFINE_string(model_path, "../../../../models/svr_cascade1023", "Path to model");
 DEFINE_string(mapinfo_path, "default", "path to map info");
 DEFINE_int32(log_interval, 1000, "logging interval");
 DEFINE_string(color, "blue", "color");
@@ -33,7 +33,7 @@ DEFINE_bool(register_to_reference_global, true, "If the ground truth trajectory 
 DEFINE_bool(register_start_portion_2d, true,
             "If set to true, estimate a 2D global transformation that aligns the start portion of the estimated "
                 "trajector with the ground truth. Only useful with FLAGS_estimate_global_transformation is true.");
-DEFINE_int32(start_portion_length, 2000, "The length (in frames) of the start portion. These frames will be used to "
+DEFINE_int32(start_portion_length, 3000, "The length (in frames) of the start portion. These frames will be used to "
     "estimate the global transformation from the estimated trajectory to the ground truth. Set to -1 to use the "
     "entire trajectory");
 
@@ -153,6 +153,7 @@ int main(int argc, char **argv) {
   printf("Overall framerate: %.3f\n", fps_all);
 
   std::vector<Eigen::Vector3d> output_positions = trajectory.GetPositions();
+  std::vector<Eigen::Quaterniond> output_orientation = trajectory.GetOrientations();
   if (FLAGS_register_to_reference_global){
     printf("Estimating global transformation\n");
     const std::vector<Eigen::Vector3d>& gt_positions = dataset.GetPosition();
@@ -163,6 +164,7 @@ int main(int argc, char **argv) {
                                        &global_translation);
     for (int i=0; i<output_positions.size(); ++i){
       output_positions[i] = global_rotation * output_positions[i] + global_translation;
+      output_orientation[i] = global_rotation * output_orientation[i];
     }
 
     if (FLAGS_register_start_portion_2d){
@@ -181,10 +183,13 @@ int main(int argc, char **argv) {
       Eigen::Matrix2d rotation_2d;
       Eigen::Vector2d translation_2d;
       IMUProject::EstimateTransformation<2>(source, target, &transform_2d, &rotation_2d, &translation_2d);
+      Eigen::Matrix3d rotation_2d_as_3d = Eigen::Matrix3d::Identity();
+      rotation_2d_as_3d.block<2, 2>(0, 0) = rotation_2d;
       for (int i=0; i<output_positions.size(); ++i){
         Eigen::Vector2d transformed = rotation_2d * output_positions[i].block<2, 1>(0, 0) + translation_2d;
         output_positions[i][0] = transformed[0];
         output_positions[i][1] = transformed[1];
+        output_orientation[i] = rotation_2d_as_3d * output_orientation[i];
       }
     }
   }
@@ -204,7 +209,7 @@ int main(int argc, char **argv) {
 
   sprintf(buffer, "%s/result_trajectory_%s.ply", result_dir_path, FLAGS_suffix.c_str());
   IMUProject::WriteToPly(std::string(buffer), dataset.GetTimeStamp().data(), output_positions.data(),
-                         trajectory.GetOrientations().data(), trajectory.GetNumFrames(),
+                         output_orientation.data(), trajectory.GetNumFrames(),
                          false, traj_color, 0.8, 100, 300);
 
   sprintf(buffer, "%s/tango_trajectory.ply", result_dir_path);
@@ -220,6 +225,7 @@ int main(int argc, char **argv) {
       Eigen::Vector3d acce = orientation[i - 1] * dataset.GetLinearAcceleration()[i - 1];
       raw_speed[i] = raw_speed[i - 1] + acce * (ts[i] - ts[i - 1]);
       raw_traj[i] = raw_traj[i - 1] + raw_speed[i - 1] * (ts[i] - ts[i - 1]);
+      raw_traj[i][2] = 0;
     }
     sprintf(buffer, "%s/raw.ply", result_dir_path);
     IMUProject::WriteToPly(std::string(buffer), ts.data(), raw_traj.data(), orientation.data(),

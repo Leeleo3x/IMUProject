@@ -11,6 +11,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)) + '/../')
 
 from algorithms import icp
 from pre_processing import gen_dataset
+from utility import write_trajectory_to_ply
 
 nano_to_sec = 1e09
 
@@ -51,12 +52,24 @@ if __name__ == '__main__':
         position_from_step[i] = position_from_step[i-1] + segment
 
     # Find a 2D rotation transformation to align the start portion of estimated track and the ground truth track.
-    start_length = 2000
-    _, rotation_to_gt, _ = icp.fit_transformation(position_from_step[:start_length, :2], positions[:start_length, :2])
-    # Rotation in 2D plane and set Z to 0
-    for i in range(position_from_step.shape[0]):
-        position_from_step[i, :2] = np.dot(rotation_to_gt, position_from_step[i, :2])
-    position_from_step[:, -1] = 0
+    start_length = 3000
+    _, rotation_to_gt, translation_to_gt = icp.fit_transformation(position_from_step, positions)
+    position_from_step = (np.dot(rotation_to_gt, position_from_step.T) + translation_to_gt).T
+
+    _, rotation_2d, translation_2d = icp.fit_transformation(position_from_step[:start_length, :2],
+                                                            positions[:start_length, 2])
+    position_from_step[:, 2] = (np.dot(rotation_2d, position_from_step[:, :2].T) + translation_2d).T
+
+    rotation_combined = np.identity(3)
+    rotation_combined[:2, :2] = rotation_2d
+    rotatioin_combined = rotation_combined * rotation_to_gt
+    output_orientations = orientations[:]
+    for i in range(orientations.shape[0]):
+        rotor = quaternion.from_rotation_matrix(rotation_combined)
+        out_orientation = rotor * quaternion.quaternion(*orientations[i]) * rotor.conj()
+        output_orientations[i] = quaternion.as_float_array(rotor)
+
+
 
     print('Writing to csv')
     data_mat = np.zeros([ts.shape[0], 10], dtype=float)
@@ -70,5 +83,6 @@ if __name__ == '__main__':
     data_pandas = pandas.DataFrame(data_mat, columns=column_list)
     data_pandas.to_csv(out_dir + '/result_step.csv')
 
-    gen_dataset.write_ply_to_file(out_dir + '/result_trajectory_step.ply', position_from_step, orientations)
+    write_trajectory_to_ply.write_ply_to_file(out_dir + '/result_trajectory_step.ply', position_from_step, orientations,
+                                              trajectory_color=(0, 150, 150), length=0.8, interval=300, num_axis=1)
     print('All done')

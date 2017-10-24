@@ -7,6 +7,8 @@ import warnings
 sys.path.append('/home/yanhang/Documents/research/IMUProject/code/python')
 sys.path.append('/Users/yanhang/Documents/research/IMUProject/code/python')
 
+
+
 parser = argparse.ArgumentParser()
 parser.add_argument('list', type=str)
 parser.add_argument('--recompute', action='store_true')
@@ -14,7 +16,7 @@ args = parser.parse_args()
 
 exec_path = '../../cpp/cmake-build-relwithdebinfo/imu_localization/IMULocalization_cli'
 model_path = '../../../models/svr_cascade1016'
-preset_list = ['full', 'const', 'mag_only', 'ori_only']
+preset_list = ['full', 'mag_only', 'ori_only', 'step']
 
 root_dir = os.path.dirname(args.list)
 data_list = []
@@ -46,6 +48,7 @@ for data in data_list:
         command = "%s %s --model_path %s --preset %s" % (exec_path, data_path, model_path, preset)
         print(command)
         subprocess.call(command, shell=True)
+    # Step counting
     command = 'python3 ../speed_regression/step_counting.py %s' % data_path
     print(command)
     subprocess.call(command, shell=True)
