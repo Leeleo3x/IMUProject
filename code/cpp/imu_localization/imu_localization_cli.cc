@@ -210,7 +210,7 @@ int main(int argc, char **argv) {
   sprintf(buffer, "%s/result_trajectory_%s.ply", result_dir_path, FLAGS_suffix.c_str());
   IMUProject::WriteToPly(std::string(buffer), dataset.GetTimeStamp().data(), output_positions.data(),
                          output_orientation.data(), trajectory.GetNumFrames(),
-                         false, traj_color, 0.8, 100, 300);
+                         false, traj_color, 0);
 
   sprintf(buffer, "%s/tango_trajectory.ply", result_dir_path);
   IMUProject::WriteToPly(std::string(buffer), dataset.GetTimeStamp().data(), dataset.GetPosition().data(),
@@ -229,7 +229,7 @@ int main(int argc, char **argv) {
     }
     sprintf(buffer, "%s/raw.ply", result_dir_path);
     IMUProject::WriteToPly(std::string(buffer), ts.data(), raw_traj.data(), orientation.data(),
-                           (int) raw_traj.size(), true, Eigen::Vector3d(0, 128, 128));
+                           (int) raw_traj.size(), true, Eigen::Vector3d(0, 128, 128), 0);
 
     sprintf(buffer, "%s/result_raw.csv", result_dir_path);
     ofstream raw_out(buffer);

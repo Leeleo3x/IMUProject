@@ -95,12 +95,15 @@ int IMUTrajectory::RegressSpeed(const int end_ind) {
 
     constraint_ind_.push_back(i);
 
+    // The forward direction is defined in the stabilized IMU frame, therefore no gravity compensation is needed.
+    Eigen::Vector3d forward_dir(0, 0, -1);
+
     if (option_.reg_option == FULL) {
       local_speed_.emplace_back(ls_x, 0, ls_z);
     } else if (option_.reg_option == CONST) {
-      local_speed_.emplace_back(0, 0, -1 * option_.const_speed);
+      local_speed_.emplace_back(forward_dir * option_.const_speed);
     } else if (option_.reg_option == MAG) {
-      local_speed_.emplace_back(0, 0, -1 * std::sqrt(ls_x * ls_x + ls_z * ls_z));
+      local_speed_.emplace_back(forward_dir * std::sqrt(ls_x * ls_x + ls_z * ls_z));
     } else if (option_.reg_option == ORI) {
       double ang = std::atan2(ls_z, ls_x);
       local_speed_.emplace_back(option_.const_speed * std::cos(ang), 0, option_.const_speed * std::sin(ang));
