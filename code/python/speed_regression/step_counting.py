@@ -49,7 +49,7 @@ if __name__ == '__main__':
 
     # Compute the forward speed. Notice that the device is not necessarily facing horizontally. We need to take the
     # gravity direction into consideration.
-    local_gravity_dir = np.array([0., -1., 0.])
+    local_gravity_dir = np.array([0., 1., 0.])
     forward_dir = []
     rotation_horizontal = []
     for i in range(gravity.shape[0]):
@@ -65,7 +65,7 @@ if __name__ == '__main__':
         position_from_step[i] = position_from_step[i-1] + segment
 
     # Find a transformation to align the start portion of estimated track and the ground truth track.
-    start_length = 3000
+    start_length = 2000
     _, rotation_to_gt, translation_to_gt = icp.fit_transformation(position_from_step, positions)
     position_from_step = (np.dot(rotation_to_gt, position_from_step.T) + translation_to_gt[:, None]).T
 

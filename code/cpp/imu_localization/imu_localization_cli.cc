@@ -33,7 +33,7 @@ DEFINE_bool(register_to_reference_global, true, "If the ground truth trajectory 
 DEFINE_bool(register_start_portion_2d, true,
             "If set to true, estimate a 2D global transformation that aligns the start portion of the estimated "
                 "trajector with the ground truth. Only useful with FLAGS_estimate_global_transformation is true.");
-DEFINE_int32(start_portion_length, 3000, "The length (in frames) of the start portion. These frames will be used to "
+DEFINE_int32(start_portion_length, 2000, "The length (in frames) of the start portion. These frames will be used to "
     "estimate the global transformation from the estimated trajectory to the ground truth. Set to -1 to use the "
     "entire trajectory");
 
@@ -81,7 +81,7 @@ int main(int argc, char **argv) {
   if (FLAGS_color == "yellow") {
     traj_color = Eigen::Vector3d(128, 128, 0);
   } else if (FLAGS_color == "green") {
-    traj_color = Eigen::Vector3d(0, 128, 0);
+    traj_color = Eigen::Vector3d(0, 180, 0);
   } else if (FLAGS_color == "brown") {
     traj_color = Eigen::Vector3d(0, 128, 128);
   }

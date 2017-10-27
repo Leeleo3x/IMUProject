@@ -22,16 +22,13 @@ if __name__ == '__main__':
     filter_sigma = 20.0
 
     args = parser.parse_args()
-    output_path = args.dir + '/figure_' + args.id
+    result_path = args.dir + '/result_' + args.id
 
-    if not os.path.exists(output_path):
-        os.makedirs(output_path)
-
-    result = pandas.read_csv(args.dir + '/result_'+args.id+'.csv')
+    result = pandas.read_csv(result_path + '/result_'+args.id+'.csv')
 
     data_all = pandas.read_csv(args.dir + '/processed/data.csv')
 
-    regression_result = np.genfromtxt(args.dir + '/regression_'+args.id+'.txt')
+    regression_result = np.genfromtxt(result_path + '/regression_'+args.id+'.txt')
     constraint_ind = regression_result[:, 0].astype(int)
     local_speed = regression_result[:, 1:]
 
@@ -94,9 +91,7 @@ if __name__ == '__main__':
     axes_local = [0, 2]
 
     lines_imu = []
-    lines_raw = []
     lines_tango = []
-    lines_const = []
 
     # ylabels = ['X Speed (m/s)', 'Y Speed (m/s)']
     # fig_gs = plt.figure('Speed', figsize=(12, 10))
@@ -114,24 +109,21 @@ if __name__ == '__main__':
     # #               loc='upper center', ncol=3, labelspacing=0.)
     # fig_gs.savefig(output_path + '/fig_gs.png', bbox_inches='tight')
 
-    # ylabels = ['X Speed (m/s)', 'Z Speed (m/s)']
-    # fig_ls = plt.figure('Local speed', figsize=(24, 18))
-    # linewidth = 1.8
-    #
-    # for i in range(0, 2):
-    #     plt.subplot(211+i)
-    #     if i == 0:
-    #         plt.xlabel('Time(s)')
-    #     plt.ylabel(ylabels[i])
-    #     plt.locator_params(nbins=5, axis='y')
-    #     lines_imu += plt.plot(ts[constraint_ind], local_speed[:, axes_local[i]], color=(0, 0, 1.0), lw=linewidth)
-    #     lines_tango += plt.plot(ts[constraint_ind], ls_gt[:, axes_local[i]], 'r', lw=linewidth)
-    #     lines_raw += plt.plot(ts[constraint_ind], ls_raw[:, axes_local[i]], color=(0., .5, 0.5), lw=linewidth)
-    #     lines_const += plt.plot(ts[constraint_ind], ls_const[:, axes_local[i]], color=(.5, .5, 0.), lw=linewidth)
-    # # plt.figlegend([lines_imu[-1], lines_tango[-1]],
-    # #               ['Our method', 'Tango (Ground truth)'],
-    # #               loc='upper center', ncol=2, labelspacing=0.)
-    # fig_ls.savefig(output_path + '/fig_ls.png', bbox_inches='tight')
+    ylabels = ['X Speed (m/s)', 'Z Speed (m/s)']
+    fig_ls = plt.figure('Local speed', figsize=(24, 18))
+    linewidth = 1.8
+
+    for i in range(0, 2):
+        plt.subplot(211+i)
+        if i == 0:
+            plt.xlabel('Time(s)')
+        plt.ylabel(ylabels[i])
+        plt.locator_params(nbins=5, axis='y')
+        lines_imu += plt.plot(ts[constraint_ind], local_speed[:, axes_local[i]], 'b', lw=linewidth)
+        lines_tango += plt.plot(ts[constraint_ind], ls_gt[:, axes_local[i]], 'r', lw=linewidth)
+    #plt.figlegend([lines_imu[-1], lines_tango[-1]], ['Our method', 'Tango (Ground truth)'],
+    #              loc='upper center', ncol=2, labelspacing=0.)
+    fig_ls.savefig(result_path + '/regression.png', bbox_inches='tight')
 
     # fig_bias = plt.figure('Bias', figsize=(12, 10))
     # ylabels = ['X Bias (m/s2)', 'Y Bias (m/s2)', 'Z Bias (m/s2)']
