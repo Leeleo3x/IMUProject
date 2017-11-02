@@ -27,10 +27,10 @@ DEFINE_double(weight_ls, 1.0, "The weight parameter for the local speed. Larger 
 DEFINE_string(suffix, "full", "suffix");
 DEFINE_string(preset, "none", "preset mode");
 
-DEFINE_bool(register_to_reference_global, true, "If the ground truth trajectory is provided and this term is set"
+DEFINE_bool(register_to_reference_global, false, "If the ground truth trajectory is provided and this term is set"
     " to true, a global transformation will be estimated that aligns the start portion of the estimated trajectory "
     "to the ground truth.");
-DEFINE_bool(register_start_portion_2d, true,
+DEFINE_bool(register_start_portion_2d, false,
             "If set to true, estimate a 2D global transformation that aligns the start portion of the estimated "
                 "trajector with the ground truth. Only useful with FLAGS_estimate_global_transformation is true.");
 DEFINE_int32(start_portion_length, 2000, "The length (in frames) of the start portion. These frames will be used to "
@@ -67,6 +67,7 @@ int main(int argc, char **argv) {
   const std::vector<Eigen::Vector3d> &gyro = dataset.GetGyro();
   const std::vector<Eigen::Vector3d> &linacce = dataset.GetLinearAcceleration();
   const std::vector<Eigen::Vector3d> &gravity = dataset.GetGravity();
+  const std::vector<Eigen::Vector3d> &magnet = dataset.GetMagnet();
 
   std::vector<Eigen::Quaterniond> orientation;
   if (FLAGS_tango_ori) {
@@ -75,6 +76,11 @@ int main(int argc, char **argv) {
   } else {
     LOG(INFO) << "Use rotation vector";
     orientation = dataset.GetRotationVector();
+    Eigen::Quaterniond rotor;
+    rotor.setIdentity();
+//    for (int i=0; i < orientation.size(); i += 1000){
+//      orientation[i] = rotor * orientation[i];
+//    }
   }
 
   Eigen::Vector3d traj_color(0, 0, 255);
@@ -115,15 +121,12 @@ int main(int argc, char **argv) {
   float start_t = (float) cv::getTickCount();
 
   constexpr int init_capacity = 20000;
-  std::vector<Eigen::Vector3d> positions_opt;
-  std::vector<Eigen::Quaterniond> orientations_opt;
 
   printf("Start adding records...\n");
   for (int i = 0; i < N; ++i) {
     trajectory.AddRecord(ts[i], gyro[i], linacce[i], gravity[i], orientation[i]);
     if (i > loc_option.local_opt_window) {
-      if (i % loc_option.global_opt_interval == 0) {
-      } else if (i % loc_option.local_opt_interval == 0) {
+      if (i % loc_option.local_opt_interval == 0) {
         LOG(INFO) << "Running local optimzation at frame " << i;
         while (true) {
           if (trajectory.CanAdd()) {
@@ -191,6 +194,14 @@ int main(int argc, char **argv) {
         output_positions[i][1] = transformed[1];
         output_orientation[i] = rotation_2d_as_3d * output_orientation[i];
       }
+    }
+  }else{
+    // Adjust the rotation vector based on the gravity vector and magnetometer of the first frame
+    Eigen::Quaterniond rot_from_gravity_magnet = IMUProject::OrientationFromGravityMegnet(gravity[0], magnet[0]);
+    Eigen::Quaterniond rotor = orientation[0].inverse() * rot_from_gravity_magnet;
+    printf("Rotor: (%f, %f, %f, %f)\n", rotor.w(), rotor.x(), rotor.y(), rotor.z());
+    for (int i=0; i<orientation.size(); ++i){
+      output_orientation[i] = rotor * output_orientation[i];
     }
   }
 

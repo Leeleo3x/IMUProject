@@ -20,6 +20,17 @@ std::vector<Eigen::Vector3d> Integration(const std::vector<double> &ts,
                                          const std::vector<Eigen::Vector3d> &input,
                                          const Eigen::Vector3d &initial = Eigen::Vector3d(0, 0, 0));
 
+inline Eigen::Quaterniond OrientationFromGravityMegnet(const Eigen::Vector3d& gravity,
+                                                       const Eigen::Vector3d& magnet,
+                                                       const Eigen::Vector3d global_gravity = Eigen::Vector3d(0, 0, 1),
+                                                       const Eigen::Vector3d global_north = Eigen::Vector3d(0, 1, 0)){
+  Eigen::Quaterniond rot_grav = Eigen::Quaterniond::FromTwoVectors(gravity, global_gravity);
+  Eigen::Vector3d magnet_grav = rot_grav * magnet;
+  magnet_grav[2] = 0.0;
+  Eigen::Quaterniond rot_magnet = Eigen::Quaterniond::FromTwoVectors(magnet_grav, global_north);
+  return rot_magnet * rot_grav;
+}
+
 // This function estimates the rigid transformation from source to target. The source and target array should contain
 // the same number of points. A homogenous representation of the transformation will be returned. In addition,
 // the rotation and/or translation part of the transformation can be required separately.

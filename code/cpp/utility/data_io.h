@@ -88,6 +88,14 @@ class IMUDataset {
     return gravity_;
   }
 
+  inline const std::vector<Eigen::Vector3d> &GetMagnet() const{
+    return magnet_;
+  }
+
+  inline std::vector<Eigen::Vector3d> &GetMagnet(){
+    return magnet_;
+  }
+
   inline std::vector<Eigen::Quaterniond> &GetRotationVector() {
     return rotation_vector_;
   }
