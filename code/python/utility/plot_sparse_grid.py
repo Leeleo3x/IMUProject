@@ -31,6 +31,7 @@ def compute_gravity_speed(ts, linacce, orientation, gravity):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('dir', type=str)
+    parser.add_argument('--id', type=str, default='regress')
     args = parser.parse_args()
 
     data_all = pandas.read_csv(args.dir + '/processed/data.csv')
@@ -46,9 +47,10 @@ if __name__ == '__main__':
 
     speed_raw = compute_gravity_speed(ts, linacce, orientation, gravity)
 
-    constraint = np.genfromtxt(args.dir + '/sparse_grid_constraint.txt')
-    bias = np.genfromtxt(args.dir + '/sparse_grid_bias.txt')
-    corrected_linacce = gaussian_filter1d(np.genfromtxt(args.dir + '/corrected_linacce.txt'), sigma=30.0, axis=0)
+    constraint = np.genfromtxt(args.dir + '/result_' + args.id + '/sparse_grid_constraint.txt')
+    bias = np.genfromtxt(args.dir + '/result_' + args.id + '/sparse_grid_bias.txt')
+    corrected_linacce = gaussian_filter1d(np.genfromtxt(args.dir + '/result_' + args.id + '/corrected_linacce.txt'),
+                                          sigma=30.0, axis=0)
 
     speed_corrected = compute_gravity_speed(ts, corrected_linacce[:, 1:], orientation, gravity)
 
@@ -88,5 +90,5 @@ if __name__ == '__main__':
 
     # plt.legend(['Predicted speed', 'Before correction', 'After correction'], loc='lower left')
 
-    fig.savefig('/Users/yanhang/Documents/research/paper/iccv2017_supplementary/presentation/alg1.png', bbox_inches='tight')
-    # plt.show()
+    # fig.savefig('/Users/yanhang/Documents/research/paper/iccv2017_supplementary/presentation/alg1.png', bbox_inches='tight')
+    plt.show()

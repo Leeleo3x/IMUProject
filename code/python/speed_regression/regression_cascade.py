@@ -133,17 +133,20 @@ class SVRCascade:
         predicted_train = self.classifier.predict(train_feature_cv)[1].ravel()
         error_svm = accuracy_score(train_label, predicted_train)
         print('Classifier trained. Training accuracy: %f' % error_svm)
-        for cls in range(self.num_classes):
+        for cls_name, cls in self.class_map.items():
             feature_in_class = train_feature_cv[train_label == cls, :]
+            target_in_class = train_response[train_label == cls, :]
+            if cls_name == 'transition':
+                continue
             for chn in range(self.num_channels):
                 rid = cls * self.num_channels + chn
                 print('Training regressor for class %d, channel %d' % (cls, chn))
-                target_in_class = train_response[train_label == cls, chn].astype(np.float32)
-                self.regressors[rid].train(feature_in_class, cv2.ml.ROW_SAMPLE, target_in_class)
+                self.regressors[rid].train(feature_in_class, cv2.ml.ROW_SAMPLE,
+                                           target_in_class[:, chn].astype(np.float32))
                 predicted = self.regressors[rid].predict(feature_in_class)[1]
                 print('Regressor for class %d  channel %d trained. Training error: %f(r2), %f(MSE)' %
-                      (cls, chn, r2_score(predicted, target_in_class),
-                       mean_squared_error(predicted, target_in_class)))
+                      (cls, chn, r2_score(predicted, target_in_class[:, chn]),
+                       mean_squared_error(predicted, target_in_class[:, chn])))
         print('All done')
 
     def test(self, test_feature, true_label=None, true_responses=None):
@@ -155,10 +158,10 @@ class SVRCascade:
         index_array = np.array([i for i in range(test_feature.shape[0])])
         reverse_index = []
         predicted_class = []
-        for cls in range(self.num_classes):
+        for cls_name, cls in self.class_map.items():
             feature_in_class = feature_cv[labels == cls, :]
-            predicted_in_class = np.empty([feature_in_class.shape[0], self.num_channels])
-            if feature_in_class.shape[0] == 0:
+            predicted_in_class = np.zeros([feature_in_class.shape[0], self.num_channels])
+            if feature_in_class.shape[0] == 0 or cls_name == 'transition':
                 predicted_class.append(predicted_in_class)
                 reverse_index.append(index_array[labels == cls])
                 continue
@@ -168,10 +171,10 @@ class SVRCascade:
             predicted_class.append(predicted_in_class)
             reverse_index.append(index_array[labels == cls])
         if true_responses is not None:
-            for cls in range(self.num_classes):
+            for cls_name, cls in self.class_map:
                 # We store the error in both R2 score and MSE score
                 true_in_class = true_responses[labels == cls, :]
-                if true_in_class.shape[0] == 0:
+                if true_in_class.shape[0] == 0 or cls_name == 'transition':
                     continue
                 for chn in range(self.num_channels):
                     r2 = r2_score(true_in_class[:, chn], predicted_class[cls][:, chn])
@@ -224,10 +227,10 @@ def load_model_from_file(path, suffix=''):
     return model
 
 
-def get_best_option(train_feature, train_label, train_response, svm_search_dict=None, svr_search_dict=None,
+def get_best_option(train_feature, train_label, class_map, train_response, svm_search_dict=None, svr_search_dict=None,
                     n_split=3, n_jobs=6, verbose=3):
     if svm_search_dict is None:
-        svm_search_dict = {'C': [0.1, 1.0, 10.0]}
+        svm_search_dict = {'C': [1.0, 10.0]}
 
     # First find best parameters for the classifier
     svm_grid_searcher = GridSearchCV(svm.SVC(), svm_search_dict, cv=n_split, n_jobs=n_jobs, verbose=verbose)
@@ -240,23 +243,25 @@ def get_best_option(train_feature, train_label, train_response, svm_search_dict=
     svm_option.C = svm_best_param['C']
     svm_option.gamma = 1. / train_feature.shape[1]
     if svr_search_dict is None:
-        svr_search_dict = {'C': [0.1, 1.0, 10.0],
+        svr_search_dict = {'C': [1.0, 10.0],
                            'epsilon': [0.001, 0.01]}
     svr_options = []
     num_classes = max(train_label) + 1
+    assert num_classes == len(class_map)
     num_channels = train_response.shape[1]
-    for cls in range(num_classes):
+    for cls_name, cls in class_map.items():
         for chn in range(num_channels):
-            svr_grid_searcher = GridSearchCV(svm.SVR(), svr_search_dict, cv=n_split,
-                                             scoring='neg_mean_squared_error', n_jobs=n_jobs, verbose=verbose)
-            svr_grid_searcher.fit(train_feature[train_label == cls, :], train_response[train_label == cls, chn])
-            best_svr_param = svr_grid_searcher.best_params_
             svr_option = SVMOption()
             svr_option.svm_type = cv2.ml.SVM_EPS_SVR
             svr_option.kernel_type = cv2.ml.SVM_RBF
-            svr_option.C = best_svr_param['C']
-            svr_option.e = best_svr_param['epsilon']
             svr_option.gamma = 1. / train_feature.shape[1]
+            if cls_name is not 'transition':
+                svr_grid_searcher = GridSearchCV(svm.SVR(), svr_search_dict, cv=n_split,
+                                                 scoring='neg_mean_squared_error', n_jobs=n_jobs, verbose=verbose)
+                svr_grid_searcher.fit(train_feature[train_label == cls, :], train_response[train_label == cls, chn])
+                best_svr_param = svr_grid_searcher.best_params_
+                svr_option.C = best_svr_param['C']
+                svr_option.e = best_svr_param['epsilon']
             svr_options.append(svr_option)
     print('All done')
     return SVRCascadeOption(num_classes, num_channels, svm_option, svr_options)
@@ -349,7 +354,7 @@ if __name__ == '__main__':
     print('Data loaded. Total number of samples: ', feature_all.shape[0])
 
     for key, value in class_map.items():
-        print('%d samples in %s' % (len(label_all[label_all==value]), key))
+        print('%d samples in %s(label %d)' % (len(label_all[label_all==value]), key, value))
 
     best_option = SVRCascadeOption()
     if args.option:
@@ -357,7 +362,8 @@ if __name__ == '__main__':
         print('Options loaded from file: ', args.option)
     else:
         print('No option file is provided, running grid search')
-        best_option = get_best_option(feature_all, label_all, responses_all, n_split=args.cv)
+        best_option = get_best_option(feature_all, label_all, class_map, responses_all, n_split=args.cv)
+        best_option.write_to_file(args.output_path + '/option.txt')
     model = SVRCascade(best_option, class_map)
     model.train(feature_all, label_all, responses_all)
 
