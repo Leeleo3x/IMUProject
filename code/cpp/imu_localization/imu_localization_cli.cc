@@ -76,11 +76,11 @@ int main(int argc, char **argv) {
   } else {
     LOG(INFO) << "Use rotation vector";
     orientation = dataset.GetRotationVector();
-    Eigen::Quaterniond rotor;
-    rotor.setIdentity();
-//    for (int i=0; i < orientation.size(); i += 1000){
-//      orientation[i] = rotor * orientation[i];
-//    }
+    Eigen::Quaterniond rotor = IMUProject::OrientationFromMagnet(gravity[0], magnet[0]);
+    // Eigen::AngleAxisd rotor(2, Eigen::Vector3d(0, 0, 1));
+    for (int i=0; i < orientation.size(); ++i){
+      orientation[i] = rotor * orientation[i];
+    }
   }
 
   Eigen::Vector3d traj_color(0, 0, 255);
@@ -198,11 +198,13 @@ int main(int argc, char **argv) {
   }else{
     // Adjust the rotation vector based on the gravity vector and magnetometer of the first frame
     Eigen::Quaterniond rot_from_gravity_magnet = IMUProject::OrientationFromGravityMegnet(gravity[0], magnet[0]);
-    Eigen::Quaterniond rotor = orientation[0].inverse() * rot_from_gravity_magnet;
-    printf("Rotor: (%f, %f, %f, %f)\n", rotor.w(), rotor.x(), rotor.y(), rotor.z());
-    for (int i=0; i<orientation.size(); ++i){
-      output_orientation[i] = rotor * output_orientation[i];
-    }
+    Eigen::Quaterniond rotor = rot_from_gravity_magnet * orientation[0].conjugate();
+    // Eigen::Quaterniond rotor = output_orientation[0].conjugate();
+//    printf("Rotor: (%f, %f, %f, %f)\n", rotor.w(), rotor.x(), rotor.y(), rotor.z());
+//    for (int i=0; i<orientation.size(); ++i){
+//      output_positions[i] = rotor * output_positions[i];
+//      output_orientation[i] = rotor * output_orientation[i];
+//    }
   }
 
   // Create output directory
