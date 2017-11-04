@@ -15,6 +15,8 @@ sys.path.append('/Users/yanhang/Documents/research/IMUProject/code/python')
 import speed_regression.training_data as td
 
 
+ignore_class = 'transition'
+
 class SVMOption:
     def __init__(self, svm_type=cv2.ml.SVM_C_SVC, kernel_type=cv2.ml.SVM_RBF, degree=1,
                  gamma=1, C=5, e=0.01, max_iter=10000):
@@ -136,7 +138,8 @@ class SVRCascade:
         for cls_name, cls in self.class_map.items():
             feature_in_class = train_feature_cv[train_label == cls, :]
             target_in_class = train_response[train_label == cls, :]
-            if cls_name == 'transition':
+            # Skip models in 'transition' mode.
+            if cls_name == ignore_class:
                 continue
             for chn in range(self.num_channels):
                 rid = cls * self.num_channels + chn
@@ -156,30 +159,28 @@ class SVRCascade:
             print('Classification accuracy: ', accuracy_score(true_label, labels))
 
         index_array = np.array([i for i in range(test_feature.shape[0])])
-        reverse_index = []
-        predicted_class = []
+        reverse_index = [None for _ in self.class_map]
+        predicted_class = [None for _ in self.class_map]
         for cls_name, cls in self.class_map.items():
             feature_in_class = feature_cv[labels == cls, :]
             predicted_in_class = np.zeros([feature_in_class.shape[0], self.num_channels])
-            if feature_in_class.shape[0] == 0 or cls_name == 'transition':
-                predicted_class.append(predicted_in_class)
-                reverse_index.append(index_array[labels == cls])
-                continue
-            for chn in range(self.num_channels):
-                rid = cls * self.num_channels + chn
-                predicted_in_class[:, chn] = self.regressors[rid].predict(feature_in_class)[1].ravel()
-            predicted_class.append(predicted_in_class)
-            reverse_index.append(index_array[labels == cls])
+            if feature_in_class.shape[0] > 0 and cls_name != ignore_class:
+                for chn in range(self.num_channels):
+                    rid = cls * self.num_channels + chn
+                    predicted_in_class[:, chn] = self.regressors[rid].predict(feature_in_class)[1].ravel()
+            predicted_class[cls] = predicted_in_class
+            reverse_index[cls] = index_array[labels == cls]
         if true_responses is not None:
-            for cls_name, cls in self.class_map:
-                # We store the error in both R2 score and MSE score
+            for cls_name, cls in self.class_map.items():
+                if cls_name == ignore_class:
+                    continue
                 true_in_class = true_responses[labels == cls, :]
-                if true_in_class.shape[0] == 0 or cls_name == 'transition':
+                if true_in_class.shape[0] == 0:
                     continue
                 for chn in range(self.num_channels):
-                    r2 = r2_score(true_in_class[:, chn], predicted_class[cls][:, chn])
+                    # r2 = r2_score(true_in_class[:, chn], predicted_class[cls][:, chn])
                     mse = mean_squared_error(true_in_class[:, chn], predicted_class[cls][:, chn])
-                    print('Error for class %d, channel %d: %f(R2), %f(MSE)' % (cls, chn, r2, mse))
+                    print('Error for class %d, channel %d: %f(MSE)' % (cls, chn, mse))
         predicted_all = np.empty([test_feature.shape[0], self.num_channels])
         for cls in range(self.num_classes):
             predicted_all[reverse_index[cls], :] = predicted_class[cls]
@@ -202,7 +203,10 @@ def write_model_to_file(path, model, suffix=''):
         for k, v in class_map.items():
             f.write('{:s} {:d}\n'.format(k, v))
     model.classifier.save(path + '/classifier{}.yaml'.format(suffix))
-    for cls in range(model.num_classes):
+    for cls_name, cls in model.class_map.items():
+        # Skip models in 'transition' mode.
+        if cls_name == ignore_class:
+            continue
         for chn in range(model.num_channels):
             model.regressors[cls * model.num_channels + chn].save(path +
                                                                   '/regressor{}_{}_{}.yaml'.format(suffix, cls, chn))
@@ -220,7 +224,10 @@ def load_model_from_file(path, suffix=''):
             class_map[line[0]] = int(line[1])
     model = SVRCascade(options, class_map)
     model.classifier = cv2.ml.SVM_load(path + '/classifier{}.yaml'.format(suffix))
-    for cls in range(options.num_classes):
+    for cls_name, cls in class_map.items():
+        # Skip models in 'transition' mode.
+        if cls_name == ignore_class:
+            continue
         for chn in range(options.num_channels):
             rid = cls * options.num_channels + chn
             model.regressors[rid] = cv2.ml.SVM_load(path + '/regressor{}_{}_{}.yaml'.format(suffix, cls, chn))
@@ -255,7 +262,7 @@ def get_best_option(train_feature, train_label, class_map, train_response, svm_s
             svr_option.svm_type = cv2.ml.SVM_EPS_SVR
             svr_option.kernel_type = cv2.ml.SVM_RBF
             svr_option.gamma = 1. / train_feature.shape[1]
-            if cls_name is not 'transition':
+            if cls_name is not ignore_class:
                 svr_grid_searcher = GridSearchCV(svm.SVR(), svr_search_dict, cv=n_split,
                                                  scoring='neg_mean_squared_error', n_jobs=n_jobs, verbose=verbose)
                 svr_grid_searcher.fit(train_feature[train_label == cls, :], train_response[train_label == cls, chn])
