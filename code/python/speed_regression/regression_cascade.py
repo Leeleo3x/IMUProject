@@ -9,6 +9,7 @@ from sklearn.metrics import mean_squared_error
 from sklearn.metrics import accuracy_score
 from sklearn import svm
 from sklearn.model_selection import GridSearchCV
+from sklearn.model_selection import train_test_split
 
 sys.path.append('/home/yanhang/Documents/research/IMUProject/code/python')
 sys.path.append('/Users/yanhang/Documents/research/IMUProject/code/python')
@@ -182,14 +183,13 @@ class SVRCascade:
                     mse = mean_squared_error(true_in_class[:, chn], predicted_class[cls][:, chn])
                     print('Error for class %d, channel %d: %f(MSE)' % (cls, chn, mse))
         predicted_all = np.empty([test_feature.shape[0], self.num_channels])
-        for cls in range(self.num_classes):
+        for cls_name, cls in self.class_map.items():
             predicted_all[reverse_index[cls], :] = predicted_class[cls]
 
         if true_responses is not None:
             for chn in range(self.num_channels):
-                r2 = r2_score(true_responses[:, chn], predicted_all[:, chn])
                 mse = mean_squared_error(true_responses[:, chn], predicted_all[:, chn])
-                print('Overall regression error for channel %d: %f(R2), %f(MSE)' % (chn, r2, mse))
+                print('Overall regression error for channel %d: %f(MSE)' % (chn, mse))
         return labels, predicted_all
 
 
@@ -237,7 +237,7 @@ def load_model_from_file(path, suffix=''):
 def get_best_option(train_feature, train_label, class_map, train_response, svm_search_dict=None, svr_search_dict=None,
                     n_split=3, n_jobs=6, verbose=3):
     if svm_search_dict is None:
-        svm_search_dict = {'C': [1.0, 10.0]}
+        svm_search_dict = {'C': [1.0, 10.0, 100.0]}
 
     # First find best parameters for the classifier
     svm_grid_searcher = GridSearchCV(svm.SVC(), svm_search_dict, cv=n_split, n_jobs=n_jobs, verbose=verbose)
@@ -272,23 +272,6 @@ def get_best_option(train_feature, train_label, class_map, train_response, svm_s
             svr_options.append(svr_option)
     print('All done')
     return SVRCascadeOption(num_classes, num_channels, svm_option, svr_options)
-
-
-def get_best_option_analytical(train_feature, train_label, train_response):
-    num_classes = max(train_label) + 1
-    num_channels = train_response.shape[1]
-    svr_options = []
-    for cls in range(num_classes):
-        train_in_class = train_feature[train_label == cls, :]
-        for chn in range(num_channels):
-            response_in_class = train_response[train_label == cls, chn]
-            mean_response = np.mean(response_in_class)
-            dev_response = np.std(response_in_class)
-            svr_option = SVMOption()
-            svr_option.svm_type = cv2.ml.SVM_EPS_SVR
-            svr_option.kernel_type = cv2.ml.SVM_RBF
-            svr_option.C = max(abs(mean_response + 3 * dev_response), abs(mean_response - 3 * dev_response))
-            pass
 
 
 def load_datalist(path, option, class_map=None):
@@ -341,27 +324,77 @@ if __name__ == '__main__':
     import argparse
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('list')
+    parser.add_argument('--list', default=None)
+    parser.add_argument('--train_test_path', default=None)
     parser.add_argument('--output_path', default=None, type=str)
     parser.add_argument('--subsample', default=1, type=int)
     parser.add_argument('--step_size', default=10, type=int)
+    parser.add_argument('--train_ratio', default=1.0, type=float)
     parser.add_argument('--cv', default=3, type=int)
     parser.add_argument('--option', default=None, type=str)
     args = parser.parse_args()
 
-    option = td.TrainingDataOption()
-    option.sample_step_ = args.step_size
-    feature_all, label_all, responses_all, class_map = load_datalist(path=args.list, option=option)
-    responses_all = responses_all[:, [0, 2]]
+    load_from_list = True
+    data_loaded = False
+    feature_train, label_train, responses_train = None, None, None
+    feature_test, label_test, responses_test = None, None, None
+    class_map = {}
 
-    feature_all = feature_all[0:-1:args.subsample]
-    label_all = label_all[0:-1:args.subsample]
-    responses_all = responses_all[0:-1:args.subsample]
+    if args.train_test_path:
+        if os.path.exists(args.train_test_path + '/train.txt') and os.path.exists(args.train_test_path + '/test.txt')\
+                and os.path.exists(args.train_test_path + '/class_map.txt'):
+            print('Loading training set from ', args.train_test_path + '/train.txt')
+            train_all = np.genfromtxt(args.train_test_path + '/train.txt')
+            print('Loading testing set from ', args.train_test_path + '/test.txt')
+            test_all = np.genfromtxt(args.train_test_path + '/test.txt')
+            feature_train, label_train, responses_train = train_all[:, :-3], train_all[:, -3], train_all[:, -2:]
+            feature_test, label_test, responses_test = test_all[:, :-3], test_all[:, -3], test_all[:, -2:]
+            with open(args.train_test_path + '/class_map.txt') as f:
+                num_classes = int(f.readline().strip())
+                for i in range(num_classes):
+                    line = f.readline().strip().split()
+                    class_map[line[0]] = int(line[1])
+            load_from_list = False
+            data_loaded = True
+    if load_from_list and args.list:
+        option = td.TrainingDataOption()
+        option.sample_step_ = args.step_size
+        feature_all, label_all, responses_all, class_map = load_datalist(path=args.list, option=option)
+        responses_all = responses_all[:, [0, 2]]
 
-    print('Data loaded. Total number of samples: ', feature_all.shape[0])
+        print('Data loaded. Total number of samples: ', feature_all.shape[0])
 
-    for key, value in class_map.items():
-        print('%d samples in %s(label %d)' % (len(label_all[label_all==value]), key, value))
+        for key, value in class_map.items():
+            print('%d samples in %s(label %d)' % (len(label_all[label_all==value]), key, value))
+
+        # Combine label and response to a single array to simplify the splitting process.
+        target_temp = np.concatenate([label_all[:, None], responses_all], axis=1)
+        feature_train, feature_test, target_train, target_test = train_test_split(feature_all, target_temp,
+                                                                                  train_size=args.train_ratio)
+        print('Randomly splitting the dataset to %d/%d samples for training/testing.' %
+              (feature_train.shape[0], feature_test.shape[0]))
+        label_train, responses_train = target_train[:, 0], target_train[:, 1:]
+        label_test, responses_test = target_test[:, 0], target_test[:, 1:]
+        data_loaded = True
+        if args.train_test_path:
+            if not os.path.exists(args.train_test_path):
+                os.makedirs(args.train_test_path)
+            train_all = np.concatenate([feature_train, label_train[:, None], responses_train], axis=1)
+            test_all = np.concatenate([feature_test, label_test[:, None], responses_test], axis=1)
+            np.savetxt(args.train_test_path + '/train.txt', train_all)
+            np.savetxt(args.train_test_path + '/test.txt', test_all)
+            with open(args.train_test_path + '/class_map.txt', 'w') as f:
+                f.write('%d\n' % len(class_map))
+                for k, v in class_map.items():
+                    f.write('{:s} {:d}\n'.format(k, v))
+            print('Training/testing set written to ' + args.train_test_path)
+    if not data_loaded:
+        raise ValueError('Both data list and train/test directory are invalid')
+
+    if args.subsample > 1:
+        feature_train = feature_train[0:-1:args.subsample]
+        label_train = label_train[0:-1:args.subsample]
+        responses_train = responses_train[0:-1:args.subsample]
 
     best_option = SVRCascadeOption()
     if args.option:
@@ -369,10 +402,13 @@ if __name__ == '__main__':
         print('Options loaded from file: ', args.option)
     else:
         print('No option file is provided, running grid search')
-        best_option = get_best_option(feature_all, label_all, class_map, responses_all, n_split=args.cv)
-        best_option.write_to_file(args.output_path + '/option.txt')
+        best_option = get_best_option(feature_train, label_train, class_map, responses_train, n_split=args.cv)
     model = SVRCascade(best_option, class_map)
-    model.train(feature_all, label_all, responses_all)
+    model.train(feature_train, label_train.astype(np.int32), responses_train)
 
     if args.output_path:
         write_model_to_file(args.output_path, model)
+
+    if label_test.shape[0] > 0:
+        print('Running trained model on testing set:')
+        model.test(feature_test, label_test.astype(np.int32), responses_test)
