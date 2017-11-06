@@ -16,7 +16,7 @@
 #include "utility/utility.h"
 #include "utility/stlplus3/file_system.hpp"
 
-DEFINE_string(model_path, "../../../../models/svr_cascade1023", "Path to model");
+DEFINE_string(model_path, "../../../../models/svr_cascade1105", "Path to model");
 DEFINE_string(mapinfo_path, "default", "path to map info");
 DEFINE_int32(log_interval, 1000, "logging interval");
 DEFINE_string(color, "blue", "color");
@@ -27,10 +27,10 @@ DEFINE_double(weight_ls, 1.0, "The weight parameter for the local speed. Larger 
 DEFINE_string(suffix, "full", "suffix");
 DEFINE_string(preset, "none", "preset mode");
 
-DEFINE_bool(register_to_reference_global, false, "If the ground truth trajectory is provided and this term is set"
+DEFINE_bool(register_to_reference_global, true, "If the ground truth trajectory is provided and this term is set"
     " to true, a global transformation will be estimated that aligns the start portion of the estimated trajectory "
     "to the ground truth.");
-DEFINE_bool(register_start_portion_2d, false,
+DEFINE_bool(register_start_portion_2d, true,
             "If set to true, estimate a 2D global transformation that aligns the start portion of the estimated "
                 "trajector with the ground truth. Only useful with FLAGS_estimate_global_transformation is true.");
 DEFINE_int32(start_portion_length, 2000, "The length (in frames) of the start portion. These frames will be used to "
@@ -77,7 +77,6 @@ int main(int argc, char **argv) {
     LOG(INFO) << "Use rotation vector";
     orientation = dataset.GetRotationVector();
     Eigen::Quaterniond rotor = IMUProject::OrientationFromMagnet(gravity[0], magnet[0]);
-    // Eigen::AngleAxisd rotor(2, Eigen::Vector3d(0, 0, 1));
     for (int i=0; i < orientation.size(); ++i){
       orientation[i] = rotor * orientation[i];
     }
@@ -157,28 +156,28 @@ int main(int argc, char **argv) {
 
   std::vector<Eigen::Vector3d> output_positions = trajectory.GetPositions();
   std::vector<Eigen::Quaterniond> output_orientation = trajectory.GetOrientations();
-  if (FLAGS_register_to_reference_global){
+  if (FLAGS_register_to_reference_global) {
     printf("Estimating global transformation\n");
-    const std::vector<Eigen::Vector3d>& gt_positions = dataset.GetPosition();
+    const std::vector<Eigen::Vector3d> &gt_positions = dataset.GetPosition();
     Eigen::Matrix4d global_transform;
     Eigen::Matrix3d global_rotation;
     Eigen::Vector3d global_translation;
     IMUProject::EstimateTransformation(output_positions, gt_positions, &global_transform, &global_rotation,
                                        &global_translation);
-    for (int i=0; i<output_positions.size(); ++i){
+    for (int i = 0; i < output_positions.size(); ++i) {
       output_positions[i] = global_rotation * output_positions[i] + global_translation;
       output_orientation[i] = global_rotation * output_orientation[i];
     }
 
-    if (FLAGS_register_start_portion_2d){
-      if (FLAGS_start_portion_length < 0){
+    if (FLAGS_register_start_portion_2d) {
+      if (FLAGS_start_portion_length < 0) {
         FLAGS_start_portion_length = static_cast<int>(output_positions.size());
       }
       printf("Registring start portion. Length: %d\n", FLAGS_start_portion_length);
       CHECK_GT(FLAGS_start_portion_length, 3) << "The start portion length must be larger than 3";
       std::vector<Eigen::Vector2d> source;
       std::vector<Eigen::Vector2d> target;
-      for (int i=0; i<FLAGS_start_portion_length; ++i){
+      for (int i = 0; i < FLAGS_start_portion_length; ++i) {
         source.push_back(output_positions[i].block<2, 1>(0, 0));
         target.push_back(gt_positions[i].block<2, 1>(0, 0));
       }
@@ -188,23 +187,13 @@ int main(int argc, char **argv) {
       IMUProject::EstimateTransformation<2>(source, target, &transform_2d, &rotation_2d, &translation_2d);
       Eigen::Matrix3d rotation_2d_as_3d = Eigen::Matrix3d::Identity();
       rotation_2d_as_3d.block<2, 2>(0, 0) = rotation_2d;
-      for (int i=0; i<output_positions.size(); ++i){
+      for (int i = 0; i < output_positions.size(); ++i) {
         Eigen::Vector2d transformed = rotation_2d * output_positions[i].block<2, 1>(0, 0) + translation_2d;
         output_positions[i][0] = transformed[0];
         output_positions[i][1] = transformed[1];
         output_orientation[i] = rotation_2d_as_3d * output_orientation[i];
       }
     }
-  }else{
-    // Adjust the rotation vector based on the gravity vector and magnetometer of the first frame
-    Eigen::Quaterniond rot_from_gravity_magnet = IMUProject::OrientationFromGravityMegnet(gravity[0], magnet[0]);
-    Eigen::Quaterniond rotor = rot_from_gravity_magnet * orientation[0].conjugate();
-    // Eigen::Quaterniond rotor = output_orientation[0].conjugate();
-//    printf("Rotor: (%f, %f, %f, %f)\n", rotor.w(), rotor.x(), rotor.y(), rotor.z());
-//    for (int i=0; i<orientation.size(); ++i){
-//      output_positions[i] = rotor * output_positions[i];
-//      output_orientation[i] = rotor * output_orientation[i];
-//    }
   }
 
   // Create output directory
@@ -311,8 +300,8 @@ int main(int argc, char **argv) {
 
     const double pixel_length = scale_length / (sp2 - sp1).norm();
 
-    IMUProject::TrajectoryOverlay(pixel_length, start_pix, op2 - op1, output_positions,
-                                  Eigen::Vector3d(255, 0, 0), map_img);
+//    IMUProject::TrajectoryOverlay(pixel_length, start_pix, op2 - op1, output_positions,
+//                                  Eigen::Vector3d(255, 0, 0), map_img);
 
     IMUProject::TrajectoryOverlay(pixel_length, start_pix, op2 - op1, dataset.GetPosition(),
                                   Eigen::Vector3d(0, 0, 255), map_img);

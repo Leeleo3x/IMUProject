@@ -94,7 +94,6 @@ int IMUTrajectory::RegressSpeed(const int end_ind) {
     const double ls_z = regressed[1];
 
     constraint_ind_.push_back(i);
-
     // The forward direction is defined in the stabilized IMU frame, therefore no gravity compensation is needed.
     Eigen::Vector3d forward_dir(0, 0, -1);
 
@@ -127,6 +126,7 @@ void IMUTrajectory::RunOptimization(const int start_id, const int N) {
   std::vector<double> bx, by, bz;
 
   std::vector<int> cur_constraint_id;
+  std::vector<int> cur_labels;
   std::vector<Eigen::Vector3d> cur_local_speed;
 
   Eigen::Vector3d cur_init_speed;

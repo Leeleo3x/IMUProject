@@ -113,10 +113,17 @@ class IMUTrajectory {
                                      std::vector<double> &bx, std::vector<double> &by, std::vector<double> &bz) {
     CHECK_GE(constraint_ind_.size(), kCon);
 
+    std::vector<double> weight_ls(kCon, option_.weight_ls);
+    for (int i=0; i<kCon; ++i){
+      if (local_speed[i][0] > kMaxSpeed || local_speed[i][1] > kMaxSpeed){
+        weight_ls[i] = 0.0;
+      }
+    }
+
     FunctorType *functor = new FunctorType(&ts_[start_id], N, &linacce_[start_id],
                                            &orientation_[start_id], &R_GW_[start_id],
                                            constraint_ind, local_speed, init_speed,
-                                           option_.weight_ls, option_.weight_vs);
+                                           weight_ls.data(), option_.weight_vs);
     bx.resize((size_t) kVar, 0.0);
     by.resize((size_t) kVar, 0.0);
     bz.resize((size_t) kVar, 0.0);
@@ -203,6 +210,9 @@ class IMUTrajectory {
 
   static constexpr int kInitCapacity_ = 10000;
 
+  // If the the regressed speed exceeds this value, set the "weight_ls" for that constraint to 0.
+  static constexpr double kMaxSpeed = 100;
+
   static const Eigen::Vector3d local_gravity_dir_;
 
  private:
@@ -217,6 +227,7 @@ class IMUTrajectory {
   std::vector<Eigen::Vector3d> position_;
 
   std::vector<int> constraint_ind_;
+  std::vector<int> labels_;
   std::vector<Eigen::Vector3d> local_speed_;
   int last_constraint_ind_;
 

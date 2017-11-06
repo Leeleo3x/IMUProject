@@ -65,6 +65,8 @@ class SVRCascade: public ModelWrapper{
   }
   SVRCascade(const SVRCascade& model) = delete;
   bool operator = (const SVRCascade& model) = delete;
+
+  const static std::string kIgnoreLabel_;
  private:
   SVRCascadeOption option_;
 

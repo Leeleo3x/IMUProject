@@ -339,14 +339,16 @@ if __name__ == '__main__':
     feature_train, label_train, responses_train = None, None, None
     feature_test, label_test, responses_test = None, None, None
     class_map = {}
-
+    train_file_path, test_file_path = None, None
     if args.train_test_path:
-        if os.path.exists(args.train_test_path + '/train.txt') and os.path.exists(args.train_test_path + '/test.txt')\
-                and os.path.exists(args.train_test_path + '/class_map.txt'):
-            print('Loading training set from ', args.train_test_path + '/train.txt')
-            train_all = np.genfromtxt(args.train_test_path + '/train.txt')
-            print('Loading testing set from ', args.train_test_path + '/test.txt')
-            test_all = np.genfromtxt(args.train_test_path + '/test.txt')
+        train_file_path = args.train_test_path + '/train.npy'
+        test_file_path = args.train_test_path + '/test.npy'
+        if os.path.exists(train_file_path) and os.path.exists(test_file_path) and os.path.exists(
+                        args.train_test_path + '/class_map.txt'):
+            print('Loading training set from ', train_file_path)
+            train_all = np.load(train_file_path)
+            print('Loading testing set from ', test_file_path)
+            test_all = np.load(test_file_path)
             feature_train, label_train, responses_train = train_all[:, :-3], train_all[:, -3], train_all[:, -2:]
             feature_test, label_test, responses_test = test_all[:, :-3], test_all[:, -3], test_all[:, -2:]
             with open(args.train_test_path + '/class_map.txt') as f:
@@ -381,8 +383,8 @@ if __name__ == '__main__':
                 os.makedirs(args.train_test_path)
             train_all = np.concatenate([feature_train, label_train[:, None], responses_train], axis=1)
             test_all = np.concatenate([feature_test, label_test[:, None], responses_test], axis=1)
-            np.savetxt(args.train_test_path + '/train.txt', train_all)
-            np.savetxt(args.train_test_path + '/test.txt', test_all)
+            np.save(train_file_path, train_all)
+            np.save(test_file_path, test_all)
             with open(args.train_test_path + '/class_map.txt', 'w') as f:
                 f.write('%d\n' % len(class_map))
                 for k, v in class_map.items():
@@ -396,18 +398,24 @@ if __name__ == '__main__':
         label_train = label_train[0:-1:args.subsample]
         responses_train = responses_train[0:-1:args.subsample]
 
-    best_option = SVRCascadeOption()
-    if args.option:
-        best_option.load_from_file(args.option)
-        print('Options loaded from file: ', args.option)
-    else:
-        print('No option file is provided, running grid search')
-        best_option = get_best_option(feature_train, label_train, class_map, responses_train, n_split=args.cv)
-    model = SVRCascade(best_option, class_map)
-    model.train(feature_train, label_train.astype(np.int32), responses_train)
+    print('Headings of feature_test')
+    print(feature_test[:10, :10])
+    print(feature_train[:10, :10])
+    # best_option = SVRCascadeOption()
+    # if args.option:
+    #     best_option.load_from_file(args.option)
+    #     print('Options loaded from file: ', args.option)
+    # else:
+    #     print('No option file is provided, running grid search')
+    #     best_option = get_best_option(feature_train, label_train, class_map, responses_train, n_split=args.cv)
+    # model = SVRCascade(best_option, class_map)
+    # model.train(feature_train, label_train.astype(np.int32), responses_train)
 
-    if args.output_path:
-        write_model_to_file(args.output_path, model)
+    print('Loading')
+    model = load_model_from_file(args.output_path)
+
+    # if args.output_path:
+    #     write_model_to_file(args.output_path, model)
 
     if label_test.shape[0] > 0:
         print('Running trained model on testing set:')

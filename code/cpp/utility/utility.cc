@@ -24,7 +24,7 @@ void TrajectoryOverlay(const double pixel_length, const Eigen::Vector2d &sp, con
   for (const auto &pos: positions) {
     Eigen::Vector3d new_pos = rotor * Eigen::Vector3d(pos[0], -pos[1], pos[2]);
     Eigen::Vector2d pix_loc = (new_pos / pixel_length).block<2, 1>(0, 0) + sp;
-    cv::circle(map, cv::Point(pix_loc[0], pix_loc[1]), 2, cv::Scalar(color[0], color[1], color[2]));
+    cv::circle(map, cv::Point(pix_loc[0], pix_loc[1]), 1, cv::Scalar(color[0], color[1], color[2]));
   }
 }
 
