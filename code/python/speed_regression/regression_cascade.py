@@ -398,24 +398,18 @@ if __name__ == '__main__':
         label_train = label_train[0:-1:args.subsample]
         responses_train = responses_train[0:-1:args.subsample]
 
-    print('Headings of feature_test')
-    print(feature_test[:10, :10])
-    print(feature_train[:10, :10])
-    # best_option = SVRCascadeOption()
-    # if args.option:
-    #     best_option.load_from_file(args.option)
-    #     print('Options loaded from file: ', args.option)
-    # else:
-    #     print('No option file is provided, running grid search')
-    #     best_option = get_best_option(feature_train, label_train, class_map, responses_train, n_split=args.cv)
-    # model = SVRCascade(best_option, class_map)
-    # model.train(feature_train, label_train.astype(np.int32), responses_train)
+    best_option = SVRCascadeOption()
+    if args.option:
+        best_option.load_from_file(args.option)
+        print('Options loaded from file: ', args.option)
+    else:
+        print('No option file is provided, running grid search')
+        best_option = get_best_option(feature_train, label_train, class_map, responses_train, n_split=args.cv)
+    model = SVRCascade(best_option, class_map)
+    model.train(feature_train, label_train.astype(np.int32), responses_train)
 
-    print('Loading')
-    model = load_model_from_file(args.output_path)
-
-    # if args.output_path:
-    #     write_model_to_file(args.output_path, model)
+    if args.output_path:
+        write_model_to_file(args.output_path, model)
 
     if label_test.shape[0] > 0:
         print('Running trained model on testing set:')
