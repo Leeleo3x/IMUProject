@@ -114,11 +114,11 @@ class IMUTrajectory {
     CHECK_GE(constraint_ind_.size(), kCon);
 
     std::vector<double> weight_ls(kCon, option_.weight_ls);
-//    for (int i=0; i<kCon; ++i){
-//      if (local_speed[i][0] > kMaxSpeed || local_speed[i][1] > kMaxSpeed){
-//        weight_ls[i] = 0.0;
-//      }
-//    }
+    for (int i=0; i<kCon; ++i){
+      if (local_speed[i].norm() > kMaxSpeed){
+        weight_ls[i] = std::numeric_limits<double>::epsilon();
+      }
+    }
 
     FunctorType *functor = new FunctorType(&ts_[start_id], N, &linacce_[start_id],
                                            &orientation_[start_id], &R_GW_[start_id],

@@ -329,7 +329,7 @@ if __name__ == '__main__':
     parser.add_argument('--output_path', default=None, type=str)
     parser.add_argument('--subsample', default=1, type=int)
     parser.add_argument('--step_size', default=10, type=int)
-    parser.add_argument('--train_ratio', default=1.0, type=float)
+    parser.add_argument('--train_ratio', default=0.6, type=float)
     parser.add_argument('--cv', default=3, type=int)
     parser.add_argument('--option', default=None, type=str)
     args = parser.parse_args()
@@ -406,6 +406,7 @@ if __name__ == '__main__':
         print('No option file is provided, running grid search')
         best_option = get_best_option(feature_train, label_train, class_map, responses_train, n_split=args.cv)
     model = SVRCascade(best_option, class_map)
+    print('Sample used for training: ', feature_train.shape[0])
     model.train(feature_train, label_train.astype(np.int32), responses_train)
 
     if args.output_path:

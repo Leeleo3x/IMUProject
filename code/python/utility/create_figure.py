@@ -1,8 +1,5 @@
 import sys
 import os
-sys.path.append('/home/yanhang/Documents/research/IMUProject/code/python')
-sys.path.append('/Users/yanhang/Documents/research/IMUProject/code/python')
-
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas
@@ -10,6 +7,9 @@ import argparse
 import quaternion
 from scipy.ndimage.filters import gaussian_filter1d
 from sklearn.metrics import mean_squared_error
+
+sys.path.append('/home/yanhang/Documents/research/IMUProject/code/python')
+sys.path.append('/Users/yanhang/Documents/research/IMUProject/code/python')
 
 from speed_regression import training_data as td
 from algorithms import geometry
@@ -23,23 +23,22 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
     result_path = args.dir + '/result_' + args.id
-
     result = pandas.read_csv(result_path + '/result_'+args.id+'.csv')
-
     data_all = pandas.read_csv(args.dir + '/processed/data.csv')
 
+    # Be careful about invalid regression value belonging to "transition" model.
+    kMaxSpeed = 100
     regression_result = np.genfromtxt(result_path + '/regression_'+args.id+'.txt')
-    constraint_ind = regression_result[:, 0].astype(int)
-    local_speed = regression_result[:, 1:]
+    regressed_magnitude = np.linalg.norm(regression_result[:, 1:], axis=1)
+    regression_valid_index = regressed_magnitude < 100
+
+    constraint_ind = regression_result[regression_valid_index, 0].astype(int)
+    local_speed = regression_result[regression_valid_index, 1:]
 
     ts = result['time'].values
     ts -= ts[0]
 
     pos_res = result[['pos_x', 'pos_y', 'pos_z']].values
-    speed_res = result[['speed_x', 'speed_y', 'speed_z']].values
-    bias_res = result[['bias_x', 'bias_y', 'bias_z']].values
-
-    speed_res = gaussian_filter1d(speed_res, sigma=filter_sigma, axis=0)
 
     position_gt = data_all[['pos_x', 'pos_y', 'pos_z']].values
     orientation_gt = data_all[['ori_w', 'ori_x', 'ori_y', 'ori_z']].values
@@ -50,7 +49,6 @@ if __name__ == '__main__':
     print('Trajectory length: {:.3f}m, {:.3f}s, mean offset: {:.3f}m ({:.3f})'.format(traj_length, ts[-1] - ts[0],
           mean_offset, mean_offset / traj_length))
 
-    speed_gt = td.compute_speed(ts, position_gt)
     ls_gt = td.compute_local_speed_with_gravity(ts, position_gt, orientation_gt, gravity)
     ls_gt = gaussian_filter1d(ls_gt, sigma=30.0, axis=0)
     ls_gt = ls_gt[constraint_ind]
@@ -58,31 +56,6 @@ if __name__ == '__main__':
     print('Regression error: {:.3f}, {:.3f}'.format(
         mean_squared_error(ls_gt[:, 0], local_speed[:, 0]),
         mean_squared_error(ls_gt[:, 2], local_speed[:, 2])))
-
-    ls_const = np.zeros([constraint_ind.shape[0], 3], dtype=float)
-    ls_const[:, 2] = np.average(ls_gt[10:-10, 2], axis=0)
-    print('constrant speed:', ls_const[0, 2])
-
-    speed_gt = gaussian_filter1d(speed_gt, sigma=filter_sigma, axis=0)
-
-    linacce = data_all[['linacce_x', 'linacce_y', 'linacce_z']].values
-    directed_linacce = np.empty(linacce.shape, dtype=float)
-    for i in range(linacce.shape[0]):
-        q = quaternion.quaternion(*orientation_gt[i])
-        directed_linacce[i] = (q * quaternion.quaternion(1.0, *linacce[i]) * q.conj()).vec
-    speed_raw = np.cumsum(directed_linacce[:-1] * (ts[1:, None] - ts[:-1, None]), axis=0)
-    speed_raw = np.concatenate([np.zeros([1, 3], dtype=float), speed_raw], axis=0)
-
-    # compute speed in stabilized IMU frame
-    local_gravity_dir = np.array([0., 1., 0.])
-
-    ls_raw = np.empty([constraint_ind.shape[0], 3], dtype=float)
-    for i in range(constraint_ind.shape[0]):
-        ind = constraint_ind[i]
-        q = quaternion.quaternion(*orientation_gt[ind])
-        ls = (q.conj() * quaternion.quaternion(1.0, *speed_raw[ind]) * q).vec
-        gr = geometry.quaternion_from_two_vectors(gravity[ind], local_gravity_dir)
-        ls_raw[i] = (gr * quaternion.quaternion(1.0, *ls) * gr.conj()).vec
 
     font = {'family': 'serif', 'size': 40}
     plt.rc('font', **font)
@@ -92,22 +65,6 @@ if __name__ == '__main__':
 
     lines_imu = []
     lines_tango = []
-
-    # ylabels = ['X Speed (m/s)', 'Y Speed (m/s)']
-    # fig_gs = plt.figure('Speed', figsize=(12, 10))
-    # for i in range(0, 2):
-    #     plt.subplot(211 + i)
-    #     if i == 0:
-    #         plt.xlabel('Time(s)')
-    #     plt.ylabel(ylabels[i])
-    #     plt.locator_params(nbins=5, axis='y')
-    #     lines_imu += plt.plot(ts, speed_res[:, axes_glob[i]], 'b')
-    #     lines_raw += plt.plot(ts[1:], speed_raw[:, axes_glob[i]], 'r')
-    #     lines_tango += plt.plot(ts, speed_gt[:, axes_glob[i]], 'c')
-    # # plt.figlegend([lines_imu[-1], lines_raw[-1], lines_tango[-1]],
-    # #               {'Our method', 'Double integration', 'Tango'},
-    # #               loc='upper center', ncol=3, labelspacing=0.)
-    # fig_gs.savefig(output_path + '/fig_gs.png', bbox_inches='tight')
 
     ylabels = ['X Speed (m/s)', 'Z Speed (m/s)']
     fig_ls = plt.figure('Local speed', figsize=(24, 18))
@@ -124,16 +81,3 @@ if __name__ == '__main__':
     #plt.figlegend([lines_imu[-1], lines_tango[-1]], ['Our method', 'Tango (Ground truth)'],
     #              loc='upper center', ncol=2, labelspacing=0.)
     fig_ls.savefig(result_path + '/regression.png', bbox_inches='tight')
-
-    # fig_bias = plt.figure('Bias', figsize=(12, 10))
-    # ylabels = ['X Bias (m/s2)', 'Y Bias (m/s2)', 'Z Bias (m/s2)']
-    # for i in range(0, 3):
-    #     plt.subplot(311+i)
-    #     if i == 2:
-    #         plt.xlabel('Time (s)')
-    #     plt.ylabel(ylabels[i])
-    #     plt.locator_params(nbins=5, axis='y')
-    #     plt.plot(ts, bias_res[:, i])
-    # fig_bias.savefig(output_path + '/fig_bias.png', bbox_inches='tight')
-
-    # plt.show()
