@@ -55,12 +55,14 @@ bool SVRCascade::LoadFromFile(const std::string &path) {
   }
 
   // Load the classifier
-  classifier_ = cv::ml::SVM::load(path + "/classifier.yaml");
-  if (!classifier_.get()) {
-    LOG(ERROR) << "Can not read the classifier from " << path + "/classifier.yaml";
-    return false;
+  if (GetNumClasses() > 1) {
+    classifier_ = cv::ml::SVM::load(path + "/classifier.yaml");
+    if (!classifier_.get()) {
+      LOG(ERROR) << "Can not read the classifier from " << path + "/classifier.yaml";
+      return false;
+    }
+    LOG(INFO) << "Classifier " << path + "/classifier.yaml loaded";
   }
-  LOG(INFO) << "Classifier " << path + "/classifier.yaml loaded";
 
   regressors_.resize(GetNumChannels() * GetNumClasses());
   char buffer[128] = {};
@@ -93,7 +95,11 @@ void SVRCascade::Predict(const cv::Mat &feature, Eigen::VectorXd* response, int 
   CHECK(response) << "The provided output response is empty";
   CHECK_EQ(response->rows(), GetNumChannels());
   CHECK(label) << "The output label is empty";
-  *label = static_cast<int>(CHECK_NOTNULL(classifier_.get())->predict(feature));
+  if (GetNumClasses() > 1) {
+    *label = static_cast<int>(CHECK_NOTNULL(classifier_.get())->predict(feature));
+  } else {
+    *label = 0;
+  }
   CHECK_LT(*label, GetNumClasses()) << "The predicted label is unknown: " << *label;
   // If the label is "transition", return an impossible value (1000, 1000). This is not a good way, but it doesn't rely
   // on the label, thus is compatible with the old all-on-one model.
