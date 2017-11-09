@@ -130,12 +130,13 @@ class SVRCascade:
 
     def train(self, train_feature, train_label, train_response):
         assert train_response.shape[1] == self.num_channels
-        print('Training classifier')
         train_feature_cv = train_feature.astype(np.float32)
-        self.classifier.train(train_feature_cv, cv2.ml.ROW_SAMPLE, train_label)
-        predicted_train = self.classifier.predict(train_feature_cv)[1].ravel()
-        error_svm = accuracy_score(train_label, predicted_train)
-        print('Classifier trained. Training accuracy: %f' % error_svm)
+        if self.num_classes > 1:
+            print('Training classifier')
+            self.classifier.train(train_feature_cv, cv2.ml.ROW_SAMPLE, train_label)
+            predicted_train = self.classifier.predict(train_feature_cv)[1].ravel()
+            error_svm = accuracy_score(train_label, predicted_train)
+            print('Classifier trained. Training accuracy: %f' % error_svm)
         for cls_name, cls in self.class_map.items():
             feature_in_class = train_feature_cv[train_label == cls, :]
             target_in_class = train_response[train_label == cls, :]
@@ -155,9 +156,11 @@ class SVRCascade:
 
     def test(self, test_feature, true_label=None, true_responses=None):
         feature_cv = test_feature.astype(np.float32)
-        labels = self.classifier.predict(feature_cv)[1].ravel()
-        if true_label is not None:
-            print('Classification accuracy: ', accuracy_score(true_label, labels))
+        labels = np.zeros(feature_cv.shape[0])
+        if self.num_classes > 1:
+            labels = self.classifier.predict(feature_cv)[1].ravel()
+            if true_label is not None:
+                print('Classification accuracy: ', accuracy_score(true_label, labels))
 
         index_array = np.array([i for i in range(test_feature.shape[0])])
         reverse_index = [None for _ in self.class_map]
@@ -202,7 +205,8 @@ def write_model_to_file(path, model, suffix=''):
         f.write('%d\n' % len(model.class_map))
         for k, v in class_map.items():
             f.write('{:s} {:d}\n'.format(k, v))
-    model.classifier.save(path + '/classifier{}.yaml'.format(suffix))
+    if model.num_classes > 1:
+        model.classifier.save(path + '/classifier{}.yaml'.format(suffix))
     for cls_name, cls in model.class_map.items():
         # Skip models in 'transition' mode.
         if cls_name == ignore_class:
@@ -223,7 +227,8 @@ def load_model_from_file(path, suffix=''):
             line = f.readline().strip().split()
             class_map[line[0]] = int(line[1])
     model = SVRCascade(options, class_map)
-    model.classifier = cv2.ml.SVM_load(path + '/classifier{}.yaml'.format(suffix))
+    if len(class_map) > 1:
+        model.classifier = cv2.ml.SVM_load(path + '/classifier{}.yaml'.format(suffix))
     for cls_name, cls in class_map.items():
         # Skip models in 'transition' mode.
         if cls_name == ignore_class:
@@ -239,16 +244,17 @@ def get_best_option(train_feature, train_label, class_map, train_response, svm_s
     if svm_search_dict is None:
         svm_search_dict = {'C': [1.0, 10.0, 100.0]}
 
-    # First find best parameters for the classifier
-    svm_grid_searcher = GridSearchCV(svm.SVC(), svm_search_dict, cv=n_split, n_jobs=n_jobs, verbose=verbose)
-    svm_grid_searcher.fit(train_feature, train_label)
-    svm_best_param = svm_grid_searcher.best_params_
-    print('SVM fitted. Optimal parameters: ', svm_best_param)
     svm_option = SVMOption()
-    svm_option.svm_type = cv2.ml.SVM_C_SVC
-    svm_option.kernel_type = cv2.ml.SVM_RBF
-    svm_option.C = svm_best_param['C']
-    svm_option.gamma = 1. / train_feature.shape[1]
+    if len(class_map) > 1:
+        # First find best parameters for the classifier
+        svm_grid_searcher = GridSearchCV(svm.SVC(), svm_search_dict, cv=n_split, n_jobs=n_jobs, verbose=verbose)
+        svm_grid_searcher.fit(train_feature, train_label)
+        svm_best_param = svm_grid_searcher.best_params_
+        print('SVM fitted. Optimal parameters: ', svm_best_param)
+        svm_option.svm_type = cv2.ml.SVM_C_SVC
+        svm_option.kernel_type = cv2.ml.SVM_RBF
+        svm_option.C = svm_best_param['C']
+        svm_option.gamma = 1. / train_feature.shape[1]
     if svr_search_dict is None:
         svr_search_dict = {'C': [1.0, 10.0],
                            'epsilon': [0.001, 0.01]}
