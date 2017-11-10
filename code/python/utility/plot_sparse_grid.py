@@ -32,40 +32,43 @@ def compute_gravity_speed(ts, linacce, orientation, gravity):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('dir', type=str)
-    parser.add_argument('--id', type=str, default='regress')
+    parser.add_argument('--id', type=str, default='full')
     args = parser.parse_args()
 
     data_all = pandas.read_csv(args.dir + '/processed/data.csv')
 
     ts = data_all['time'].values / 1e09
     ts -= ts[0]
+    filter_sigma = 30.0
 
-    bias_start_id = 1
-    bias_end_id = 30
+    bias_interval = 150
+    bias_ind = np.arange(bias_interval, ts.shape[0], bias_interval)
+    bias_start_id = 15
+    bias_end_id = 21
 
-    linacce = gaussian_filter1d(data_all[['linacce_x', 'linacce_y', 'linacce_z']].values, sigma=30.0, axis=0)
+    linacce = data_all[['linacce_x', 'linacce_y', 'linacce_z']].values
     gravity = data_all[['grav_x', 'grav_y', 'grav_z']].values
     orientation = data_all[['ori_w', 'ori_x', 'ori_y', 'ori_z']].values
 
     speed_raw = compute_gravity_speed(ts, linacce, orientation, gravity)
 
-    result_all = pandas.read_csv(args.dir + '/result_' + args.id + '/result.csv')
-    constraint = np.genfromtxt(args.dir + '/result_' + args.id + '/sparse_grid_constraint.txt')
-    bias = np.genfromtxt(args.dir + '/result_' + args.id + '/sparse_grid_bias.txt')
-    corrected_linacce = gaussian_filter1d(np.genfromtxt(args.dir + '/result_' + args.id + '/corrected_linacce.txt'),
-                                          sigma=30.0, axis=0)
-    bias_ind = bias[:, 0].astype(int)
-    constraint_ind = constraint[:, 0].astype(int)
+    result_all = pandas.read_csv(args.dir + '/result_{0}/result_{0}.csv'.format(args.id))
+    regression_result = np.genfromtxt(args.dir + '/result_{0}/regression_{0}.txt'.format(args.id))
+    constraint_ind = regression_result[:, 0].astype(int)
+    constraint = regression_result[:, 1:]
+    bias = result_all[['bias_x', 'bias_y', 'bias_z']].values
+    corrected_linacce = gaussian_filter1d(linacce + bias, sigma=filter_sigma, axis=0)
+    linacce = gaussian_filter1d(linacce, sigma=filter_sigma, axis=0)
 
-    speed_corrected = compute_gravity_speed(ts, corrected_linacce[:, 1:], orientation, gravity)
+    speed_corrected = compute_gravity_speed(ts, corrected_linacce, orientation, gravity)
 
     font_config = {'family': 'serif',
-                   'size': 11}
-    linew = 1
-    markersize = 3
+                   'size': 120}
+    linew = 18
+    markersize = 100
 
     plt.rc('font', **font_config)
-    fig = plt.figure('Sparse grid', figsize=(24, 6))
+    fig = plt.figure('Sparse grid', figsize=(130, 30))
 
     glob_start_id = bias_ind[bias_start_id]
     glob_end_id = bias_ind[bias_end_id]
@@ -74,47 +77,48 @@ if __name__ == '__main__':
 
     # First draw the plot for low-frequency bias.
 
-    for i in range(3):
-        plt.subplot(321 + i * 2)
+    for i in range(1):
+        plt.subplot(121 + i * 2)
         plt.ylabel('Acceleration (m/s2)')
         plt.xlabel('Time (s)')
         x_min = min(ts[bias_ind[bias_start_id]], ts[glob_start_id]) - 0.1
         x_max = max(ts[bias_ind[bias_end_id - 1]], ts[glob_end_id]) + 0.1
         plt.xlim(x_min, x_max)
         plt.plot(ts[glob_start_id:glob_end_id], linacce[glob_start_id:glob_end_id, i], color='r', lw=linew)
-        plt.plot(ts[glob_start_id:glob_end_id], corrected_linacce[glob_start_id:glob_end_id, i+1], color='b', lw=linew)
-        plt.plot(ts[bias_ind[bias_start_id:bias_end_id]], bias[bias_start_id:bias_end_id, i+1], color=(.5, .8, .0),
-                 lw=linew, marker='o', markersize=markersize)
+        plt.plot(ts[glob_start_id:glob_end_id], corrected_linacce[glob_start_id:glob_end_id, i], color='b', lw=linew)
+        plt.plot(ts[bias_ind[bias_start_id:bias_end_id]], bias[bias_ind[bias_start_id:bias_end_id], i],
+                 color=(.5, .8, .0), lw=linew, marker='o', markersize=markersize)
     # plt.legend(['Sparse bias', 'Raw acceleration', 'Corrected acceleration'], loc='lower left')
 
     # Then draw the plot for velocity constraints.
-    con_start_id = np.where(constraint_ind > glob_start_id)[0][0] - 1
-    con_end_id = np.where(constraint_ind > glob_end_id)[0][0] + 1
+    con_start_id = max(np.where(constraint_ind > glob_start_id)[0][0] - 1, 0)
+    con_end_id = min(np.where(constraint_ind > glob_end_id)[0][0] + 1, constraint_ind.shape[0] - 1)
+    print('con_start_id: %d, con_end_id: %d' % (con_start_id, con_end_id))
 
     glob_start_id = constraint_ind[con_start_id]
     glob_end_id = constraint_ind[con_end_id]
 
-    for i in [0, 2]:
-        plt.subplot(321 + i * 2 + 1)
+    for i in [0]:
+        plt.subplot(121 + i * 2 + 1)
         plt.ylabel('Velocity (m/s)')
         plt.xlabel('Time (s)')
         x_min = min(ts[constraint_ind[con_start_id]], ts[glob_start_id]) - 0.1
         x_max = max(ts[constraint_ind[con_end_id - 1]], ts[glob_end_id]) + 0.1
         plt.xlim(x_min, x_max)
         plt.plot(ts[glob_start_id:glob_end_id], speed_raw[glob_start_id:glob_end_id, i], color='r', lw=linew)
-        plt.plot(ts[glob_start_id:glob_end_id], speed_corrected[glob_start_id:glob_end_id, i], color='b', lw=linew)
-        plt.plot(ts[constraint_ind[con_start_id:con_end_id]], constraint[con_start_id:con_end_id, i+1], color=(.8, .5, 0),
+        plt.plot(ts[glob_start_id:glob_end_id], speed_corrected[glob_start_id:glob_end_id, i] - 0.05, color='b', lw=linew)
+        plt.plot(ts[constraint_ind[con_start_id:con_end_id]], constraint[con_start_id:con_end_id, i], color=(.8, .5, 0),
                  lw=linew, marker='^', markersize=markersize)
 
-    plt.subplot(324)
-    plt.ylabel('Velocity (m/s)')
-    plt.xlabel('Time (s)')
-    plt.plot(ts[glob_start_id:glob_end_id], speed_raw[glob_start_id:glob_end_id, 2], color='r', lw=linew)
-    plt.plot(ts[glob_start_id:glob_end_id], speed_corrected[glob_start_id:glob_end_id, 2], color='b', lw=linew)
-    plt.plot(ts[constraint_ind[con_start_id:con_end_id]], np.zeros(con_end_id - con_start_id), color=(.8, .5, 0),
-             lw=linew, marker='^', markersize=markersize)
+    # plt.subplot(324)
+    # plt.ylabel('Velocity (m/s)')
+    # plt.xlabel('Time (s)')
+    # plt.plot(ts[glob_start_id:glob_end_id], speed_raw[glob_start_id:glob_end_id, 1], color='r', lw=linew)
+    # plt.plot(ts[glob_start_id:glob_end_id], speed_corrected[glob_start_id:glob_end_id, 1], color='b', lw=linew)
+    # plt.plot(ts[constraint_ind[con_start_id:con_end_id]], np.zeros(con_end_id - con_start_id), color=(.8, .5, 0),
+    #          lw=linew, marker='^', markersize=markersize)
 
     # plt.legend(['Predicted speed', 'Before correction', 'After correction'], loc='lower left')
 
-    # fig.savefig(args.dir + '/alg1.png', bbox_inches='tight')
-    plt.show()
+    fig.savefig(args.dir + '/result_{}/alg1.png'.format(args.id), bbox_inches='tight')
+    # plt.show()
