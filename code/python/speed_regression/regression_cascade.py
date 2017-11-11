@@ -242,19 +242,24 @@ def load_model_from_file(path, suffix=''):
 def get_best_option(train_feature, train_label, class_map, train_response, svm_search_dict=None, svr_search_dict=None,
                     n_split=3, n_jobs=6, verbose=3):
     if svm_search_dict is None:
-        svm_search_dict = {'C': [1.0, 10.0, 100.0]}
+        svm_search_dict = {'C': [10.0]}
 
     svm_option = SVMOption()
-    if len(class_map) > 1:
-        # First find best parameters for the classifier
-        svm_grid_searcher = GridSearchCV(svm.SVC(), svm_search_dict, cv=n_split, n_jobs=n_jobs, verbose=verbose)
-        svm_grid_searcher.fit(train_feature, train_label)
-        svm_best_param = svm_grid_searcher.best_params_
-        print('SVM fitted. Optimal parameters: ', svm_best_param)
-        svm_option.svm_type = cv2.ml.SVM_C_SVC
-        svm_option.kernel_type = cv2.ml.SVM_RBF
-        svm_option.C = svm_best_param['C']
-        svm_option.gamma = 1. / train_feature.shape[1]
+    svm_option.svm_type = cv2.ml.SVM_C_SVC
+    svm_option.kernel_type = cv2.ml.SVM_RBF
+    svm_option.C = 10.0
+    svm_option.gamma = 1. / train_feature.shape[1]
+
+    # if len(class_map) > 1:
+    #     # First find best parameters for the classifier
+    #     svm_grid_searcher = GridSearchCV(svm.SVC(), svm_search_dict, cv=n_split, n_jobs=n_jobs, verbose=verbose)
+    #     svm_grid_searcher.fit(train_feature, train_label)
+    #     svm_best_param = svm_grid_searcher.best_params_
+    #     print('SVM fitted. Optimal parameters: ', svm_best_param)
+    #     svm_option.svm_type = cv2.ml.SVM_C_SVC
+    #     svm_option.kernel_type = cv2.ml.SVM_RBF
+    #     svm_option.C = svm_best_param['C']
+    #     svm_option.gamma = 1. / train_feature.shape[1]
     if svr_search_dict is None:
         svr_search_dict = {'C': [1.0, 10.0],
                            'epsilon': [0.001, 0.01]}

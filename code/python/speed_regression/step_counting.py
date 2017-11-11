@@ -65,7 +65,7 @@ if __name__ == '__main__':
         position_from_step[i] = position_from_step[i-1] + segment
 
     # Find a transformation to align the start portion of estimated track and the ground truth track.
-    start_length = 2000
+    start_length = 2500
     _, rotation_to_gt, translation_to_gt = icp.fit_transformation(position_from_step, positions)
     position_from_step = (np.dot(rotation_to_gt, position_from_step.T) + translation_to_gt[:, None]).T
 

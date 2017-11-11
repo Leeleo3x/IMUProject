@@ -33,7 +33,7 @@ DEFINE_bool(register_to_reference_global, true, "If the ground truth trajectory 
 DEFINE_bool(register_start_portion_2d, true,
             "If set to true, estimate a 2D global transformation that aligns the start portion of the estimated "
                 "trajector with the ground truth. Only useful with FLAGS_estimate_global_transformation is true.");
-DEFINE_int32(start_portion_length, 1500, "The length (in frames) of the start portion. These frames will be used to "
+DEFINE_int32(start_portion_length, 2500, "The length (in frames) of the start portion. These frames will be used to "
     "estimate the global transformation from the estimated trajectory to the ground truth. Set to -1 to use the "
     "entire trajectory");
 
@@ -56,9 +56,6 @@ int main(int argc, char **argv) {
   // load data
   IMUProject::IMUDataset dataset(argv[1]);
 
-  // load regressor
-  std::unique_ptr<IMUProject::ModelWrapper> model(new IMUProject::SVRCascade(FLAGS_model_path));
-  LOG(INFO) << "Model " << FLAGS_model_path << " loaded";
 
   // Run the system
   const int N = (int) dataset.GetTimeStamp().size();
@@ -79,36 +76,6 @@ int main(int argc, char **argv) {
     for (int i=0; i < orientation.size(); ++i){
       orientation[i] = rotor * orientation[i];
     }
-  }
-
-  if (preset == "raw"){
-      // Write trajectory with double integration
-      vector<Eigen::Vector3d> raw_traj(dataset.GetTimeStamp().size(), dataset.GetPosition()[0]);
-      vector<Eigen::Vector3d> raw_speed(dataset.GetTimeStamp().size(), Eigen::Vector3d(0, 0, 0));
-      for (auto i = 1; i < raw_traj.size(); ++i) {
-        Eigen::Vector3d acce = orientation[i - 1] * dataset.GetLinearAcceleration()[i - 1];
-        raw_speed[i] = raw_speed[i - 1] + acce * (ts[i] - ts[i - 1]);
-        raw_traj[i] = raw_traj[i - 1] + raw_speed[i - 1] * (ts[i] - ts[i - 1]);
-        raw_traj[i][2] = 0;
-      }
-      sprintf(buffer, "%s/raw.ply", result_dir_path);
-      IMUProject::WriteToPly(std::string(buffer), ts.data(), raw_traj.data(), orientation.data(),
-                             (int) raw_traj.size(), true, Eigen::Vector3d(0, 128, 128), 0);
-
-      sprintf(buffer, "%s/result_raw.csv", result_dir_path);
-      ofstream raw_out(buffer);
-      CHECK(raw_out.is_open());
-      raw_out << ",time,pos_x,pos_y,pos_z,speed_x,speed_y,speed_z,bias_x,bias_y,bias_z" << endl;
-      for (auto i = 0; i < raw_traj.size(); ++i) {
-        const Eigen::Vector3d &pos = raw_traj[i];
-        const Eigen::Vector3d &acce = dataset.GetLinearAcceleration()[i];
-        const Eigen::Vector3d &spd = raw_speed[i];
-        sprintf(buffer, "%d,%.9f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f\n",
-                i, dataset.GetTimeStamp()[i], pos[0], pos[1], pos[2], spd[0], spd[1], spd[2],
-                acce[0] - linacce[i][0], acce[1] - linacce[i][1], acce[2] - linacce[i][2]);
-        raw_out << buffer;
-      }
-
   }
 
   Eigen::Vector3d traj_color(0, 0, 255);
@@ -140,7 +107,57 @@ int main(int argc, char **argv) {
     loc_option.reg_option = IMUProject::CONST;
     FLAGS_suffix = "const";
     traj_color = Eigen::Vector3d(150, 150, 0);
+  } else if (FLAGS_preset == "raw"){
+    FLAGS_suffix = "raw";
+    traj_color = Eigen::Vector3d(0, 128, 128);
   }
+
+  // Create output directory
+  char result_dir_path[128];
+  sprintf(result_dir_path, "%s/result_%s/", argv[1], FLAGS_suffix.c_str());
+  if (stlplus::file_exists(result_dir_path)) {
+    LOG(ERROR) << "Path " << result_dir_path << " is the name of an existing file.";
+    return 1;
+  }
+
+  if (!stlplus::folder_exists(result_dir_path)) {
+    LOG(INFO) << "Creating folder: " << result_dir_path;
+    CHECK(stlplus::folder_create(result_dir_path)) << "Can not create folder " << result_dir_path << " for output.";
+  }
+  if (FLAGS_preset == "raw"){
+    // Write trajectory with double integration
+    vector<Eigen::Vector3d> raw_traj(dataset.GetTimeStamp().size(), dataset.GetPosition()[0]);
+    vector<Eigen::Vector3d> raw_speed(dataset.GetTimeStamp().size(), Eigen::Vector3d(0, 0, 0));
+    for (auto i = 1; i < raw_traj.size(); ++i) {
+      Eigen::Vector3d acce = orientation[i - 1] * dataset.GetLinearAcceleration()[i - 1];
+      raw_speed[i] = raw_speed[i - 1] + acce * (ts[i] - ts[i - 1]);
+      raw_traj[i] = raw_traj[i - 1] + raw_speed[i - 1] * (ts[i] - ts[i - 1]);
+      raw_traj[i][2] = 0;
+    }
+    sprintf(buffer, "%s/result_raw.ply", result_dir_path);
+    IMUProject::WriteToPly(std::string(buffer), ts.data(), raw_traj.data(), orientation.data(),
+                           (int) raw_traj.size(), true, traj_color, 0);
+
+    sprintf(buffer, "%s/result_raw.csv", result_dir_path);
+    ofstream raw_out(buffer);
+    CHECK(raw_out.is_open());
+    raw_out << ",time,pos_x,pos_y,pos_z,speed_x,speed_y,speed_z,bias_x,bias_y,bias_z" << endl;
+    for (auto i = 0; i < raw_traj.size(); ++i) {
+      const Eigen::Vector3d &pos = raw_traj[i];
+      const Eigen::Vector3d &acce = dataset.GetLinearAcceleration()[i];
+      const Eigen::Vector3d &spd = raw_speed[i];
+      sprintf(buffer, "%d,%.9f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f\n",
+              i, dataset.GetTimeStamp()[i], pos[0], pos[1], pos[2], spd[0], spd[1], spd[2],
+              acce[0] - linacce[i][0], acce[1] - linacce[i][1], acce[2] - linacce[i][2]);
+      raw_out << buffer;
+    }
+    return 0;
+  }
+
+
+  // load regressor
+  std::unique_ptr<IMUProject::ModelWrapper> model(new IMUProject::SVRCascade(FLAGS_model_path));
+  LOG(INFO) << "Model " << FLAGS_model_path << " loaded";
 
   IMUProject::TrainingDataOption td_option;
   IMUProject::IMUTrajectory trajectory(loc_option, td_option, Eigen::Vector3d(0, 0, 0),
@@ -226,18 +243,7 @@ int main(int argc, char **argv) {
   }
 
 
-  // Create output directory
-  char result_dir_path[128];
-  sprintf(result_dir_path, "%s/result_%s/", argv[1], FLAGS_suffix.c_str());
-  if (stlplus::file_exists(result_dir_path)) {
-    LOG(ERROR) << "Path " << result_dir_path << " is the name of an existing file.";
-    return 1;
-  }
 
-  if (!stlplus::folder_exists(result_dir_path)) {
-    LOG(INFO) << "Creating folder: " << result_dir_path;
-    CHECK(stlplus::folder_create(result_dir_path)) << "Can not create folder " << result_dir_path << " for output.";
-  }
 
   sprintf(buffer, "%s/result_trajectory_%s.ply", result_dir_path, FLAGS_suffix.c_str());
   IMUProject::WriteToPly(std::string(buffer), dataset.GetTimeStamp().data(), output_positions.data(),
