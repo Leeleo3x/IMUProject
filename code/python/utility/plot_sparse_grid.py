@@ -55,7 +55,7 @@ if __name__ == '__main__':
 
     result_all = pandas.read_csv(args.dir + '/result_{0}/result_{0}.csv'.format(args.id))
     regression_result = np.genfromtxt(args.dir + '/result_{0}/regression_{0}.txt'.format(args.id))
-    regression_result = regression_result[0:-1:3]
+    # regression_result = regression_result[0:-1:3]
     constraint_ind = regression_result[:, 0].astype(int)
     constraint = regression_result[:, 1:]
     bias = result_all[['bias_x', 'bias_y', 'bias_z']].values
@@ -73,9 +73,9 @@ if __name__ == '__main__':
     # fig = plt.figure('Sparse grid', figsize=(130, 30))
 
     font_config = {'family': 'serif',
-                   'size': 32}
-    linew = 1.8
-    markersize = 10
+                   'size': 18}
+    linew = 1.4
+    markersize = 5
 
     plt.rc('font', **font_config)
     fig = plt.figure('Sparse grid', figsize=(20, 5))
