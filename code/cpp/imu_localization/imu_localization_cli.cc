@@ -6,7 +6,7 @@
 
 #include <vector>
 #include <string>
-
+#include <algorithm>
 #include <opencv2/opencv.hpp>
 #include <Eigen/Eigen>
 #include <gflags/gflags.h>
@@ -16,13 +16,13 @@
 #include "utility/utility.h"
 #include "utility/stlplus3/file_system.hpp"
 
-DEFINE_string(model_path, "../../../../models/svr_cascade1105", "Path to model");
+DEFINE_string(model_path, "../../../../models/svr_cascade1111", "Path to model");
 DEFINE_string(mapinfo_path, "default", "path to map info");
 DEFINE_int32(log_interval, 1000, "logging interval");
 DEFINE_string(color, "blue", "color");
 DEFINE_double(weight_vs, 1.0, "The weight parameter for vertical speed. Larger weight_vs imposes more penalty for"
     " the vertical speed not being 0.");
-DEFINE_double(weight_ls, 1.0, "The weight parameter for the local speed. Larger weight_ls imposes more penalty for"
+DEFINE_double(weight_ls, 10.0, "The weight parameter for the local speed. Larger weight_ls imposes more penalty for"
     " the integrated local speed being different than the regressed speed.");
 DEFINE_string(suffix, "full", "suffix");
 DEFINE_string(preset, "none", "preset mode");
@@ -196,9 +196,16 @@ int main(int argc, char **argv) {
   }
 
   printf("All done. Number of points on trajectory: %d\n", trajectory.GetNumFrames());
-  const float fps_all =
-      (float) trajectory.GetNumFrames() / (((float) cv::getTickCount() - start_t) / (float) cv::getTickFrequency());
-  printf("Overall framerate: %.3f\n", fps_all);
+  const auto total_time = ((float) cv::getTickCount() - start_t) / (float) cv::getTickFrequency();
+  const float fps_all = (float) trajectory.GetNumFrames() / total_time;
+  printf("Time usage: %.3fs. Overall framerate: %.3f\n", total_time, fps_all);
+  const std::vector<float>& time_regression = trajectory.GetRegressionTimes();
+  const std::vector<float>& time_optimization = trajectory.GetOptimizationTimes();
+  printf("%d regressions executed; %d optimization executed.\n", static_cast<int>(time_regression.size()),
+         static_cast<int>(time_optimization.size()));
+  printf("Average time for regression: %.3f, average time for optimization: %.3f\n",
+         std::accumulate(time_regression.begin(), time_regression.end(), 0.0f) / time_regression.size(),
+         std::accumulate(time_optimization.begin(), time_optimization.end(), 0.0f) / time_optimization.size());
 
   std::vector<Eigen::Vector3d> output_positions = trajectory.GetPositions();
   std::vector<Eigen::Quaterniond> output_orientation = trajectory.GetOrientations();
@@ -241,7 +248,6 @@ int main(int argc, char **argv) {
       }
     }
   }
-
 
 
 

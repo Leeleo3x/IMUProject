@@ -78,6 +78,7 @@ void IMUTrajectory::CommitOptimizationResult(const SparseGrid *grid, const int s
 
 int IMUTrajectory::RegressSpeed(const int end_ind) {
   for (int i = last_constraint_ind_ + option_.reg_interval; i < end_ind; i += option_.reg_interval) {
+    auto clock = cv::getTickCount();
     std::vector<Eigen::Vector3d> gyro_slice(gyro_.begin() + i - td_option_.window_size, gyro_.begin() + i);
     std::vector<Eigen::Vector3d> linacce_slice(linacce_.begin() + i - td_option_.window_size,
                                                linacce_.begin() + i);
@@ -109,9 +110,10 @@ int IMUTrajectory::RegressSpeed(const int end_ind) {
     } else { // Z_ONLY
       local_speed_.emplace_back(ls_x, 0, 0);
     }
+
+    time_regression_.push_back((cv::getTickCount() - clock) / static_cast<float>(cv::getTickFrequency()));
   }
   last_constraint_ind_ = constraint_ind_.back();
-
   return 0;
 }
 
@@ -183,9 +185,13 @@ void IMUTrajectory::RunOptimization(const int start_id, const int N) {
   solver_options.max_num_iterations = 3;
   solver_options.linear_solver_type = ceres::DENSE_QR;
 
+  auto clock = cv::getTickCount();
+
   ceres::Solver::Summary summary;
   ceres::Solve(solver_options, &problem, &summary);
   LOG(INFO) << summary.BriefReport();
+
+  time_optimization_.push_back((cv::getTickCount() - clock) / static_cast<float>(cv::getTickFrequency()));
 
   CommitOptimizationResult(grid, start_id, bx.data(), by.data(), bz.data());
 }

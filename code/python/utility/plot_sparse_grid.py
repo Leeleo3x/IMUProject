@@ -39,6 +39,7 @@ if __name__ == '__main__':
 
     ts = data_all['time'].values / 1e09
     ts -= ts[0]
+    ts /= 3
     filter_sigma = 30.0
 
     bias_interval = 150
@@ -54,6 +55,7 @@ if __name__ == '__main__':
 
     result_all = pandas.read_csv(args.dir + '/result_{0}/result_{0}.csv'.format(args.id))
     regression_result = np.genfromtxt(args.dir + '/result_{0}/regression_{0}.txt'.format(args.id))
+    regression_result = regression_result[0:-1:3]
     constraint_ind = regression_result[:, 0].astype(int)
     constraint = regression_result[:, 1:]
     bias = result_all[['bias_x', 'bias_y', 'bias_z']].values
@@ -62,13 +64,21 @@ if __name__ == '__main__':
 
     speed_corrected = compute_gravity_speed(ts, corrected_linacce, orientation, gravity)
 
+    # font_config = {'family': 'serif',
+    #                'size': 120}
+    # linew = 18
+    # markersize = 100
+    #
+    # plt.rc('font', **font_config)
+    # fig = plt.figure('Sparse grid', figsize=(130, 30))
+
     font_config = {'family': 'serif',
-                   'size': 120}
-    linew = 18
-    markersize = 100
+                   'size': 32}
+    linew = 1.8
+    markersize = 10
 
     plt.rc('font', **font_config)
-    fig = plt.figure('Sparse grid', figsize=(130, 30))
+    fig = plt.figure('Sparse grid', figsize=(20, 5))
 
     glob_start_id = bias_ind[bias_start_id]
     glob_end_id = bias_ind[bias_end_id]
@@ -120,5 +130,5 @@ if __name__ == '__main__':
 
     # plt.legend(['Predicted speed', 'Before correction', 'After correction'], loc='lower left')
 
-    fig.savefig(args.dir + '/result_{}/alg1.png'.format(args.id), bbox_inches='tight')
-    # plt.show()
+    # fig.savefig(args.dir + '/result_{}/alg1.png'.format(args.id), bbox_inches='tight')
+    plt.show()

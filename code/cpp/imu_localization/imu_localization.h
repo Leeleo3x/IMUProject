@@ -37,7 +37,7 @@ enum RegressionOption {
 
 struct IMULocalizationOption {
   // Number of frames between two consecutive optimizations.
-  int local_opt_interval = 400;
+  int local_opt_interval = 200;
   // Temporal window size (in frames) for each optimization.
   int local_opt_window = 1000;
 
@@ -144,6 +144,14 @@ class IMUTrajectory {
     return functor->GetLinacceGrid();
   }
 
+  inline const std::vector<float>& GetRegressionTimes() const{
+    return time_regression_;
+  };
+
+  inline const std::vector<float>& GetOptimizationTimes() const{
+    return time_optimization_;
+  };
+
   inline const Eigen::Vector3d &GetCurrentSpeed() const {
     std::lock_guard<std::mutex> guard(mt_);
     return position_.back();
@@ -225,6 +233,9 @@ class IMUTrajectory {
 
   std::vector<Eigen::Vector3d> speed_;
   std::vector<Eigen::Vector3d> position_;
+
+  std::vector<float> time_regression_;
+  std::vector<float> time_optimization_;
 
   std::vector<int> constraint_ind_;
   std::vector<int> labels_;
