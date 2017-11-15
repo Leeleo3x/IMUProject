@@ -15,8 +15,10 @@ args = parser.parse_args()
 exec_path = '../../cpp/cmake-build-relwithdebinfo/imu_localization/IMULocalization_cli'
 model_path = '../../../models/svr_cascade1111'
 
-weight_list = [0.01, 0.1, 1.0, 10.0, 100.0, 1000.0, 10000.0]
-suffix_list = ['001', '01', '1', '10', '100', '1000', '10000']
+# weight_list = [0.01, 0.1, 1.0, 10.0, 100.0, 1000.0, 10000.0]
+weight_list = [0.0001, 10000]
+# suffix_list = ['001', '01', '1', '10', '100', '1000', '10000']
+suffix_list = ['00001', '10000']
 
 assert len(weight_list) == len(suffix_list)
 
