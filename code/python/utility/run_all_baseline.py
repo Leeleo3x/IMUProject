@@ -15,7 +15,7 @@ args = parser.parse_args()
 
 exec_path = '../../cpp/cmake-build-relwithdebinfo/imu_localization/IMULocalization_cli'
 model_path = '../../../models/svr_cascade1111'
-preset_list = ['mag_only', 'ori_only']
+preset_list = ['mag_only', 'ori_only', 'full', 'raw']
 # preset_list = ['full']
 
 root_dir = os.path.dirname(args.list)

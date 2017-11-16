@@ -33,7 +33,8 @@ if __name__ == '__main__':
     gravity = data_all[['grav_x', 'grav_y', 'grav_z']].values
     ori_tango = data_all[['ori_w', 'ori_x', 'ori_y', 'ori_z']].values
     track_length = np.sum(np.linalg.norm(positions[1:] - positions[:-1], axis=1))
-    step_stride = track_length / step_data[-1][1]
+    # step_stride = track_length / step_data[-1][1]
+    step_stride = 0.67
     print('Track length: {:.3f}m, stride length: {:.3f}m'.format(track_length, step_stride))
 
     # Interpolate step counts to Tango's sample rate.

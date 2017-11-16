@@ -241,7 +241,8 @@ int main(int argc, char **argv) {
       Eigen::Matrix3d rotation_2d_as_3d = Eigen::Matrix3d::Identity();
       rotation_2d_as_3d.block<2, 2>(0, 0) = rotation_2d;
       for (int i = 0; i < output_positions.size(); ++i) {
-        Eigen::Vector2d transformed = rotation_2d * output_positions[i].block<2, 1>(0, 0) + translation_2d;
+        Eigen::Vector2d transformed = rotation_2d * (output_positions[i].block<2, 1>(0, 0) - translation_2d)
+            + translation_2d;
         output_positions[i][0] = transformed[0];
         output_positions[i][1] = transformed[1];
         output_orientation[i] = rotation_2d_as_3d * output_orientation[i];
