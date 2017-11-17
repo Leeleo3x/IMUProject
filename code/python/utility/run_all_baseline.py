@@ -14,7 +14,7 @@ parser.add_argument('--recompute', action='store_true')
 args = parser.parse_args()
 
 exec_path = '../../cpp/cmake-build-relwithdebinfo/imu_localization/IMULocalization_cli'
-model_path = '../../../models/svr_cascade1111'
+model_path = '../../../models/svr_cascade1116_2'
 preset_list = ['mag_only', 'ori_only', 'full', 'raw']
 # preset_list = ['full']
 

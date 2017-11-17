@@ -23,7 +23,7 @@ using namespace std;
 
 DEFINE_int32(max_iter, 500, "maximum iteration");
 DEFINE_int32(window, 200, "Window size");
-DEFINE_string(model_path, "../../../../models/svr_cascade1002_c1e001", "Path to models");
+DEFINE_string(model_path, "../../../../models/svr_cascade1116_2", "Path to models");
 DEFINE_bool(gt, false, "Use ground truth");
 DEFINE_bool(rv, false, "Use rotation vector");
 DEFINE_double(feature_smooth_sigma, 2.0, "Sigma for feature smoothing.");

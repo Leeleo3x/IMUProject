@@ -16,7 +16,7 @@
 #include "utility/utility.h"
 #include "utility/stlplus3/file_system.hpp"
 
-DEFINE_string(model_path, "../../../../models/svr_cascade1111", "Path to model");
+DEFINE_string(model_path, "../../../../models/svr_cascade1116_2", "Path to model");
 DEFINE_string(mapinfo_path, "default", "path to map info");
 DEFINE_int32(log_interval, 1000, "logging interval");
 DEFINE_string(color, "blue", "color");
@@ -218,7 +218,7 @@ int main(int argc, char **argv) {
     IMUProject::EstimateTransformation(output_positions, gt_positions, &global_transform, &global_rotation,
                                        &global_translation);
     for (int i = 0; i < output_positions.size(); ++i) {
-      output_positions[i] = global_rotation * output_positions[i] + global_translation;
+      output_positions[i] = global_rotation * (output_positions[i] - gt_positions[0]) + gt_positions[0];
       output_orientation[i] = global_rotation * output_orientation[i];
     }
 
@@ -241,8 +241,11 @@ int main(int argc, char **argv) {
       Eigen::Matrix3d rotation_2d_as_3d = Eigen::Matrix3d::Identity();
       rotation_2d_as_3d.block<2, 2>(0, 0) = rotation_2d;
       for (int i = 0; i < output_positions.size(); ++i) {
-        Eigen::Vector2d transformed = rotation_2d * (output_positions[i].block<2, 1>(0, 0) - translation_2d)
-            + translation_2d;
+//        Eigen::Vector2d transformed = rotation_2d * (output_positions[i].block<2, 1>(0, 0) - translation_2d)
+//            + translation_2d;
+        Eigen::Vector2d pt_centered = (output_positions[i] - gt_positions[0]).block<2, 1>(0, 0);
+        Eigen::Vector2d transformed = rotation_2d * pt_centered + gt_positions[0].block<2, 1>(0, 0);
+
         output_positions[i][0] = transformed[0];
         output_positions[i][1] = transformed[1];
         output_orientation[i] = rotation_2d_as_3d * output_orientation[i];
