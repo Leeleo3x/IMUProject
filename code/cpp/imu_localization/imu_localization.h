@@ -46,10 +46,16 @@ struct IMULocalizationOption {
   double weight_vs = 1.0;
 
   RegressionOption reg_option = FULL;
-
   double const_speed = 1.0;
 
   static constexpr int reg_interval = 50;
+
+  // The following two terms are used to identify unreliable classification/regression results. It works as follows:
+  // For i'th predicted label, we consider the window: [i - $label_filter_radius, i + $label_filter_radius].
+  // If the predicted label changes more than $max_allowed_transition, we say that the classification/regression
+  // is unreliable.
+  const int max_allowed_transition = 2;
+  const int label_filter_radius = 10;
 };
 
 struct FunctorSize {
@@ -109,21 +115,27 @@ class IMUTrajectory {
   template<class FunctorType, int kVar, int kCon>
   const SparseGrid *ConstructProblem(const int start_id, const int N, ceres::Problem &problem,
                                      const int* constraint_ind, const Eigen::Vector3d *local_speed,
+                                     const int* transition_counts,
                                      const Eigen::Vector3d init_speed,
                                      std::vector<double> &bx, std::vector<double> &by, std::vector<double> &bz) {
     CHECK_GE(constraint_ind_.size(), kCon);
 
     std::vector<double> weight_ls(kCon, option_.weight_ls);
+    std::vector<double> weight_vs(kCon, option_.weight_vs);
     for (int i=0; i<kCon; ++i){
-      if (local_speed[i].norm() > kMaxSpeed){
-        weight_ls[i] = std::numeric_limits<double>::epsilon();
+      if (transition_counts[i] > option_.max_allowed_transition){
+//        weight_ls[i] = std::numeric_limits<double>::epsilon();
+//        weight_vs[i] = std::numeric_limits<double>::epsilon();
+        // printf("%d set weight to 0. Transition count: %d\n", constraint_ind[i], transition_counts[i]);
+        weight_ls[i] = 0;
+        weight_vs[i] = 0;
       }
     }
 
     FunctorType *functor = new FunctorType(&ts_[start_id], N, &linacce_[start_id],
                                            &orientation_[start_id], &R_GW_[start_id],
                                            constraint_ind, local_speed, init_speed,
-                                           weight_ls.data(), option_.weight_vs);
+                                           weight_ls.data(), weight_vs.data());
     bx.resize((size_t) kVar, 0.0);
     by.resize((size_t) kVar, 0.0);
     bz.resize((size_t) kVar, 0.0);
@@ -196,6 +208,14 @@ class IMUTrajectory {
     return local_speed_;
   }
 
+  inline const std::vector<int>& GetLabels() const{
+    return labels_;
+  }
+
+  inline const std::vector<int>& GetTransitionCounts() const{
+    return transition_counts_;
+  }
+
   inline const int GetNumFrames() const {
     std::lock_guard<std::mutex> guard(mt_);
     return num_frames_;
@@ -238,7 +258,9 @@ class IMUTrajectory {
   std::vector<float> time_optimization_;
 
   std::vector<int> constraint_ind_;
+
   std::vector<int> labels_;
+  std::vector<int> transition_counts_;
   std::vector<Eigen::Vector3d> local_speed_;
   int last_constraint_ind_;
 

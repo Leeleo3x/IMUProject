@@ -286,8 +286,11 @@ int main(int argc, char **argv) {
     ofstream reg_out(buffer);
     const std::vector<int> &cids = trajectory.GetConstraintInd();
     const std::vector<Eigen::Vector3d> &lss = trajectory.GetLocalSpeed();
+    const std::vector<int>& labels = trajectory.GetLabels();
+    const std::vector<int>& trans_counts = trajectory.GetTransitionCounts();
     for (auto i = 0; i < cids.size(); ++i) {
-      reg_out << cids[i] << ' ' << lss[i][0] << ' ' << lss[i][1] << ' ' << lss[i][2] << endl;
+      reg_out << cids[i] << ' ' << lss[i][0] << ' ' << lss[i][1] << ' ' << lss[i][2] << ' ' << labels[i] << ' '
+              << trans_counts[i] << endl;
     }
   }
 

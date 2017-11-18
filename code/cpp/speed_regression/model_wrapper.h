@@ -19,6 +19,7 @@ class ModelWrapper{
  public:
   virtual bool LoadFromFile(const std::string& path) = 0;
   virtual void Predict(const cv::Mat& feature, Eigen::VectorXd* response) const = 0;
+  virtual void Predict(const cv::Mat& feature, Eigen::VectorXd* response, int* label) const = 0;
 };
 
 struct SVRCascadeOption{
@@ -38,7 +39,7 @@ class SVRCascade: public ModelWrapper{
   }
   bool LoadFromFile(const std::string& path) override;
   void Predict(const cv::Mat& feature, Eigen::VectorXd* response) const override;
-  void Predict(const cv::Mat& feature, Eigen::VectorXd* response, int* label) const;
+  void Predict(const cv::Mat& feature, Eigen::VectorXd* response, int* label) const override ;
 
   inline int GetNumClasses() const{
     return option_.num_classes;
@@ -79,6 +80,7 @@ class CVModel: public ModelWrapper{
  public:
   bool LoadFromFile(const std::string& path) override;
   void Predict(const cv::Mat& feature, Eigen::VectorXd* response) const override;
+  virtual void Predict(const cv::Mat& feature, Eigen::VectorXd* response, int* label) const override;
  private:
   std::vector<cv::Ptr<cv::ml::SVM>> regressor_;
 };

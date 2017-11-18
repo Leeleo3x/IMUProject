@@ -72,16 +72,21 @@ struct LocalSpeedFunctor {
                     const int *constraint_ind,
                     const Eigen::Vector3d *local_speed,
                     const Eigen::Vector3d& init_speed,
-                    const double* weight_ls = nullptr, const double weight_vs = 1.0) :
+                    const double* weight_ls = nullptr, const double* weight_vs = nullptr) :
       time_stamp_(time_stamp), linacce_(linacce), orientation_(orientation), R_GW_(R_GW),
-      constraint_ind_(constraint_ind), local_speed_(local_speed), init_speed_(init_speed),
-      weight_vs_(std::sqrt(weight_vs)) {
+      constraint_ind_(constraint_ind), local_speed_(local_speed), init_speed_(init_speed) {
     grid_.reset(new SparseGrid(time_stamp, N, KVARIABLE));
     constexpr double kDefaultLambda = 1.0;
     weight_ls_.resize(KCONSTRAINT, kDefaultLambda);
     if (weight_ls){
       for (int i=0; i<KCONSTRAINT; ++i){
         weight_ls_[i] = std::sqrt(weight_ls[i]);
+      }
+    }
+    weight_vs_.resize(KCONSTRAINT, kDefaultLambda);
+    if (weight_vs){
+      for (int i=0; i<KCONSTRAINT; ++i){
+        weight_vs_[i] = std::sqrt(weight_vs[i]);
       }
     }
   }
@@ -154,7 +159,7 @@ struct LocalSpeedFunctor {
       const int ind = constraint_ind_[cid];
       Eigen::Matrix<T, 3, 1> ls = R_GW_[ind].template cast<T>() * speed[ind];
       residual[cid] = weight_ls_[cid] * (ls[0] - (T) local_speed_[cid][0]);
-      residual[cid + KCONSTRAINT] = weight_vs_ * speed[ind][2];
+      residual[cid + KCONSTRAINT] = weight_vs_[cid] * speed[ind][2];
       residual[cid + 2 * KCONSTRAINT] = weight_ls_[cid] * (ls[2] - (T) local_speed_[cid][2]);
     }
     return true;
@@ -172,7 +177,7 @@ struct LocalSpeedFunctor {
 
   const Eigen::Vector3d init_speed_;
   std::vector<double> weight_ls_;
-  const double weight_vs_;
+  std::vector<double> weight_vs_;
 };
 
 template<int KVARIABLE>
