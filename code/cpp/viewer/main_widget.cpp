@@ -99,7 +99,6 @@ void MainWidget::InitializeTrajectories(const std::string &path) {
     gt_position.push_back(dataset.GetPosition()[i]);
     imu_orientation.push_back(dataset.GetRotationVector()[i]);
   }
-  add_trajectory(gt_position, gt_orientation, tango_traj_color, 0.5f);
 
   Eigen::Quaterniond imu_to_tango = gt_orientation[0] * imu_orientation[0].conjugate();
   for (auto &ori: imu_orientation) {
@@ -138,6 +137,7 @@ void MainWidget::InitializeTrajectories(const std::string &path) {
     }
   }
 
+  // add_trajectory(gt_position, gt_orientation, tango_traj_color, 0.5f);
   speed_panel_.reset(new OfflineSpeedPanel((int) traj_colors.size(), traj_colors, 1.0f, 1.5f * ratio));
 
   // Sanity checks
