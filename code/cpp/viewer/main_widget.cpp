@@ -6,13 +6,34 @@
 
 namespace IMUProject {
 
+namespace {
+static bool ReadResult(const std::string &path, const int frame_interval, std::vector<Eigen::Vector3d> *trajectory) {
+  CHECK(trajectory);
+  std::ifstream full_in(path.c_str());
+  std::string line;
+  if (full_in.is_open()) {
+    printf("Loading %s\n", path.c_str());
+    std::vector<Eigen::Vector3d> traj;
+    std::getline(full_in, line);
+    int count = 0;
+    while (std::getline(full_in, line)) {
+      std::vector<double> values = ParseCommaSeparatedLine(line);
+      if (count % frame_interval == 0) {
+        trajectory->emplace_back(values[2], values[3], values[4]);
+      }
+      count++;
+    }
+    return true;
+  }else{
+    return false;
+  }
+}
+}  // namespace
+
 MainWidget::MainWidget(const std::string &path,
                        const int canvas_width,
                        const int canvas_height,
                        QWidget *parent) : render_count_(0),
-                                          full_traj_color(0.0f, 0.0f, 1.0f),
-                                          const_traj_color(0.6f, 0.6f, 0.0f),
-                                          tango_traj_color(1.0f, 0.0f, 0.0f),
                                           panel_border_margin_(10), panel_size_(300), is_rendering_(false) {
   setFocusPolicy(Qt::StrongFocus);
   canvas_.reset(new Canvas(canvas_width, canvas_height));
@@ -36,9 +57,11 @@ void MainWidget::InitializeTrajectories(const std::string &path) {
 
   std::vector<Eigen::Vector3f> traj_colors;
 
+  const Eigen::Vector3f full_traj_color(0.0, 0.0, 0.8);
   const Eigen::Vector3f ori_traj_color(0.0, 0.8, 0.0);
   const Eigen::Vector3f mag_traj_color(0.5, 0, 0.5);
-  const Eigen::Vector3f step_traj_color(0.5, 0.0, 0.2);
+  const Eigen::Vector3f step_traj_color(0.31, 0.31, 0.31);
+  const Eigen::Vector3f tango_traj_color(0.8, 0, 0);
 
   auto add_trajectory = [&](std::vector<Eigen::Vector3d> &traj, const std::vector<Eigen::Quaterniond> &orientation,
                             const Eigen::Vector3f color, const float frustum_size) {
@@ -53,7 +76,6 @@ void MainWidget::InitializeTrajectories(const std::string &path) {
       max_distance = traj_max_distance;
       ratio = (double) std::min(canvas_->GetWidth() / 2, canvas_->GetHeight() / 2) / max_distance *
           fill_ratio;
-//                ratio = 1.0;
     }
 
     for (auto &pos: traj) {
@@ -77,110 +99,44 @@ void MainWidget::InitializeTrajectories(const std::string &path) {
     gt_position.push_back(dataset.GetPosition()[i]);
     imu_orientation.push_back(dataset.GetRotationVector()[i]);
   }
+  add_trajectory(gt_position, gt_orientation, tango_traj_color, 0.5f);
 
   Eigen::Quaterniond imu_to_tango = gt_orientation[0] * imu_orientation[0].conjugate();
   for (auto &ori: imu_orientation) {
     ori = imu_to_tango * ori;
   }
 
-  std::string line;
-
   {
     sprintf(buffer, "%s/result_full/result_full.csv", path.c_str());
-    std::ifstream full_in(buffer);
-    if (full_in.is_open()) {
-      printf("Loading %s\n", buffer);
-      std::vector<Eigen::Vector3d> traj;
-      std::getline(full_in, line);
-      int count = 0;
-      while (std::getline(full_in, line)) {
-        std::vector<double> values = ParseCommaSeparatedLine(line);
-        if (count % frame_interval_ == 0) {
-          traj.emplace_back(values[2], values[3], values[4]);
-        }
-        count++;
-      }
+    std::vector<Eigen::Vector3d> traj;
+    if (ReadResult(buffer, frame_interval_, &traj)){
       add_trajectory(traj, imu_orientation, full_traj_color, 1.0f);
     }
   }
 
   {
     sprintf(buffer, "%s/result_step/result_step.csv", path.c_str());
-    std::ifstream step_in(buffer);
-    if (step_in.is_open()) {
-      printf("Loading %s\n", buffer);
-      std::vector<Eigen::Vector3d> traj;
-      std::getline(step_in, line);
-      int count = 0;
-      while (std::getline(step_in, line)) {
-        std::vector<double> values = ParseCommaSeparatedLine(line);
-        if (count % frame_interval_ == 0) {
-          traj.emplace_back(values[2], values[3], values[4]);
-        }
-        count++;
-      }
-      add_trajectory(traj, imu_orientation, step_traj_color, 1.0f);
+    std::vector<Eigen::Vector3d> traj;
+    if (ReadResult(buffer, frame_interval_, &traj)){
+      add_trajectory(traj, imu_orientation, step_traj_color, 0.5f);
     }
   }
 
   {
-    sprintf(buffer, "%s/result_const/result_const.csv", path.c_str());
-    std::ifstream const_in(buffer);
-    if (const_in.is_open()) {
-      printf("Loading %s\n", buffer);
-      std::vector<Eigen::Vector3d> traj;
-      std::getline(const_in, line);
-      int count = 0;
-      while (std::getline(const_in, line)) {
-        std::vector<double> values = ParseCommaSeparatedLine(line);
-        if (count % frame_interval_ == 0) {
-          traj.emplace_back(values[2], values[3], values[4]);
-        }
-        count++;
-      }
-      add_trajectory(traj, imu_orientation, const_traj_color, 0.5f);
+    sprintf(buffer, "%s/result_ori_only/result_ori_only.csv", path.c_str());
+    std::vector<Eigen::Vector3d> traj;
+    if (ReadResult(buffer, frame_interval_, &traj)){
+      add_trajectory(traj, imu_orientation, ori_traj_color, 0.5f);
     }
   }
 
-
-//		sprintf(buffer, "%s/result_ori_only.csv", path.c_str());
-//		ifstream ori_in(buffer);
-//		if(ori_in.is_open()){
-//			printf("Loading %s\n", buffer);
-//			std::vector<Eigen::Vector3d> traj;
-//			std::getline(ori_in, line);
-//			int count = 0;
-//			while(std::getline(ori_in, line)) {
-//				std::vector<double> values = ParseCommaSeparatedLine(line);
-//				if(count %  frame_interval_ == 0) {
-//					traj.emplace_back(values[2], values[3], values[4]);
-//				}
-//				count++;
-//			}
-//			add_trajectory(traj, imu_orientation, ori_traj_color, 0.5f);
-//		}
-//
-//		sprintf(buffer, "%s/result_mag_only.csv", path.c_str());
-//		ifstream mag_in(buffer);
-//		if(mag_in.is_open()){
-//			printf("Loading %s\n", buffer);
-//			std::vector<Eigen::Vector3d> traj;
-//			std::getline(mag_in, line);
-//			int count = 0;
-//			while(std::getline(mag_in, line)) {
-//				std::vector<double> values = ParseCommaSeparatedLine(line);
-//				if(count %  frame_interval_ == 0) {
-//					traj.emplace_back(values[2], values[3], values[4]);
-//
-//				}
-//				count++;
-//			}
-//			add_trajectory(traj, imu_orientation, mag_traj_color, 0.5f);
-//		}
-
-
-
-  add_trajectory(gt_position, gt_orientation, tango_traj_color, 0.5f);
+  {
+    sprintf(buffer, "%s/result_mag_only/result_mag_only.csv", path.c_str());
+    std::vector<Eigen::Vector3d> traj;
+    if (ReadResult(buffer, frame_interval_, &traj)){
+      add_trajectory(traj, imu_orientation, mag_traj_color, 0.5f);
+    }
+  }
 
   speed_panel_.reset(new OfflineSpeedPanel((int) traj_colors.size(), traj_colors, 1.0f, 1.5f * ratio));
 

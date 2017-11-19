@@ -68,11 +68,12 @@ if __name__ == '__main__':
     # Find a transformation to align the start portion of estimated track and the ground truth track.
     start_length = 2500
     _, rotation_to_gt, translation_to_gt = icp.fit_transformation(position_from_step, positions)
-    position_from_step = (np.dot(rotation_to_gt, position_from_step.T) + translation_to_gt[:, None]).T
+    position_from_step = np.dot(rotation_to_gt, (position_from_step - positions[0]).T).T + positions[0]
 
     _, rotation_2d, translation_2d = icp.fit_transformation(position_from_step[:start_length, :2],
                                                             positions[:start_length, :2])
-    position_from_step[:, :2] = (np.dot(rotation_2d, position_from_step[:, :2].T) + translation_2d[:, None]).T
+    position_from_step[:, :2] = np.dot(rotation_2d, (position_from_step[:, :2]
+                                                     - positions[0, :2]).T).T + positions[0, :2]
 
     # rotation_combined = np.identity(3)
     # rotation_combined[:2, :2] = rotation_2d

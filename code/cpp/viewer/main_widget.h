@@ -53,8 +53,6 @@ class MainWidget : public QOpenGLWidget, protected QOpenGLFunctions {
   std::vector<std::shared_ptr<LegendRenderer> > legends_;
   std::vector<QRect> legend_areas_;
 
-  const Eigen::Vector3f full_traj_color;
-  const Eigen::Vector3f tango_traj_color;
   const Eigen::Vector3f const_traj_color;
 
   bool is_rendering_;
