@@ -114,13 +114,13 @@ void MainWidget::InitializeTrajectories(const std::string &path) {
   Eigen::Vector3d sum_gt_position = std::accumulate(gt_position.begin(), gt_position.end(), Eigen::Vector3d(0, 0, 0));
   bool is_gt_valid = sum_gt_position.norm() > std::numeric_limits<double>::epsilon();
 
-  constexpr int start_portion_length = 5000;
+  constexpr int start_portion_length = 1200;
   Eigen::Quaterniond global_rotation = Eigen::Quaterniond::Identity();
   if (is_gt_valid){
     Eigen::Quaterniond imu_to_tango = gt_orientation[0] * imu_orientation[0].conjugate();
     Eigen::Vector3d init_offset = gt_position[start_portion_length] - gt_position[0];
     init_offset[2] = 0;
-    global_rotation = Eigen::Quaterniond::FromTwoVectors(init_offset, Eigen::Vector3d(0, 1, 0));
+    // global_rotation = Eigen::Quaterniond::FromTwoVectors(init_offset, Eigen::Vector3d(1, 0, 0));
     init_orientation = gt_orientation[0] * imu_orientation[0].conjugate();
     add_trajectory(gt_position, gt_orientation, tango_traj_color, 0.5f, global_rotation);
   } else {
@@ -138,7 +138,7 @@ void MainWidget::InitializeTrajectories(const std::string &path) {
       if (!is_gt_valid){
         Eigen::Vector3d init_offset = traj[start_portion_length] - traj[0];
         init_offset[2] = 0;
-        global_rotation = Eigen::Quaterniond::FromTwoVectors(init_offset, Eigen::Vector3d(0, 1, 0));
+        global_rotation = Eigen::Quaterniond::FromTwoVectors(init_offset, Eigen::Vector3d(1, 0, 0));
       }
       add_trajectory(traj, imu_orientation, full_traj_color, 1.0f, global_rotation);
     }
