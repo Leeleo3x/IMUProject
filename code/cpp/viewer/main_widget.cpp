@@ -284,6 +284,18 @@ void MainWidget::keyPressEvent(QKeyEvent *e) {
       update();
       break;
     }
+    case (Qt::Key_Up): {
+      navigation_->IncreaseFOV();
+      UpdateCameraInfo(render_count_);
+      update();
+      break;
+    }
+    case (Qt::Key_Down): {
+      navigation_->DecreaseFOV();
+      UpdateCameraInfo(render_count_);
+      update();
+      break;
+    }
     default: break;
   }
 }

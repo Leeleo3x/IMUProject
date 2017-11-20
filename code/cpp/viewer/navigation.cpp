@@ -33,11 +33,11 @@ void Navigation::UpdateNavitation(const Eigen::Vector3d &pos,
   up_dirs_[TOP] = QVector3D(0.0f, 0.0f, -1.0f);
   up_dirs_[SIDE] = QVector3D(0.0f, 1.0f, 0.0f);
 
-  fovs_[BACK] = 50.0f;
-  fovs_[CENTER] = 50.0f;
-  fovs_[PERSPECTIVE] = 50.0f;
-  fovs_[SIDE] = 30.0f;
-  fovs_[TOP] = 50.0f;
+//  fovs_[BACK] = 50.0f;
+//  fovs_[CENTER] = 50.0f;
+//  fovs_[PERSPECTIVE] = 50.0f;
+//  fovs_[SIDE] = 30.0f;
+//  fovs_[TOP] = 50.0f;
 
   if (render_mode_ == TRANSITION) {
     if (transition_counter_ == transition_frames_) {

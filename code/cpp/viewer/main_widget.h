@@ -13,6 +13,7 @@
 #include <QTimerEvent>
 #include <QBasicTimer>
 #include <QKeyEvent>
+#include <QWheelEvent>
 #include <QOpenGLWidget>
 
 #include "utility/data_io.h"
@@ -34,7 +35,6 @@ class MainWidget : public QOpenGLWidget, protected QOpenGLFunctions {
   void resizeGL(int w, int h) Q_DECL_OVERRIDE;
   void paintGL() Q_DECL_OVERRIDE;
   void keyPressEvent(QKeyEvent *e) Q_DECL_OVERRIDE;
-
   void timerEvent(QTimerEvent *event) Q_DECL_OVERRIDE;
 
  private:
