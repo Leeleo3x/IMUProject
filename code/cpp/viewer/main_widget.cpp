@@ -100,10 +100,23 @@ void MainWidget::InitializeTrajectories(const std::string &path) {
     imu_orientation.push_back(dataset.GetRotationVector()[i]);
   }
 
-  Eigen::Quaterniond imu_to_tango = gt_orientation[0] * imu_orientation[0].conjugate();
-  for (auto &ori: imu_orientation) {
-    ori = imu_to_tango * ori;
+  Eigen::Matrix3d local_to_global;
+  // local_to_global << 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, -1.0, 0.0;
+  local_to_global = Eigen::Matrix3d::Identity();
+  Eigen::Quaterniond init_orientation (local_to_global.inverse());
+  Eigen::Vector3d sum_gt_position = std::accumulate(gt_position.begin(), gt_position.end(), Eigen::Vector3d(0, 0, 0));
+
+  if (sum_gt_position.norm() > std::numeric_limits<double>::epsilon()){
+        Eigen::Quaterniond imu_to_tango = gt_orientation[0] * imu_orientation[0].conjugate();
+    add_trajectory(gt_position, gt_orientation, tango_traj_color, 0.5f);
+    init_orientation = gt_orientation[0] * imu_orientation[0].conjugate();
+  } else {
+    printf("Ground truth not presented\n");
   }
+  
+  for (auto &ori: imu_orientation) {
+    ori = init_orientation * ori;
+  }  
 
   {
     sprintf(buffer, "%s/result_full/result_full.csv", path.c_str());
@@ -137,7 +150,7 @@ void MainWidget::InitializeTrajectories(const std::string &path) {
     }
   }
 
-  // add_trajectory(gt_position, gt_orientation, tango_traj_color, 0.5f);
+
   speed_panel_.reset(new OfflineSpeedPanel((int) traj_colors.size(), traj_colors, 1.0f, 1.5f * ratio));
 
   // Sanity checks

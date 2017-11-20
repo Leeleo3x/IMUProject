@@ -209,20 +209,30 @@ int main(int argc, char **argv) {
 
   std::vector<Eigen::Vector3d> output_positions = trajectory.GetPositions();
   std::vector<Eigen::Quaterniond> output_orientation = trajectory.GetOrientations();
+  const std::vector<Eigen::Vector3d> &gt_positions = dataset.GetPosition();
+  Eigen::Vector3d sum_gt_position = std::accumulate(gt_positions.begin(), gt_positions.end(),
+						    Eigen::Vector3d(0, 0, 0));
+  bool is_gt_valid = sum_gt_position.norm() > std::numeric_limits<double>::epsilon();
   if (FLAGS_register_to_reference_global) {
     printf("Estimating global transformation\n");
-    const std::vector<Eigen::Vector3d> &gt_positions = dataset.GetPosition();
+
     Eigen::Matrix4d global_transform;
     Eigen::Matrix3d global_rotation;
     Eigen::Vector3d global_translation;
-    IMUProject::EstimateTransformation(output_positions, gt_positions, &global_transform, &global_rotation,
-                                       &global_translation);
+    if(is_gt_valid) {
+      IMUProject::EstimateTransformation(output_positions, gt_positions, &global_transform, &global_rotation,
+                                         &global_translation);
+    } else {
+      Eigen::Matrix3d local_to_glob;
+      local_to_glob << 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, -1.0, 0.0;
+      global_rotation = local_to_glob.inverse() * output_orientation[0].conjugate();
+    }
     for (int i = 0; i < output_positions.size(); ++i) {
       output_positions[i] = global_rotation * (output_positions[i] - gt_positions[0]) + gt_positions[0];
       output_orientation[i] = global_rotation * output_orientation[i];
     }
 
-    if (FLAGS_register_start_portion_2d) {
+    if (FLAGS_register_start_portion_2d && is_gt_valid) {
       if (FLAGS_start_portion_length < 0) {
         FLAGS_start_portion_length = static_cast<int>(output_positions.size());
       }
@@ -258,7 +268,7 @@ int main(int argc, char **argv) {
   sprintf(buffer, "%s/result_trajectory_%s.ply", result_dir_path, FLAGS_suffix.c_str());
   IMUProject::WriteToPly(std::string(buffer), dataset.GetTimeStamp().data(), output_positions.data(),
                          output_orientation.data(), trajectory.GetNumFrames(),
-                         false, traj_color, 0);
+                         false, traj_color, 0.8, 100, 300);
 
   sprintf(buffer, "%s/tango_trajectory.ply", result_dir_path);
   IMUProject::WriteToPly(std::string(buffer), dataset.GetTimeStamp().data(), dataset.GetPosition().data(),
@@ -297,7 +307,7 @@ int main(int argc, char **argv) {
   if (FLAGS_mapinfo_path == "default") {
     sprintf(buffer, "%s/map.txt", argv[1]);
   } else {
-    sprintf(buffer, "%s/%s", argv[1], FLAGS_mapinfo_path.c_str());
+    sprintf(buffer, "%s", FLAGS_mapinfo_path.c_str());
   }
   ifstream map_in(buffer);
   if (map_in.is_open()) {
@@ -321,8 +331,8 @@ int main(int argc, char **argv) {
 
     const double pixel_length = scale_length / (sp2 - sp1).norm();
 
-//    IMUProject::TrajectoryOverlay(pixel_length, start_pix, op2 - op1, output_positions,
-//                                  Eigen::Vector3d(255, 0, 0), map_img);
+   IMUProject::TrajectoryOverlay(pixel_length, start_pix, op2 - op1, output_positions,
+                                 Eigen::Vector3d(255, 0, 0), map_img);
 
     IMUProject::TrajectoryOverlay(pixel_length, start_pix, op2 - op1, dataset.GetPosition(),
                                   Eigen::Vector3d(0, 0, 255), map_img);
