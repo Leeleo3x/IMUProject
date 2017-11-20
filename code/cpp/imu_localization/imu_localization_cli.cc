@@ -209,9 +209,13 @@ int main(int argc, char **argv) {
 
   std::vector<Eigen::Vector3d> output_positions = trajectory.GetPositions();
   std::vector<Eigen::Quaterniond> output_orientation = trajectory.GetOrientations();
-  if (FLAGS_register_to_reference_global) {
+  const std::vector<Eigen::Vector3d> &gt_positions = dataset.GetPosition();
+  Eigen::Vector3d sum_gt_position = std::accumulate(gt_positions.begin(), gt_positions.end(),
+						    Eigen::Vector3d(0, 0, 0));
+  bool is_gt_valid = sum_gt_position.norm() > std::numeric_limits<double>::epsilon();
+  if (FLAGS_register_to_reference_global && is_gt_valid) {
     printf("Estimating global transformation\n");
-    const std::vector<Eigen::Vector3d> &gt_positions = dataset.GetPosition();
+
     Eigen::Matrix4d global_transform;
     Eigen::Matrix3d global_rotation;
     Eigen::Vector3d global_translation;
@@ -297,7 +301,7 @@ int main(int argc, char **argv) {
   if (FLAGS_mapinfo_path == "default") {
     sprintf(buffer, "%s/map.txt", argv[1]);
   } else {
-    sprintf(buffer, "%s/%s", argv[1], FLAGS_mapinfo_path.c_str());
+    sprintf(buffer, "%s", FLAGS_mapinfo_path.c_str());
   }
   ifstream map_in(buffer);
   if (map_in.is_open()) {
@@ -321,8 +325,8 @@ int main(int argc, char **argv) {
 
     const double pixel_length = scale_length / (sp2 - sp1).norm();
 
-//    IMUProject::TrajectoryOverlay(pixel_length, start_pix, op2 - op1, output_positions,
-//                                  Eigen::Vector3d(255, 0, 0), map_img);
+   IMUProject::TrajectoryOverlay(pixel_length, start_pix, op2 - op1, output_positions,
+                                 Eigen::Vector3d(255, 0, 0), map_img);
 
     IMUProject::TrajectoryOverlay(pixel_length, start_pix, op2 - op1, dataset.GetPosition(),
                                   Eigen::Vector3d(0, 0, 255), map_img);

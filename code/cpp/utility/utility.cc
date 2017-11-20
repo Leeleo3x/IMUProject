@@ -12,7 +12,7 @@ void TrajectoryOverlay(const double pixel_length, const Eigen::Vector2d &sp, con
 
   // Assume
   constexpr int forward_start = 600;
-  constexpr int forward_end = 1600;
+  constexpr int forward_end = 1200;
 
   Eigen::Vector3d ori_traj = positions[forward_end] - positions[forward_start];
   ori_traj[1] *= -1;
