@@ -213,20 +213,26 @@ int main(int argc, char **argv) {
   Eigen::Vector3d sum_gt_position = std::accumulate(gt_positions.begin(), gt_positions.end(),
 						    Eigen::Vector3d(0, 0, 0));
   bool is_gt_valid = sum_gt_position.norm() > std::numeric_limits<double>::epsilon();
-  if (FLAGS_register_to_reference_global && is_gt_valid) {
+  if (FLAGS_register_to_reference_global) {
     printf("Estimating global transformation\n");
 
     Eigen::Matrix4d global_transform;
     Eigen::Matrix3d global_rotation;
     Eigen::Vector3d global_translation;
-    IMUProject::EstimateTransformation(output_positions, gt_positions, &global_transform, &global_rotation,
-                                       &global_translation);
+    if(is_gt_valid) {
+      IMUProject::EstimateTransformation(output_positions, gt_positions, &global_transform, &global_rotation,
+                                         &global_translation);
+    } else {
+      Eigen::Matrix3d local_to_glob;
+      local_to_glob << 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, -1.0, 0.0;
+      global_rotation = local_to_glob.inverse() * output_orientation[0].conjugate();
+    }
     for (int i = 0; i < output_positions.size(); ++i) {
       output_positions[i] = global_rotation * (output_positions[i] - gt_positions[0]) + gt_positions[0];
       output_orientation[i] = global_rotation * output_orientation[i];
     }
 
-    if (FLAGS_register_start_portion_2d) {
+    if (FLAGS_register_start_portion_2d && is_gt_valid) {
       if (FLAGS_start_portion_length < 0) {
         FLAGS_start_portion_length = static_cast<int>(output_positions.size());
       }
@@ -262,7 +268,7 @@ int main(int argc, char **argv) {
   sprintf(buffer, "%s/result_trajectory_%s.ply", result_dir_path, FLAGS_suffix.c_str());
   IMUProject::WriteToPly(std::string(buffer), dataset.GetTimeStamp().data(), output_positions.data(),
                          output_orientation.data(), trajectory.GetNumFrames(),
-                         false, traj_color, 0);
+                         false, traj_color, 0.8, 100, 300);
 
   sprintf(buffer, "%s/tango_trajectory.ply", result_dir_path);
   IMUProject::WriteToPly(std::string(buffer), dataset.GetTimeStamp().data(), dataset.GetPosition().data(),
