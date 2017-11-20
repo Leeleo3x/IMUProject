@@ -7,7 +7,7 @@
 namespace IMUProject {
 
 namespace {
-static bool ReadResult(const std::string &path, const int frame_interval, std::vector<Eigen::Vector3d> *trajectory) {
+bool ReadResult(const std::string &path, const int frame_interval, std::vector<Eigen::Vector3d> *trajectory) {
   CHECK(trajectory);
   std::ifstream full_in(path.c_str());
   std::string line;
@@ -63,9 +63,15 @@ void MainWidget::InitializeTrajectories(const std::string &path) {
   const Eigen::Vector3f step_traj_color(0.31, 0.31, 0.31);
   const Eigen::Vector3f tango_traj_color(0.8, 0, 0);
 
-  auto add_trajectory = [&](std::vector<Eigen::Vector3d> &traj, const std::vector<Eigen::Quaterniond> &orientation,
-                            const Eigen::Vector3f color, const float frustum_size) {
+  auto add_trajectory = [&](std::vector<Eigen::Vector3d> traj, std::vector<Eigen::Quaterniond> orientation,
+                            const Eigen::Vector3f color, const float frustum_size,
+                            Eigen::Quaterniond global_rotation) {
     CHECK_GT(traj.size(), 0);
+    Eigen::Vector3d first_pos = traj[0];
+    for (int i=0; i<traj.size(); ++i){
+      traj[i] = global_rotation * (traj[i] - first_pos) + first_pos;
+      orientation[i] = global_rotation * orientation[i];
+    }
     if (max_distance < 0) {
       centroid = std::accumulate(traj.begin(), traj.end(), Eigen::Vector3d(0, 0, 0)) / (double) traj.size();
       double traj_max_distance = -1.0;
@@ -78,9 +84,10 @@ void MainWidget::InitializeTrajectories(const std::string &path) {
           fill_ratio;
     }
 
-    for (auto &pos: traj) {
+    for (auto& pos: traj){
       pos = (pos - centroid) * ratio;
     }
+
     trajectories_.emplace_back(new OfflineTrajectory(traj, color));
     view_frustum_.emplace_back(new ViewFrustum(frustum_size, true));
     positions_.push_back(traj);
@@ -105,32 +112,45 @@ void MainWidget::InitializeTrajectories(const std::string &path) {
   local_to_global = Eigen::Matrix3d::Identity();
   Eigen::Quaterniond init_orientation (local_to_global.inverse());
   Eigen::Vector3d sum_gt_position = std::accumulate(gt_position.begin(), gt_position.end(), Eigen::Vector3d(0, 0, 0));
+  bool is_gt_valid = sum_gt_position.norm() > std::numeric_limits<double>::epsilon();
 
-  if (sum_gt_position.norm() > std::numeric_limits<double>::epsilon()){
-        Eigen::Quaterniond imu_to_tango = gt_orientation[0] * imu_orientation[0].conjugate();
-    add_trajectory(gt_position, gt_orientation, tango_traj_color, 0.5f);
+  constexpr int start_portion_length = 5000;
+  Eigen::Quaterniond global_rotation = Eigen::Quaterniond::Identity();
+  if (is_gt_valid){
+    Eigen::Quaterniond imu_to_tango = gt_orientation[0] * imu_orientation[0].conjugate();
+    Eigen::Vector3d init_offset = gt_position[start_portion_length] - gt_position[0];
+    init_offset[2] = 0;
+    global_rotation = Eigen::Quaterniond::FromTwoVectors(init_offset, Eigen::Vector3d(0, 1, 0));
     init_orientation = gt_orientation[0] * imu_orientation[0].conjugate();
+    add_trajectory(gt_position, gt_orientation, tango_traj_color, 0.5f, global_rotation);
   } else {
     printf("Ground truth not presented\n");
   }
   
   for (auto &ori: imu_orientation) {
     ori = init_orientation * ori;
-  }  
+  }
 
   {
     sprintf(buffer, "%s/result_full/result_full.csv", path.c_str());
     std::vector<Eigen::Vector3d> traj;
     if (ReadResult(buffer, frame_interval_, &traj)){
-      add_trajectory(traj, imu_orientation, full_traj_color, 1.0f);
+      if (!is_gt_valid){
+        Eigen::Vector3d init_offset = traj[start_portion_length] - traj[0];
+        init_offset[2] = 0;
+        global_rotation = Eigen::Quaterniond::FromTwoVectors(init_offset, Eigen::Vector3d(0, 1, 0));
+      }
+      add_trajectory(traj, imu_orientation, full_traj_color, 1.0f, global_rotation);
     }
   }
 
+  printf("Global rotation: (%f, %f, %f, %f)\n", global_rotation.w(), global_rotation.x(), global_rotation.y(),
+         global_rotation.z());
   {
     sprintf(buffer, "%s/result_step/result_step.csv", path.c_str());
     std::vector<Eigen::Vector3d> traj;
     if (ReadResult(buffer, frame_interval_, &traj)){
-      add_trajectory(traj, imu_orientation, step_traj_color, 0.5f);
+      add_trajectory(traj, imu_orientation, step_traj_color, 0.5f, global_rotation);
     }
   }
 
@@ -138,7 +158,7 @@ void MainWidget::InitializeTrajectories(const std::string &path) {
     sprintf(buffer, "%s/result_ori_only/result_ori_only.csv", path.c_str());
     std::vector<Eigen::Vector3d> traj;
     if (ReadResult(buffer, frame_interval_, &traj)){
-      add_trajectory(traj, imu_orientation, ori_traj_color, 0.5f);
+      add_trajectory(traj, imu_orientation, ori_traj_color, 0.5f, global_rotation);
     }
   }
 
@@ -146,7 +166,7 @@ void MainWidget::InitializeTrajectories(const std::string &path) {
     sprintf(buffer, "%s/result_mag_only/result_mag_only.csv", path.c_str());
     std::vector<Eigen::Vector3d> traj;
     if (ReadResult(buffer, frame_interval_, &traj)){
-      add_trajectory(traj, imu_orientation, mag_traj_color, 0.5f);
+      add_trajectory(traj, imu_orientation, mag_traj_color, 0.5f, global_rotation);
     }
   }
 

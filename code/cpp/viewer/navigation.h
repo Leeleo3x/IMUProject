@@ -59,6 +59,10 @@ class Navigation {
     return modelview_;
   }
 
+  inline CameraMode GetRenderMode() const{
+    return render_mode_;
+  }
+
   void UpdateNavitation(const Eigen::Vector3d &pos,
                         const Eigen::Quaterniond &orientation);
 
@@ -67,8 +71,6 @@ class Navigation {
     dst_mode_ = dst;
     transition_counter_ = 0;
     render_mode_ = TRANSITION;
-//			render_mode_ = dst;
-//			src_mode_ = dst;
   }
 
   inline void SetModelView(QMatrix4x4 modelview) {
