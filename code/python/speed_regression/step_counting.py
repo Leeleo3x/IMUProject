@@ -56,11 +56,12 @@ if __name__ == '__main__':
     forward_dir = []
     rotation_horizontal = []
     for i in range(gravity.shape[0]):
-        # rotor = geometry.quaternion_from_two_vectors(local_gravity_dir, gravity[i])
-        rotor = geometry.quaternion_from_two_vectors(gravity[i], local_gravity_dir)
+        rotor = geometry.quaternion_from_two_vectors(local_gravity_dir, gravity[i])
+        # rotor = geometry.quaternion_from_two_vectors(gravity[i], local_gravity_dir)
         # forward_dir.append(rotor * quaternion.quaternion(0., 0., 0., -1.) * rotor.conj())
-        forward_dir.append(quaternion.quaternion(0, 0, 0, -1))
-        rotation_horizontal.append(rotor * quaternion.quaternion(*orientations[i]) * rotor.conj())
+        forward_dir.append(rotor * quaternion.quaternion(0, 0, 0, -1) * rotor.conj())
+        rotation_horizontal.append(quaternion.quaternion(*orientations[i]))
+
 
     for i in range(1, positions.shape[0]):
         q = rotation_horizontal[i - 1]
