@@ -69,7 +69,7 @@ if __name__ == '__main__':
     # If the ground truth is presented, ind a transformation to align the start portion of estimated
     # track and the ground truth track.
     if is_gt_valid:
-        start_length = 2500
+        start_length = 1000
         _, rotation_to_gt, translation_to_gt = icp.fit_transformation(position_from_step, positions)
         position_from_step = np.dot(rotation_to_gt, (position_from_step - positions[0]).T).T + positions[0]
 

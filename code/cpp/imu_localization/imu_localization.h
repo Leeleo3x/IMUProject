@@ -54,8 +54,8 @@ struct IMULocalizationOption {
   // For i'th predicted label, we consider the window: [i - $label_filter_radius, i + $label_filter_radius].
   // If the predicted label changes more than $max_allowed_transition, we say that the classification/regression
   // is unreliable.
-  const int max_allowed_transition = 3;
-  const int label_filter_radius = 10;
+  const int max_allowed_transition = 2;
+  const int label_filter_radius = 7;
 };
 
 struct FunctorSize {
@@ -127,8 +127,8 @@ class IMUTrajectory {
 //        weight_ls[i] = std::numeric_limits<double>::epsilon();
 //        weight_vs[i] = std::numeric_limits<double>::epsilon();
         // printf("%d set weight to 0. Transition count: %d\n", constraint_ind[i], transition_counts[i]);
-        weight_ls[i] = 0.0;
-        weight_vs[i] = 0.0;
+        weight_ls[i] = 1;
+        weight_vs[i] = 1;
       }
     }
 
