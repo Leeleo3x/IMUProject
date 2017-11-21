@@ -114,7 +114,7 @@ void MainWidget::InitializeTrajectories(const std::string &path) {
   Eigen::Vector3d sum_gt_position = std::accumulate(gt_position.begin(), gt_position.end(), Eigen::Vector3d(0, 0, 0));
   bool is_gt_valid = sum_gt_position.norm() > std::numeric_limits<double>::epsilon();
 
-  const int start_portion_length = min(500, static_cast<int>(gt_position.size() - 1));
+  const int start_portion_length = std::min(500, static_cast<int>(gt_position.size() - 1));
   Eigen::Quaterniond global_rotation = Eigen::Quaterniond::Identity();
   if (is_gt_valid){
     Eigen::Quaterniond imu_to_tango = gt_orientation[0] * imu_orientation[0].conjugate();
