@@ -18,6 +18,7 @@ nano_to_sec = 1e09
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('dir')
+    parser.add_argument('--start_portion_length', default=1000, type=int)
 
     print('Loading...')
     args = parser.parse_args()
@@ -69,7 +70,7 @@ if __name__ == '__main__':
     # If the ground truth is presented, ind a transformation to align the start portion of estimated
     # track and the ground truth track.
     if is_gt_valid:
-        start_length = 1000
+        start_length = args.start_portion_length
         _, rotation_to_gt, translation_to_gt = icp.fit_transformation(position_from_step, positions)
         position_from_step = np.dot(rotation_to_gt, (position_from_step - positions[0]).T).T + positions[0]
 
