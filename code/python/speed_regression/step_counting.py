@@ -103,4 +103,5 @@ if __name__ == '__main__':
     write_trajectory_to_ply.write_ply_to_file(out_dir + '/result_trajectory_step.ply', position_from_step,
                                               orientations, trajectory_color=(80, 80, 80), length=0,
                                               interval=300, num_axis=0)
+
     print('All done')
