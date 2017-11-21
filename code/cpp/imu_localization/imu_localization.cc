@@ -129,9 +129,9 @@ int IMUTrajectory::RegressSpeed(const int end_ind) {
         ++transition_counts_[i];
       }
     }
-//    if (transition_counts_[i] > option_.max_allowed_transition){
-//      local_speed_[i] = Eigen::Vector3d(0, 0, 0);
-//    }
+    // if (transition_counts_[i] > option_.max_allowed_transition){
+    //   local_speed_[i] = Eigen::Vector3d(0, 0, 0);
+    // }
   }
 
   // Update index of last regressed velocity.
