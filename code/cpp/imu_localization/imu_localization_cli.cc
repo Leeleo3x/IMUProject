@@ -215,17 +215,16 @@ int main(int argc, char **argv) {
   bool is_gt_valid = sum_gt_position.norm() > std::numeric_limits<double>::epsilon();
   if (FLAGS_register_to_reference_global) {
     printf("Estimating global transformation\n");
-
     Eigen::Matrix4d global_transform;
-    Eigen::Matrix3d global_rotation;
+    Eigen::Matrix3d global_rotation = Eigen::Matrix3d::Identity();
     Eigen::Vector3d global_translation;
     if(is_gt_valid) {
       IMUProject::EstimateTransformation(output_positions, gt_positions, &global_transform, &global_rotation,
                                          &global_translation);
     } else {
-      Eigen::Matrix3d local_to_glob;
-      local_to_glob << 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, -1.0, 0.0;
-      global_rotation = local_to_glob.inverse() * output_orientation[0].conjugate();
+//      Eigen::Matrix3d local_to_glob;
+//      local_to_glob << 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, -1.0, 0.0;
+//      global_rotation = local_to_glob.inverse() * output_orientation[0].conjugate();
     }
     for (int i = 0; i < output_positions.size(); ++i) {
       output_positions[i] = global_rotation * (output_positions[i] - gt_positions[0]) + gt_positions[0];
