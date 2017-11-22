@@ -14,7 +14,7 @@ from algorithms import geometry
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('dir', type=str)
-    parser.add_argument('--skip', default=1000, type=int)
+    parser.add_argument('--skip_front', default=1000, type=int)
     parser.add_argument('--skip_end', default=600, type=int)
     args = parser.parse_args()
 
@@ -23,7 +23,7 @@ if __name__ == '__main__':
     linacce_input = np.genfromtxt(args.dir + '/linacce.txt')
     gravity_input = np.genfromtxt(args.dir + '/gravity.txt')
     magnet_input = np.genfromtxt(args.dir + '/magnet.txt')
-    rv_input = np.genfromtxt(args.dir + '/orientation.txt')[args.skip:-args.skip_end]
+    rv_input = np.genfromtxt(args.dir + '/orientation.txt')[args.skip_front:-args.skip_end]
 
     rv_input[:, [1, 2, 3, 4]] = rv_input[:, [4, 1, 2, 3]]
 

@@ -77,7 +77,9 @@ void IMUTrajectory::CommitOptimizationResult(const SparseGrid *grid, const int s
 }
 
 int IMUTrajectory::RegressSpeed(const int end_ind) {
+  const int old_label_counts = static_cast<int>(labels_.size());
   for (int i = last_constraint_ind_ + option_.reg_interval; i < end_ind; i += option_.reg_interval) {
+    auto clock = cv::getTickCount();
     std::vector<Eigen::Vector3d> gyro_slice(gyro_.begin() + i - td_option_.window_size, gyro_.begin() + i);
     std::vector<Eigen::Vector3d> linacce_slice(linacce_.begin() + i - td_option_.window_size,
                                                linacce_.begin() + i);
@@ -87,14 +89,15 @@ int IMUTrajectory::RegressSpeed(const int end_ind) {
                                                   (int) gyro_slice.size(), td_option_.feature_smooth_sigma);
 
     Eigen::VectorXd regressed(2);
-    model_->Predict(feature, &regressed);
-    // cv::Mat feature = ComputeDirectFeature(gyro_slice.data(), linacce_slice.data(), (int)gyro_slice.size());
+    int predicted_label;
+    model_->Predict(feature, &regressed, &predicted_label);
+    labels_.emplace_back(predicted_label);
+    transition_counts_.emplace_back(0);
 
     const double ls_x = regressed[0];
     const double ls_z = regressed[1];
 
     constraint_ind_.push_back(i);
-
     // The forward direction is defined in the stabilized IMU frame, therefore no gravity compensation is needed.
     Eigen::Vector3d forward_dir(0, 0, -1);
 
@@ -110,9 +113,29 @@ int IMUTrajectory::RegressSpeed(const int end_ind) {
     } else { // Z_ONLY
       local_speed_.emplace_back(ls_x, 0, 0);
     }
-  }
-  last_constraint_ind_ = constraint_ind_.back();
 
+    time_regression_.push_back((cv::getTickCount() - clock) / static_cast<float>(cv::getTickFrequency()));
+  }
+
+  // Inspect the predicted labels and update transition counts;
+  // We also need to update transition counts as before as (last_constraint_id - label_filter_radius).
+  const int update_start_id = std::max(old_label_counts - option_.label_filter_radius, 0);
+  for (int i=update_start_id; i < labels_.size(); ++i){
+    const int window_start_id = std::max(i - option_.label_filter_radius, 0);
+    const int window_end_id = std::min(i + option_.label_filter_radius,  static_cast<int>(labels_.size()));
+    transition_counts_[i] = 0;
+    for (int j=window_start_id + 1; j < window_end_id; ++j){
+      if (labels_[j] != labels_[j-1]){
+        ++transition_counts_[i];
+      }
+    }
+     if (transition_counts_[i] > option_.max_allowed_transition){
+       local_speed_[i] = Eigen::Vector3d(0, 0, 0);
+     }
+  }
+
+  // Update index of last regressed velocity.
+  last_constraint_ind_ = constraint_ind_.back();
   return 0;
 }
 
@@ -127,6 +150,7 @@ void IMUTrajectory::RunOptimization(const int start_id, const int N) {
   std::vector<double> bx, by, bz;
 
   std::vector<int> cur_constraint_id;
+  std::vector<int> cur_transition_counts;
   std::vector<Eigen::Vector3d> cur_local_speed;
 
   Eigen::Vector3d cur_init_speed;
@@ -137,6 +161,7 @@ void IMUTrajectory::RunOptimization(const int start_id, const int N) {
       for (auto i = constraint_ind_.size() - kCon; i < constraint_ind_.size(); ++i) {
         cur_constraint_id.push_back(constraint_ind_[i] - start_id);
         cur_local_speed.push_back(local_speed_[i]);
+        cur_transition_counts.push_back(transition_counts_[i]);
       }
       cur_init_speed = speed_[start_id];
     } else {
@@ -146,9 +171,11 @@ void IMUTrajectory::RunOptimization(const int start_id, const int N) {
       for (auto i = 0; i < kCon - 1; ++i) {
         cur_constraint_id.push_back(constraint_ind_[(int) (i * inc)]);
         cur_local_speed.push_back(local_speed_[(int) (i * inc)]);
+        cur_transition_counts.push_back(transition_counts_[i * inc]);
       }
       cur_constraint_id.push_back(constraint_ind_.back());
       cur_local_speed.push_back(local_speed_.back());
+      cur_transition_counts.push_back(transition_counts_.back());
     }
   };
 
@@ -156,36 +183,45 @@ void IMUTrajectory::RunOptimization(const int start_id, const int N) {
     ConstructConstraint(FunctorSize::kCon_600);
     CHECK_EQ(cur_constraint_id.size(), FunctorSize::kCon_600);
     grid = ConstructProblem<Functor600, FunctorSize::kVar_600, FunctorSize::kCon_600>
-        (start_id, N, problem, cur_constraint_id.data(), cur_local_speed.data(), cur_init_speed, bx, by, bz);
+        (start_id, N, problem, cur_constraint_id.data(), cur_local_speed.data(), cur_transition_counts.data(),
+         cur_init_speed, bx, by, bz);
   } else if (N >= 800 && N < 1000) {
     ConstructConstraint(FunctorSize::kCon_800);
     CHECK_EQ(cur_constraint_id.size(), FunctorSize::kCon_800);
     grid = ConstructProblem<Functor800, FunctorSize::kVar_800, FunctorSize::kCon_800>
-        (start_id, N, problem, cur_constraint_id.data(), cur_local_speed.data(), cur_init_speed, bx, by, bz);
+        (start_id, N, problem, cur_constraint_id.data(), cur_local_speed.data(), cur_transition_counts.data(),
+         cur_init_speed, bx, by, bz);
   } else if (N >= 1000 && N < 5000) {
     ConstructConstraint(FunctorSize::kCon_1000);
     CHECK_EQ(cur_constraint_id.size(), FunctorSize::kCon_1000);
     grid = ConstructProblem<Functor1000, FunctorSize::kVar_1000, FunctorSize::kCon_1000>
-        (start_id, N, problem, cur_constraint_id.data(), cur_local_speed.data(), cur_init_speed, bx, by, bz);
+        (start_id, N, problem, cur_constraint_id.data(), cur_local_speed.data(), cur_transition_counts.data(),
+         cur_init_speed, bx, by, bz);
   } else if (N >= 5000 && N < 10100) {
     ConstructConstraint(FunctorSize::kCon_5000);
     CHECK_EQ(cur_constraint_id.size(), FunctorSize::kCon_5000);
     grid = ConstructProblem<Functor5000, FunctorSize::kVar_5000, FunctorSize::kCon_5000>
-        (start_id, N, problem, cur_constraint_id.data(), cur_local_speed.data(), cur_init_speed, bx, by, bz);
+        (start_id, N, problem, cur_constraint_id.data(), cur_local_speed.data(), cur_transition_counts.data(),
+         cur_init_speed, bx, by, bz);
   } else {
     ConstructConstraint(FunctorSize::kCon_large);
     CHECK_EQ(cur_constraint_id.size(), FunctorSize::kCon_large);
     grid = ConstructProblem<FunctorLarge, FunctorSize::kVar_large, FunctorSize::kCon_large>
-        (start_id, N, problem, cur_constraint_id.data(), cur_local_speed.data(), cur_init_speed, bx, by, bz);
+        (start_id, N, problem, cur_constraint_id.data(), cur_local_speed.data(), cur_transition_counts.data(),
+         cur_init_speed, bx, by, bz);
   }
 
   ceres::Solver::Options solver_options;
   solver_options.max_num_iterations = 3;
   solver_options.linear_solver_type = ceres::DENSE_QR;
 
+  auto clock = cv::getTickCount();
+
   ceres::Solver::Summary summary;
   ceres::Solve(solver_options, &problem, &summary);
   LOG(INFO) << summary.BriefReport();
+
+  time_optimization_.push_back((cv::getTickCount() - clock) / static_cast<float>(cv::getTickFrequency()));
 
   CommitOptimizationResult(grid, start_id, bx.data(), by.data(), bz.data());
 }

@@ -68,7 +68,7 @@ Canvas::Canvas(const float width, const float height,
   }
 
   if (texture == nullptr) {
-    texture_img_.load(":/images/iccv_texture.png");
+    texture_img_.load(":/images/ground_texture.png");
     printf("Default texture image loaded. Width: %d, height: %d\n",
            texture_img_.width(), texture_img_.height());
   } else {

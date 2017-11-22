@@ -66,7 +66,8 @@ def interpolate_3dvector_linear(input, input_timestamp, output_timestamp):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('list')
+    parser.add_argument('--list', type=str, default=None)
+    parser.add_argument('--path', type=str, default=None)
     parser.add_argument('--skip_front', type=int, default=800)
     parser.add_argument('--skip_end', type=int, default=800)
     parser.add_argument('--recompute', action='store_true')
@@ -76,11 +77,17 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    with open(args.list) as f:
-        dataset_list = [s.strip('\n') for s in f.readlines()]
+    dataset_list = []
+    if args.path:
+        dataset_list.append(args.path)
+    elif args.list:
+        root_dir = os.path.dirname(args.list)
+        with open(args.list) as f:
+            dataset_list = [root_dir + '/' + s.strip('\n') for s in f.readlines()]
+    else:
+        raise ValueError('No data specified')
 
     print(dataset_list)
-    root_dir = os.path.dirname(args.list)
 
     nano_to_sec = 1000000000.0
     total_length = 0.0
@@ -94,7 +101,7 @@ if __name__ == '__main__':
         motion_type = 'unknown'
         if len(info) == 2:
             motion_type = info[1]
-        data_root = root_dir + '/' + info[0]
+        data_root = info[0]
         length = 0
         if os.path.exists(data_root + '/processed/data.csv') and not args.recompute:
             data_pandas = pandas.read_csv(data_root + '/processed/data.csv')

@@ -18,6 +18,7 @@ nano_to_sec = 1e09
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('dir')
+    parser.add_argument('--start_portion_length', default=1000, type=int)
 
     print('Loading...')
     args = parser.parse_args()
@@ -28,12 +29,13 @@ if __name__ == '__main__':
 
     ts = data_all['time'].values / nano_to_sec
     positions = data_all[['pos_x', 'pos_y', 'pos_z']].values
+    is_gt_valid = np.linalg.norm(np.sum(positions, axis=0)) > 1e-05
     # orientations = data_all[['ori_w', 'ori_x', 'ori_y', 'ori_z']].values
     orientations = data_all[['rv_w', 'rv_x', 'rv_y', 'rv_z']].values
     gravity = data_all[['grav_x', 'grav_y', 'grav_z']].values
-    ori_tango = data_all[['ori_w', 'ori_x', 'ori_y', 'ori_z']].values
     track_length = np.sum(np.linalg.norm(positions[1:] - positions[:-1], axis=1))
-    step_stride = track_length / step_data[-1][1]
+    # step_stride = track_length / step_data[-1][1]
+    step_stride = 0.67
     print('Track length: {:.3f}m, stride length: {:.3f}m'.format(track_length, step_stride))
 
     # Interpolate step counts to Tango's sample rate.
@@ -45,7 +47,8 @@ if __name__ == '__main__':
     # Compute positions by dead-reckoning
     step_length = step_stride * (step_interpolated[1:] - step_interpolated[:-1])
     position_from_step = np.zeros(positions.shape)
-    position_from_step[0] = positions[0]
+    if is_gt_valid:
+        position_from_step[0] = positions[0]
 
     # Compute the forward speed. Notice that the device is not necessarily facing horizontally. We need to take the
     # gravity direction into consideration.
@@ -64,14 +67,17 @@ if __name__ == '__main__':
         segment = (q * forward_dir[i] * q.conj()).vec * step_length[i - 1]
         position_from_step[i] = position_from_step[i-1] + segment
 
-    # Find a transformation to align the start portion of estimated track and the ground truth track.
-    start_length = 2000
-    _, rotation_to_gt, translation_to_gt = icp.fit_transformation(position_from_step, positions)
-    position_from_step = (np.dot(rotation_to_gt, position_from_step.T) + translation_to_gt[:, None]).T
+    # If the ground truth is presented, ind a transformation to align the start portion of estimated
+    # track and the ground truth track.
+    if is_gt_valid:
+        start_length = args.start_portion_length
+        _, rotation_to_gt, translation_to_gt = icp.fit_transformation(position_from_step, positions)
+        position_from_step = np.dot(rotation_to_gt, (position_from_step - positions[0]).T).T + positions[0]
 
-    _, rotation_2d, translation_2d = icp.fit_transformation(position_from_step[:start_length, :2],
+        _, rotation_2d, translation_2d = icp.fit_transformation(position_from_step[:start_length, :2],
                                                             positions[:start_length, :2])
-    position_from_step[:, :2] = (np.dot(rotation_2d, position_from_step[:, :2].T) + translation_2d[:, None]).T
+        position_from_step[:, :2] = np.dot(rotation_2d, (position_from_step[:, :2]
+                                                     - positions[0, :2]).T).T + positions[0, :2]
 
     # rotation_combined = np.identity(3)
     # rotation_combined[:2, :2] = rotation_2d

@@ -9,11 +9,14 @@ from sklearn.metrics import mean_squared_error
 from sklearn.metrics import accuracy_score
 from sklearn import svm
 from sklearn.model_selection import GridSearchCV
+from sklearn.model_selection import train_test_split
 
 sys.path.append('/home/yanhang/Documents/research/IMUProject/code/python')
 sys.path.append('/Users/yanhang/Documents/research/IMUProject/code/python')
 import speed_regression.training_data as td
 
+
+ignore_class = 'transition'
 
 class SVMOption:
     def __init__(self, svm_type=cv2.ml.SVM_C_SVC, kernel_type=cv2.ml.SVM_RBF, degree=1,
@@ -127,65 +130,69 @@ class SVRCascade:
 
     def train(self, train_feature, train_label, train_response):
         assert train_response.shape[1] == self.num_channels
-        print('Training classifier')
         train_feature_cv = train_feature.astype(np.float32)
-        self.classifier.train(train_feature_cv, cv2.ml.ROW_SAMPLE, train_label)
-        predicted_train = self.classifier.predict(train_feature_cv)[1].ravel()
-        error_svm = accuracy_score(train_label, predicted_train)
-        print('Classifier trained. Training accuracy: %f' % error_svm)
-        for cls in range(self.num_classes):
+        if self.num_classes > 1:
+            print('Training classifier')
+            self.classifier.train(train_feature_cv, cv2.ml.ROW_SAMPLE, train_label)
+            predicted_train = self.classifier.predict(train_feature_cv)[1].ravel()
+            error_svm = accuracy_score(train_label, predicted_train)
+            print('Classifier trained. Training accuracy: %f' % error_svm)
+        for cls_name, cls in self.class_map.items():
             feature_in_class = train_feature_cv[train_label == cls, :]
+            target_in_class = train_response[train_label == cls, :]
+            # Skip models in 'transition' mode.
+            if cls_name == ignore_class:
+                continue
             for chn in range(self.num_channels):
                 rid = cls * self.num_channels + chn
                 print('Training regressor for class %d, channel %d' % (cls, chn))
-                target_in_class = train_response[train_label == cls, chn].astype(np.float32)
-                self.regressors[rid].train(feature_in_class, cv2.ml.ROW_SAMPLE, target_in_class)
+                self.regressors[rid].train(feature_in_class, cv2.ml.ROW_SAMPLE,
+                                           target_in_class[:, chn].astype(np.float32))
                 predicted = self.regressors[rid].predict(feature_in_class)[1]
                 print('Regressor for class %d  channel %d trained. Training error: %f(r2), %f(MSE)' %
-                      (cls, chn, r2_score(predicted, target_in_class),
-                       mean_squared_error(predicted, target_in_class)))
+                      (cls, chn, r2_score(predicted, target_in_class[:, chn]),
+                       mean_squared_error(predicted, target_in_class[:, chn])))
         print('All done')
 
     def test(self, test_feature, true_label=None, true_responses=None):
         feature_cv = test_feature.astype(np.float32)
-        labels = self.classifier.predict(feature_cv)[1].ravel()
-        if true_label is not None:
-            print('Classification accuracy: ', accuracy_score(true_label, labels))
+        labels = np.zeros(feature_cv.shape[0])
+        if self.num_classes > 1:
+            labels = self.classifier.predict(feature_cv)[1].ravel()
+            if true_label is not None:
+                print('Classification accuracy: ', accuracy_score(true_label, labels))
 
         index_array = np.array([i for i in range(test_feature.shape[0])])
-        reverse_index = []
-        predicted_class = []
-        for cls in range(self.num_classes):
+        reverse_index = [None for _ in self.class_map]
+        predicted_class = [None for _ in self.class_map]
+        for cls_name, cls in self.class_map.items():
             feature_in_class = feature_cv[labels == cls, :]
-            predicted_in_class = np.empty([feature_in_class.shape[0], self.num_channels])
-            if feature_in_class.shape[0] == 0:
-                predicted_class.append(predicted_in_class)
-                reverse_index.append(index_array[labels == cls])
-                continue
-            for chn in range(self.num_channels):
-                rid = cls * self.num_channels + chn
-                predicted_in_class[:, chn] = self.regressors[rid].predict(feature_in_class)[1].ravel()
-            predicted_class.append(predicted_in_class)
-            reverse_index.append(index_array[labels == cls])
+            predicted_in_class = np.zeros([feature_in_class.shape[0], self.num_channels])
+            if feature_in_class.shape[0] > 0 and cls_name != ignore_class:
+                for chn in range(self.num_channels):
+                    rid = cls * self.num_channels + chn
+                    predicted_in_class[:, chn] = self.regressors[rid].predict(feature_in_class)[1].ravel()
+            predicted_class[cls] = predicted_in_class
+            reverse_index[cls] = index_array[labels == cls]
         if true_responses is not None:
-            for cls in range(self.num_classes):
-                # We store the error in both R2 score and MSE score
+            for cls_name, cls in self.class_map.items():
+                if cls_name == ignore_class:
+                    continue
                 true_in_class = true_responses[labels == cls, :]
                 if true_in_class.shape[0] == 0:
                     continue
                 for chn in range(self.num_channels):
-                    r2 = r2_score(true_in_class[:, chn], predicted_class[cls][:, chn])
+                    # r2 = r2_score(true_in_class[:, chn], predicted_class[cls][:, chn])
                     mse = mean_squared_error(true_in_class[:, chn], predicted_class[cls][:, chn])
-                    print('Error for class %d, channel %d: %f(R2), %f(MSE)' % (cls, chn, r2, mse))
+                    print('Error for class %d, channel %d: %f(MSE)' % (cls, chn, mse))
         predicted_all = np.empty([test_feature.shape[0], self.num_channels])
-        for cls in range(self.num_classes):
+        for cls_name, cls in self.class_map.items():
             predicted_all[reverse_index[cls], :] = predicted_class[cls]
 
         if true_responses is not None:
             for chn in range(self.num_channels):
-                r2 = r2_score(true_responses[:, chn], predicted_all[:, chn])
                 mse = mean_squared_error(true_responses[:, chn], predicted_all[:, chn])
-                print('Overall regression error for channel %d: %f(R2), %f(MSE)' % (chn, r2, mse))
+                print('Overall regression error for channel %d: %f(MSE)' % (chn, mse))
         return labels, predicted_all
 
 
@@ -198,8 +205,12 @@ def write_model_to_file(path, model, suffix=''):
         f.write('%d\n' % len(model.class_map))
         for k, v in class_map.items():
             f.write('{:s} {:d}\n'.format(k, v))
-    model.classifier.save(path + '/classifier{}.yaml'.format(suffix))
-    for cls in range(model.num_classes):
+    if model.num_classes > 1:
+        model.classifier.save(path + '/classifier{}.yaml'.format(suffix))
+    for cls_name, cls in model.class_map.items():
+        # Skip models in 'transition' mode.
+        if cls_name == ignore_class:
+            continue
         for chn in range(model.num_channels):
             model.regressors[cls * model.num_channels + chn].save(path +
                                                                   '/regressor{}_{}_{}.yaml'.format(suffix, cls, chn))
@@ -216,67 +227,62 @@ def load_model_from_file(path, suffix=''):
             line = f.readline().strip().split()
             class_map[line[0]] = int(line[1])
     model = SVRCascade(options, class_map)
-    model.classifier = cv2.ml.SVM_load(path + '/classifier{}.yaml'.format(suffix))
-    for cls in range(options.num_classes):
+    if len(class_map) > 1:
+        model.classifier = cv2.ml.SVM_load(path + '/classifier{}.yaml'.format(suffix))
+    for cls_name, cls in class_map.items():
+        # Skip models in 'transition' mode.
+        if cls_name == ignore_class:
+            continue
         for chn in range(options.num_channels):
             rid = cls * options.num_channels + chn
             model.regressors[rid] = cv2.ml.SVM_load(path + '/regressor{}_{}_{}.yaml'.format(suffix, cls, chn))
     return model
 
 
-def get_best_option(train_feature, train_label, train_response, svm_search_dict=None, svr_search_dict=None,
+def get_best_option(train_feature, train_label, class_map, train_response, svm_search_dict=None, svr_search_dict=None,
                     n_split=3, n_jobs=6, verbose=3):
     if svm_search_dict is None:
-        svm_search_dict = {'C': [0.1, 1.0, 10.0]}
+        svm_search_dict = {'C': [10.0]}
 
-    # First find best parameters for the classifier
-    svm_grid_searcher = GridSearchCV(svm.SVC(), svm_search_dict, cv=n_split, n_jobs=n_jobs, verbose=verbose)
-    svm_grid_searcher.fit(train_feature, train_label)
-    svm_best_param = svm_grid_searcher.best_params_
-    print('SVM fitted. Optimal parameters: ', svm_best_param)
     svm_option = SVMOption()
     svm_option.svm_type = cv2.ml.SVM_C_SVC
     svm_option.kernel_type = cv2.ml.SVM_RBF
-    svm_option.C = svm_best_param['C']
+    svm_option.C = 10.0
     svm_option.gamma = 1. / train_feature.shape[1]
+
+    # if len(class_map) > 1:
+    #     # First find best parameters for the classifier
+    #     svm_grid_searcher = GridSearchCV(svm.SVC(), svm_search_dict, cv=n_split, n_jobs=n_jobs, verbose=verbose)
+    #     svm_grid_searcher.fit(train_feature, train_label)
+    #     svm_best_param = svm_grid_searcher.best_params_
+    #     print('SVM fitted. Optimal parameters: ', svm_best_param)
+    #     svm_option.svm_type = cv2.ml.SVM_C_SVC
+    #     svm_option.kernel_type = cv2.ml.SVM_RBF
+    #     svm_option.C = svm_best_param['C']
+    #     svm_option.gamma = 1. / train_feature.shape[1]
     if svr_search_dict is None:
-        svr_search_dict = {'C': [0.1, 1.0, 10.0],
+        svr_search_dict = {'C': [1.0, 10.0],
                            'epsilon': [0.001, 0.01]}
     svr_options = []
     num_classes = max(train_label) + 1
+    assert num_classes == len(class_map)
     num_channels = train_response.shape[1]
-    for cls in range(num_classes):
+    for cls_name, cls in class_map.items():
         for chn in range(num_channels):
-            svr_grid_searcher = GridSearchCV(svm.SVR(), svr_search_dict, cv=n_split,
-                                             scoring='neg_mean_squared_error', n_jobs=n_jobs, verbose=verbose)
-            svr_grid_searcher.fit(train_feature[train_label == cls, :], train_response[train_label == cls, chn])
-            best_svr_param = svr_grid_searcher.best_params_
             svr_option = SVMOption()
             svr_option.svm_type = cv2.ml.SVM_EPS_SVR
             svr_option.kernel_type = cv2.ml.SVM_RBF
-            svr_option.C = best_svr_param['C']
-            svr_option.e = best_svr_param['epsilon']
             svr_option.gamma = 1. / train_feature.shape[1]
+            if cls_name is not ignore_class:
+                svr_grid_searcher = GridSearchCV(svm.SVR(), svr_search_dict, cv=n_split,
+                                                 scoring='neg_mean_squared_error', n_jobs=n_jobs, verbose=verbose)
+                svr_grid_searcher.fit(train_feature[train_label == cls, :], train_response[train_label == cls, chn])
+                best_svr_param = svr_grid_searcher.best_params_
+                svr_option.C = best_svr_param['C']
+                svr_option.e = best_svr_param['epsilon']
             svr_options.append(svr_option)
     print('All done')
     return SVRCascadeOption(num_classes, num_channels, svm_option, svr_options)
-
-
-def get_best_option_analytical(train_feature, train_label, train_response):
-    num_classes = max(train_label) + 1
-    num_channels = train_response.shape[1]
-    svr_options = []
-    for cls in range(num_classes):
-        train_in_class = train_feature[train_label == cls, :]
-        for chn in range(num_channels):
-            response_in_class = train_response[train_label == cls, chn]
-            mean_response = np.mean(response_in_class)
-            dev_response = np.std(response_in_class)
-            svr_option = SVMOption()
-            svr_option.svm_type = cv2.ml.SVM_EPS_SVR
-            svr_option.kernel_type = cv2.ml.SVM_RBF
-            svr_option.C = max(abs(mean_response + 3 * dev_response), abs(mean_response - 3 * dev_response))
-            pass
 
 
 def load_datalist(path, option, class_map=None):
@@ -329,27 +335,79 @@ if __name__ == '__main__':
     import argparse
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('list')
+    parser.add_argument('--list', default=None)
+    parser.add_argument('--train_test_path', default=None)
     parser.add_argument('--output_path', default=None, type=str)
     parser.add_argument('--subsample', default=1, type=int)
     parser.add_argument('--step_size', default=10, type=int)
+    parser.add_argument('--train_ratio', default=0.99999, type=float)
     parser.add_argument('--cv', default=3, type=int)
     parser.add_argument('--option', default=None, type=str)
     args = parser.parse_args()
 
-    option = td.TrainingDataOption()
-    option.sample_step_ = args.step_size
-    feature_all, label_all, responses_all, class_map = load_datalist(path=args.list, option=option)
-    responses_all = responses_all[:, [0, 2]]
+    load_from_list = True
+    data_loaded = False
+    feature_train, label_train, responses_train = None, None, None
+    feature_test, label_test, responses_test = None, None, None
+    class_map = {}
+    train_file_path, test_file_path = None, None
+    if args.train_test_path:
+        train_file_path = args.train_test_path + '/train.npy'
+        test_file_path = args.train_test_path + '/test.npy'
+        if os.path.exists(train_file_path) and os.path.exists(test_file_path) and os.path.exists(
+                        args.train_test_path + '/class_map.txt'):
+            print('Loading training set from ', train_file_path)
+            train_all = np.load(train_file_path)
+            print('Loading testing set from ', test_file_path)
+            test_all = np.load(test_file_path)
+            feature_train, label_train, responses_train = train_all[:, :-3], train_all[:, -3], train_all[:, -2:]
+            feature_test, label_test, responses_test = test_all[:, :-3], test_all[:, -3], test_all[:, -2:]
+            with open(args.train_test_path + '/class_map.txt') as f:
+                num_classes = int(f.readline().strip())
+                for i in range(num_classes):
+                    line = f.readline().strip().split()
+                    class_map[line[0]] = int(line[1])
+            load_from_list = False
+            data_loaded = True
+    if load_from_list and args.list:
+        option = td.TrainingDataOption()
+        option.sample_step_ = args.step_size
+        feature_all, label_all, responses_all, class_map = load_datalist(path=args.list, option=option)
+        responses_all = responses_all[:, [0, 2]]
 
-    feature_all = feature_all[0:-1:args.subsample]
-    label_all = label_all[0:-1:args.subsample]
-    responses_all = responses_all[0:-1:args.subsample]
+        print('Data loaded. Total number of samples: ', feature_all.shape[0])
 
-    print('Data loaded. Total number of samples: ', feature_all.shape[0])
+        for key, value in class_map.items():
+            print('%d samples in %s(label %d)' % (len(label_all[label_all==value]), key, value))
 
-    for key, value in class_map.items():
-        print('%d samples in %s' % (len(label_all[label_all==value]), key))
+        # Combine label and response to a single array to simplify the splitting process.
+        target_temp = np.concatenate([label_all[:, None], responses_all], axis=1)
+        feature_train, feature_test, target_train, target_test = train_test_split(feature_all, target_temp,
+                                                                                  train_size=args.train_ratio)
+        print('Randomly splitting the dataset to %d/%d samples for training/testing.' %
+              (feature_train.shape[0], feature_test.shape[0]))
+        label_train, responses_train = target_train[:, 0], target_train[:, 1:]
+        label_test, responses_test = target_test[:, 0], target_test[:, 1:]
+        data_loaded = True
+        if args.train_test_path:
+            if not os.path.exists(args.train_test_path):
+                os.makedirs(args.train_test_path)
+            train_all = np.concatenate([feature_train, label_train[:, None], responses_train], axis=1)
+            test_all = np.concatenate([feature_test, label_test[:, None], responses_test], axis=1)
+            np.save(train_file_path, train_all)
+            np.save(test_file_path, test_all)
+            with open(args.train_test_path + '/class_map.txt', 'w') as f:
+                f.write('%d\n' % len(class_map))
+                for k, v in class_map.items():
+                    f.write('{:s} {:d}\n'.format(k, v))
+            print('Training/testing set written to ' + args.train_test_path)
+    if not data_loaded:
+        raise ValueError('Both data list and train/test directory are invalid')
+
+    if args.subsample > 1:
+        feature_train = feature_train[0:-1:args.subsample]
+        label_train = label_train[0:-1:args.subsample]
+        responses_train = responses_train[0:-1:args.subsample]
 
     best_option = SVRCascadeOption()
     if args.option:
@@ -357,9 +415,14 @@ if __name__ == '__main__':
         print('Options loaded from file: ', args.option)
     else:
         print('No option file is provided, running grid search')
-        best_option = get_best_option(feature_all, label_all, responses_all, n_split=args.cv)
+        best_option = get_best_option(feature_train, label_train, class_map, responses_train, n_split=args.cv)
     model = SVRCascade(best_option, class_map)
-    model.train(feature_all, label_all, responses_all)
+    print('Sample used for training: ', feature_train.shape[0])
+    model.train(feature_train, label_train.astype(np.int32), responses_train)
 
     if args.output_path:
         write_model_to_file(args.output_path, model)
+
+    if label_test.shape[0] > 0:
+        print('Running trained model on testing set:')
+        model.test(feature_test, label_test.astype(np.int32), responses_test)

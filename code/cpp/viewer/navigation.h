@@ -47,7 +47,8 @@ class Navigation {
     camera_centers_.resize(NUM_MODE);
     center_points_.resize(NUM_MODE);
     up_dirs_.resize(NUM_MODE);
-    fovs_.resize(NUM_MODE);
+    // fovs_.resize(NUM_MODE);
+    fovs_ = {50.0, 50.0, 50.0, 50.0, 30.0};
   }
 
   inline QMatrix4x4 GetProjectionMatrix() const {
@@ -58,6 +59,10 @@ class Navigation {
     return modelview_;
   }
 
+  inline CameraMode GetRenderMode() const{
+    return render_mode_;
+  }
+
   void UpdateNavitation(const Eigen::Vector3d &pos,
                         const Eigen::Quaterniond &orientation);
 
@@ -66,8 +71,6 @@ class Navigation {
     dst_mode_ = dst;
     transition_counter_ = 0;
     render_mode_ = TRANSITION;
-//			render_mode_ = dst;
-//			src_mode_ = dst;
   }
 
   inline void SetModelView(QMatrix4x4 modelview) {
@@ -83,10 +86,23 @@ class Navigation {
       StartTransition(mode);
     }
   }
+
+  inline void IncreaseFOV(){
+    fovs_[render_mode_] = std::min(kMaxFOV, fovs_[render_mode_] + kFOVStride);
+  }
+
+  inline void DecreaseFOV(){
+    fovs_[render_mode_] = std::max(kMinFOV, fovs_[render_mode_] - kFOVStride);
+  }
+
  private:
   const float fov_;
   const float aspect_ratio_;
   const float trajectory_height_;
+
+  const float kMaxFOV = 90;
+  const float kMinFOV = 10;
+  const float kFOVStride = 5;
 
   const float canvas_width_;
   const float canvas_height_;
