@@ -4,6 +4,7 @@
 
 #include "imu_localization.h"
 
+#include <fstream>
 #include <vector>
 #include <string>
 #include <algorithm>

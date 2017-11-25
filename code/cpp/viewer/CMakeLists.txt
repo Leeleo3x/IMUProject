@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.0)
 
-list(APPEND CMAKE_PREFIX_PATH /opt/Qt/5.8/gcc_64 /usr/local/Cellar/qt\@5.7/5.7.1/)
+list(APPEND CMAKE_PREFIX_PATH /opt/Qt/5.8/gcc_64 /usr/local/Cellar/qt5/5.9.3/)
 
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 

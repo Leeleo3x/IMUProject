@@ -7,7 +7,7 @@ find_package(Eigen REQUIRED)
 find_package(Glog REQUIRED)
 find_package(Gflags REQUIRED)
 
-include_directories(${EIGEN_INCLUDE_DIRS})
+include_directories(${EIGEN_INCLUDE_DIRS} ${GLOG_INCLUDE_DIR})
 
 add_library(SpeedRegression feature_target.h feature_target.cc
         model_wrapper.h model_wrapper.cc speed_regression_cli.cc)
