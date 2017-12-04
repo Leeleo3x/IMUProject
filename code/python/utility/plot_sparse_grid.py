@@ -65,21 +65,21 @@ if __name__ == '__main__':
 
     speed_corrected = compute_gravity_speed(ts, corrected_linacce, orientation, gravity)
 
-    font_config = {'family': 'serif',
-                   'size': 120}
-    linew = 18
-    markersize = 100
-
-    plt.rc('font', **font_config)
-    fig = plt.figure('Sparse grid', figsize=(130, 25))
-
     # font_config = {'family': 'serif',
-    #                'size': 18}
-    # linew = 1.4
-    # markersize = 5
+    #                'size': 120}
+    # linew = 18
+    # markersize = 100
     #
     # plt.rc('font', **font_config)
-    # fig = plt.figure('Sparse grid', figsize=(20, 5))
+    # fig = plt.figure('Sparse grid', figsize=(130, 25))
+
+    font_config = {'family': 'serif',
+                   'size': 18}
+    linew = 8
+    markersize = 5
+
+    plt.rc('font', **font_config)
+    fig = plt.figure('Sparse grid', figsize=(16, 8))
 
     glob_start_id = bias_ind[bias_start_id]
     glob_end_id = bias_ind[bias_end_id]
@@ -87,9 +87,8 @@ if __name__ == '__main__':
     bias_end_id = min(bias_ind.shape[0] - 1, bias_end_id + 1)
 
     # First draw the plot for low-frequency bias.
-
     for i in range(1):
-        plt.subplot(121 + i * 2)
+        plt.subplot(111 + i * 2, axis_bgcolor='black')
         plt.ylabel('Acceleration (m/s2)')
         plt.xlabel('Time (s)')
         x_min = min(ts[bias_ind[bias_start_id]], ts[glob_start_id]) - 0.1
@@ -109,18 +108,18 @@ if __name__ == '__main__':
     glob_start_id = constraint_ind[con_start_id]
     glob_end_id = constraint_ind[con_end_id]
 
-    for i in [0]:
-        plt.subplot(121 + i * 2 + 1)
-        plt.ylabel('Velocity (m/s)')
-        plt.xlabel('Time (s)')
-        # x_min = min(ts[constraint_ind[con_start_id]], ts[glob_start_id]) - 0.1
-        # x_max = max(ts[constraint_ind[con_end_id - 1]], ts[glob_end_id]) + 0.1
-        x_min, x_max = 3.9, 5.8
-        plt.xlim(x_min, x_max)
-        plt.plot(ts[glob_start_id:glob_end_id], speed_raw[glob_start_id:glob_end_id, i], color='r', lw=linew)
-        plt.plot(ts[glob_start_id:glob_end_id], speed_corrected[glob_start_id:glob_end_id, i] - 0.05, color='b', lw=linew)
-        #plt.plot(ts[constraint_ind[con_start_id:con_end_id]], constraint[con_start_id:con_end_id, i], color=(.8, .5, 0),
-        #          lw=linew, marker='^', markersize=markersize)
+    # for i in [0]:
+    #     plt.subplot(121 + i * 2 + 1)
+    #     plt.ylabel('Velocity (m/s)')
+    #     plt.xlabel('Time (s)')
+    #     # x_min = min(ts[constraint_ind[con_start_id]], ts[glob_start_id]) - 0.1
+    #     # x_max = max(ts[constraint_ind[con_end_id - 1]], ts[glob_end_id]) + 0.1
+    #     x_min, x_max = 3.9, 5.8
+    #     plt.xlim(x_min, x_max)
+    #     plt.plot(ts[glob_start_id:glob_end_id], speed_raw[glob_start_id:glob_end_id, i], color='r', lw=linew)
+    #     plt.plot(ts[glob_start_id:glob_end_id], speed_corrected[glob_start_id:glob_end_id, i] - 0.05, color='b', lw=linew)
+    #     plt.plot(ts[constraint_ind[con_start_id:con_end_id]], constraint[con_start_id:con_end_id, i], color=(.8, .5, 0),
+    #              lw=linew, marker='^', markersize=markersize)
 
     # plt.subplot(324)
     # plt.ylabel('Velocity (m/s)')
@@ -132,5 +131,5 @@ if __name__ == '__main__':
 
     # plt.legend(['Predicted speed', 'Before correction', 'After correction'], loc='lower left')
 
-    fig.savefig(args.dir + '/result_{}/alg1.png'.format(args.id), bbox_inches='tight')
-    # plt.show()
+    # fig.savefig(args.dir + '/result_{}/alg1.png'.format(args.id), bbox_inches='tight')
+    plt.show()
