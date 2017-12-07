@@ -151,9 +151,7 @@ int main(int argc, char **argv) {
               acce[0] - linacce[i][0], acce[1] - linacce[i][1], acce[2] - linacce[i][2]);
       raw_out << buffer;
     }
-    return 0;
   }
-
 
   // load regressor
   std::unique_ptr<IMUProject::ModelWrapper> model(new IMUProject::SVRCascade(FLAGS_model_path));
@@ -221,10 +219,6 @@ int main(int argc, char **argv) {
     if(is_gt_valid) {
       IMUProject::EstimateTransformation(output_positions, gt_positions, &global_transform, &global_rotation,
                                          &global_translation);
-    } else {
-//      Eigen::Matrix3d local_to_glob;
-//      local_to_glob << 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, -1.0, 0.0;
-//      global_rotation = local_to_glob.inverse() * output_orientation[0].conjugate();
     }
     for (int i = 0; i < output_positions.size(); ++i) {
       output_positions[i] = global_rotation * (output_positions[i] - gt_positions[0]) + gt_positions[0];
@@ -267,12 +261,12 @@ int main(int argc, char **argv) {
   sprintf(buffer, "%s/result_trajectory_%s.ply", result_dir_path, FLAGS_suffix.c_str());
   IMUProject::WriteToPly(std::string(buffer), dataset.GetTimeStamp().data(), output_positions.data(),
                          output_orientation.data(), trajectory.GetNumFrames(),
-                         false, traj_color, 0.8, 100, 300);
+                         false, traj_color, 0);
 
   sprintf(buffer, "%s/tango_trajectory.ply", result_dir_path);
   IMUProject::WriteToPly(std::string(buffer), dataset.GetTimeStamp().data(), dataset.GetPosition().data(),
                          dataset.GetOrientation().data(), (int) dataset.GetPosition().size(),
-                         false, Eigen::Vector3d(255, 0, 0), 0.8, 100, 300);
+                         false, Eigen::Vector3d(255, 0, 0), 0.0);
 
 
   {
