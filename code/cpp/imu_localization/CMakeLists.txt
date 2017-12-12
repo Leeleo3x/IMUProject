@@ -9,11 +9,6 @@ find_package(Gflags REQUIRED)
 find_package(Ceres REQUIRED)
 include_directories(${EIGEN_INCLUDE_DIRS})
 
-message(" --OpenMesh include dirs:" ${OPENMESH_INCLUDE_DIR})
-message(" --OpenCV include dirs:" ${OpenCV_INCLUDE_DIRS})
-message(" --Eigen include dirs:" ${EIGEN_INCLUDE_DIRS})
-message(" --Ceres include dirs:" ${CERES_INCLUDE_DIRS})
-
 add_executable(IMULocalization_cli imu_localization.h imu_localization.cc imu_localization_cli.cc)
 target_link_libraries(IMULocalization_cli IMUUtility SpeedRegression IMUOptimization stlplus3)
 target_link_libraries(IMULocalization_cli ${OpenCV_LIBS} ${GLOG_LIBRARY} ${GFLAGS_LIBRARY})

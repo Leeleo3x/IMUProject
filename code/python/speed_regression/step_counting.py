@@ -36,7 +36,8 @@ if __name__ == '__main__':
     track_length = np.sum(np.linalg.norm(positions[1:] - positions[:-1], axis=1))
     # step_stride = track_length / step_data[-1][1]
     step_stride = 0.67
-    print('Track length: {:.3f}m, stride length: {:.3f}m'.format(track_length, step_stride))
+    if is_gt_valid:
+        print('Track length: {:.3f}m, stride length: {:.3f}m'.format(track_length, step_stride))
 
     # Interpolate step counts to Tango's sample rate.
     step_data = np.concatenate([np.array([[ts[0] - 1, 0]]), step_data, np.array([[ts[-1] + 1, step_data[-1][1]]])],
