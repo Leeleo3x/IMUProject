@@ -4,7 +4,7 @@ project(IMUOptimization)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
 find_package(OpenCV REQUIRED)
-find_package(Ceres REQUIRED)
+find_package(Ceres 1.13.0 REQUIRED)
 find_package(Eigen REQUIRED)
 find_package(Glog REQUIRED)
 find_package(Gflags REQUIRED)

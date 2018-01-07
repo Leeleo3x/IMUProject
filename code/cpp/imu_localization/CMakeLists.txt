@@ -7,7 +7,8 @@ find_package(Eigen REQUIRED)
 find_package(Glog REQUIRED)
 find_package(Gflags REQUIRED)
 find_package(Ceres REQUIRED)
-include_directories(${EIGEN_INCLUDE_DIRS})
+include_directories(${EIGEN_INCLUDE_DIRS} ${CERES_INCLUDE_DIRS})
+
 
 add_executable(IMULocalization_cli imu_localization.h imu_localization.cc imu_localization_cli.cc)
 target_link_libraries(IMULocalization_cli IMUUtility SpeedRegression IMUOptimization stlplus3)

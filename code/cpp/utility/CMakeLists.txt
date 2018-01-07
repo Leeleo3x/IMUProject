@@ -9,6 +9,7 @@ find_package(Gflags REQUIRED)
 find_package(OpenMesh REQUIRED)
 
 include_directories(${EIGEN_INCLUDE_DIRS})
+include_directories(${OPENMESH_INCLUDE_DIR})
 
 add_subdirectory(stlplus3)
 add_library(IMUUtility utility.h utility.cc data_io.h data_io.cc)
