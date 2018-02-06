@@ -4,6 +4,7 @@ from scipy.ndimage.filters import gaussian_filter1d
 from sklearn.metrics import r2_score, mean_squared_error
 import sys
 import os
+sys.path.append(os.path.abspath('../'))
 from speed_regression import training_data as td
 
 args = None
