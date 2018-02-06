@@ -2,12 +2,8 @@ import numpy as np
 import tensorflow as tf
 from scipy.ndimage.filters import gaussian_filter1d
 from sklearn.metrics import r2_score, mean_squared_error
-import matplotlib.pyplot as plt
-
 import sys
 import os
-
-sys.path.append('/home/yanhang/Documents/research/IMUProject/code/python')
 from speed_regression import training_data as td
 
 args = None
@@ -233,7 +229,9 @@ def load_dataset(listpath, imu_columns, feature_smooth_sigma, target_smooth_sigm
     with open(listpath) as f:
         datasets = f.readlines()
     for data in datasets:
-        data_name = data.strip()
+        if data[0] == '#':
+            continue
+        [data_name, _] = [x.strip() for x in data.split(',')]
         data_all = pandas.read_csv(root_dir + '/' + data_name + '/processed/data.csv')
         ts = data_all['time'].values / nano_to_sec
         gravity = data_all[['grav_x', 'grav_y', 'grav_z']].values

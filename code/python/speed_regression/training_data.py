@@ -8,8 +8,6 @@ import pandas
 from scipy.fftpack import fft
 from scipy.ndimage.filters import gaussian_filter1d
 import matplotlib.pyplot as plt
-
-sys.path.append('/home/yanhang/Documents/research/IMUProject/code/python')
 from algorithms import geometry
 
 
