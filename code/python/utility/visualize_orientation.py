@@ -4,8 +4,8 @@ from mpl_toolkits.mplot3d import Axes3D
 from pyquaternion import Quaternion
 import argparse
 import math
-import os
 from numpy import linalg as la
+from matplotlib import animation
 
 
 def build_data(magnet, acce):
@@ -44,7 +44,19 @@ def show(folder, start, num):
 
     fig = plt.figure()
     ax = fig.gca(projection='3d')
-    ax.plot(position[:, 1], position[:, 2], position[:, 3])
+    ax.set_xlim3d([-1.5, 1.5])
+    ax.set_xlabel('X')
+    ax.set_ylim3d([-1.5, 1.5])
+    ax.set_ylabel('Y')
+    ax.set_zlim3d([-1.5, 1.5])
+    ax.set_zlabel('Z')
+    # ax.plot(position[:, 1], position[:, 2], position[:, 3])
+    init = np.array(
+        [0, 0, 0]
+    )
+    line0 = ax.plot([0], [0], [0], 'r')[0]
+    line1 = ax.plot([0], [0], [0], 'g')[0]
+    line2 = ax.plot([0], [0], [0], 'b')[0]
     ax.legend()
 
     quaternion_pixel = []
@@ -52,7 +64,7 @@ def show(folder, start, num):
     angle = []
     dir_pixel = []
     dir_tango = []
-    v = np.array([-1, 0, 0])
+    v = np.array([1, 0, 0])
     for x in pixel:
         print((x[0] - pixel_start)/1000000)
         if (x[0] - pixel_start) / 1000000 > 0:
@@ -62,30 +74,50 @@ def show(folder, start, num):
         if (x[0] - tango_start) / 1000000 > 0:
             quaternion_tango.append(Quaternion(x[1:5]))
             dir_tango.append(quaternion_tango[-1].rotate(v))
+
+
     for i in range(min(len(quaternion_pixel), len(quaternion_tango))):
         x = quaternion_pixel[i].rotate(v)
         y = quaternion_tango[i].rotate(v)
         res = np.dot(x, y)
         angle.append(math.acos(res) / math.pi * 180)
 
-    pixel_z = []
-    tango_z = []
+    ppp = []
     pre = 0
+    current = -1
     for x in position:
         idx = int((x[0] - tango_start) / 5000000)
         if idx < 0:
             continue
-        if x[0] - pre < 1000000000:
-            continue
-        pre = x[0]
-        pixel_z.append(dir_pixel[idx])
-        tango_z.append(dir_tango[idx])
-        def insert(point, c):
-            idx2 = np.concatenate((x[1:4].T, (x[1:4] + point.T)), axis=0)
-            idx2 = idx2.reshape(-1, 3)
-            ax.plot(idx2[:, 0], idx2[:, 1], idx2[:, 2], c)
-        insert(pixel_z[-1], 'r')
-        insert(tango_z[-1], 'g')
+        if idx != current:
+            current = idx
+            ppp.append(x[1:4]*0.1-np.array([0.5, 1.3, 0.5]))
+
+    ppp = np.array(ppp)
+    ppp[:, 0] *= -1
+    ppp = ppp.T
+
+    def insert(i):
+        x = dir_pixel[i]
+        y = dir_tango[i]
+        point = np.array([0, 0, 0])
+        idx = np.concatenate((point.T, (y + point.T)), axis=0)
+        idx = idx.reshape(-1, 3).T
+        idx2 = np.concatenate((point.T, (x + point.T)), axis=0)
+        idx2 = idx2.reshape(-1, 3).T
+        line1.set_data(idx[0:2, :])
+        line1.set_3d_properties(idx[2, :])
+        line0.set_data(idx2[0:2, :])
+        line0.set_3d_properties(idx2[2, :])
+        line2.set_data(ppp[0:2, :i])
+        line2.set_3d_properties(ppp[2, :i])
+        return [line0, line1, line2]
+
+    anim = animation.FuncAnimation(fig, insert, frames=min(len(dir_pixel), len(dir_tango)), interval=5, blit=True)
+
+    anim.save('example.mp4', fps=30)
+    plt.show()
+
 
 
     def view(array):
