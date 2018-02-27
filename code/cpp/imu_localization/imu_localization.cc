@@ -5,6 +5,7 @@
 #include "imu_localization.h"
 
 #include <chrono>
+#include <cmath>
 
 #include "algorithm/geometry.h"
 #include "speed_regression/feature_target.h"
@@ -57,7 +58,8 @@ void IMUTrajectory::AddRecord(const double t, const Eigen::Vector3d &gyro, const
   if (num_frames_ > 1) {
     const double dt = ts_[num_frames_ - 1] - ts_[num_frames_ - 2];
     speed_.emplace_back(orientation * linacce * dt);
-    position_.emplace_back(speed_[num_frames_ - 1] * dt);
+//    position_.emplace_back(speed_[num_frames_ - 1] * dt);
+    position_.emplace_back(0, 0, 0);
   } else {
     speed_.push_back(init_speed_);
     position_.push_back(init_position_);
@@ -88,31 +90,42 @@ int IMUTrajectory::RegressSpeed(const int end_ind) {
     cv::Mat feature = ComputeDirectFeatureGravity(gyro_slice.data(), linacce_slice.data(), gravity_slice.data(),
                                                   (int) gyro_slice.size(), td_option_.feature_smooth_sigma);
 
-    Eigen::VectorXd regressed(2);
+    Eigen::VectorXd regressed(model_->GetNumChannels());
     int predicted_label;
     model_->Predict(feature, &regressed, &predicted_label);
     labels_.emplace_back(predicted_label);
     transition_counts_.emplace_back(0);
 
-    const double ls_x = regressed[0];
-    const double ls_z = regressed[1];
+//    const double ls_x = regressed[0];
+//    const double ls_z = regressed[1];
+    auto t = ts_[i] - ts_[i - td_option_.window_size];
+    Eigen::Vector3d angular_velocity = regressed.tail<3>() * t;
+    auto ang_norm = angular_velocity.norm();
+    Eigen::Quaterniond q;
+    q.w() = cos(ang_norm / 2);
+    q.vec() =  sin(ang_norm / 2) * angular_velocity / ang_norm;
+
 
     constraint_ind_.push_back(i);
+    local_speed_.emplace_back(regressed[0], 0, 0);
+    rotation_vector_.emplace_back(q);
     // The forward direction is defined in the stabilized IMU frame, therefore no gravity compensation is needed.
-    Eigen::Vector3d forward_dir(0, 0, -1);
+//    Eigen::Vector3d forward_dir(0, 0, -1);
 
-    if (option_.reg_option == FULL) {
-      local_speed_.emplace_back(ls_x, 0, ls_z);
-    } else if (option_.reg_option == CONST) {
-      local_speed_.emplace_back(forward_dir * option_.const_speed);
-    } else if (option_.reg_option == MAG) {
-      local_speed_.emplace_back(forward_dir * std::sqrt(ls_x * ls_x + ls_z * ls_z));
-    } else if (option_.reg_option == ORI) {
-      double ang = std::atan2(ls_z, ls_x);
-      local_speed_.emplace_back(option_.const_speed * std::cos(ang), 0, option_.const_speed * std::sin(ang));
-    } else { // Z_ONLY
-      local_speed_.emplace_back(ls_x, 0, 0);
-    }
+//    if (option_.reg_option == FULL) {
+//      local_speed_.emplace_back(ls_x, 0, ls_z);
+//    } else if (option_.reg_option == CONST) {
+//      local_speed_.emplace_back(forward_dir * option_.const_speed);
+//    } else if (option_.reg_option == MAG) {
+//      local_speed_.emplace_back(forward_dir * std::sqrt(ls_x * ls_x + ls_z * ls_z));
+//    } else if (option_.reg_option == ORI) {
+//      double ang = std::atan2(ls_z, ls_x);
+//      local_speed_.emplace_back(option_.const_speed * std::cos(ang), 0, option_.const_speed * std::sin(ang));
+//    }
+//    else if (option_.reg_option == ANG) {
+//    } else { // Z_ONLY
+//      local_speed_.emplace_back(ls_x, 0, 0);
+//    }
 
     time_regression_.push_back((cv::getTickCount() - clock) / static_cast<float>(cv::getTickFrequency()));
   }
@@ -155,75 +168,81 @@ void IMUTrajectory::RunOptimization(const int start_id, const int N) {
 
   Eigen::Vector3d cur_init_speed;
 
-  auto ConstructConstraint = [&](const int kCon) {
-    CHECK_GE(constraint_ind_.size(), kCon);
-    if (start_id > 0) {
-      for (auto i = constraint_ind_.size() - kCon; i < constraint_ind_.size(); ++i) {
-        cur_constraint_id.push_back(constraint_ind_[i] - start_id);
-        cur_local_speed.push_back(local_speed_[i]);
-        cur_transition_counts.push_back(transition_counts_[i]);
-      }
-      cur_init_speed = speed_[start_id];
-    } else {
-      // Be sure to include the first and last constraint
-      cur_init_speed = init_speed_;
-      const float inc = (float) constraint_ind_.size() / ((float) kCon - 1);
-      for (auto i = 0; i < kCon - 1; ++i) {
-        cur_constraint_id.push_back(constraint_ind_[(int) (i * inc)]);
-        cur_local_speed.push_back(local_speed_[(int) (i * inc)]);
-        cur_transition_counts.push_back(transition_counts_[i * inc]);
-      }
-      cur_constraint_id.push_back(constraint_ind_.back());
-      cur_local_speed.push_back(local_speed_.back());
-      cur_transition_counts.push_back(transition_counts_.back());
-    }
-  };
+//  auto ConstructConstraint = [&](const int kCon) {
+//    CHECK_GE(constraint_ind_.size(), kCon);
+//    if (start_id > 0) {
+//      for (auto i = constraint_ind_.size() - kCon; i < constraint_ind_.size(); ++i) {
+//        cur_constraint_id.push_back(constraint_ind_[i] - start_id);
+//        cur_local_speed.push_back(local_speed_[i]);
+//        cur_transition_counts.push_back(transition_counts_[i]);
+//      }
+//      cur_init_speed = speed_[start_id];
+//    } else {
+//      // Be sure to include the first and last constraint
+//      cur_init_speed = init_speed_;
+//      const float inc = (float) constraint_ind_.size() / ((float) kCon - 1);
+//      for (auto i = 0; i < kCon - 1; ++i) {
+//        cur_constraint_id.push_back(constraint_ind_[(int) (i * inc)]);
+//        cur_local_speed.push_back(local_speed_[(int) (i * inc)]);
+//        cur_transition_counts.push_back(transition_counts_[i * inc]);
+//      }
+//      cur_constraint_id.push_back(constraint_ind_.back());
+//      cur_local_speed.push_back(local_speed_.back());
+//      cur_transition_counts.push_back(transition_counts_.back());
+//    }
+//  };
+//
+//  if (N >= 600 && N < 800) {
+//    ConstructConstraint(FunctorSize::kCon_600);
+//    CHECK_EQ(cur_constraint_id.size(), FunctorSize::kCon_600);
+//    grid = ConstructProblem<Functor600, FunctorSize::kVar_600, FunctorSize::kCon_600>
+//        (start_id, N, problem, cur_constraint_id.data(), cur_local_speed.data(), cur_transition_counts.data(),
+//         cur_init_speed, bx, by, bz);
+//  } else if (N >= 800 && N < 1000) {
+//    ConstructConstraint(FunctorSize::kCon_800);
+//    CHECK_EQ(cur_constraint_id.size(), FunctorSize::kCon_800);
+//    grid = ConstructProblem<Functor800, FunctorSize::kVar_800, FunctorSize::kCon_800>
+//        (start_id, N, problem, cur_constraint_id.data(), cur_local_speed.data(), cur_transition_counts.data(),
+//         cur_init_speed, bx, by, bz);
+//  } else if (N >= 1000 && N < 5000) {
+//    ConstructConstraint(FunctorSize::kCon_1000);
+//    CHECK_EQ(cur_constraint_id.size(), FunctorSize::kCon_1000);
+//    grid = ConstructProblem<Functor1000, FunctorSize::kVar_1000, FunctorSize::kCon_1000>
+//        (start_id, N, problem, cur_constraint_id.data(), cur_local_speed.data(), cur_transition_counts.data(),
+//         cur_init_speed, bx, by, bz);
+//  } else if (N >= 5000 && N < 10100) {
+//    ConstructConstraint(FunctorSize::kCon_5000);
+//    CHECK_EQ(cur_constraint_id.size(), FunctorSize::kCon_5000);
+//    grid = ConstructProblem<Functor5000, FunctorSize::kVar_5000, FunctorSize::kCon_5000>
+//        (start_id, N, problem, cur_constraint_id.data(), cur_local_speed.data(), cur_transition_counts.data(),
+//         cur_init_speed, bx, by, bz);
+//  } else {
+//    ConstructConstraint(FunctorSize::kCon_large);
+//    CHECK_EQ(cur_constraint_id.size(), FunctorSize::kCon_large);
+//    grid = ConstructProblem<FunctorLarge, FunctorSize::kVar_large, FunctorSize::kCon_large>
+//        (start_id, N, problem, cur_constraint_id.data(), cur_local_speed.data(), cur_transition_counts.data(),
+//         cur_init_speed, bx, by, bz);
+//  }
+//
+//  ceres::Solver::Options solver_options;
+//  solver_options.max_num_iterations = 3;
+//  solver_options.linear_solver_type = ceres::DENSE_QR;
+//
+//  auto clock = cv::getTickCount();
+//
+//  ceres::Solver::Summary summary;
+//  ceres::Solve(solver_options, &problem, &summary);
+//  LOG(INFO) << summary.BriefReport();
+//
+//  time_optimization_.push_back((cv::getTickCount() - clock) / static_cast<float>(cv::getTickFrequency()));
 
-  if (N >= 600 && N < 800) {
-    ConstructConstraint(FunctorSize::kCon_600);
-    CHECK_EQ(cur_constraint_id.size(), FunctorSize::kCon_600);
-    grid = ConstructProblem<Functor600, FunctorSize::kVar_600, FunctorSize::kCon_600>
-        (start_id, N, problem, cur_constraint_id.data(), cur_local_speed.data(), cur_transition_counts.data(),
-         cur_init_speed, bx, by, bz);
-  } else if (N >= 800 && N < 1000) {
-    ConstructConstraint(FunctorSize::kCon_800);
-    CHECK_EQ(cur_constraint_id.size(), FunctorSize::kCon_800);
-    grid = ConstructProblem<Functor800, FunctorSize::kVar_800, FunctorSize::kCon_800>
-        (start_id, N, problem, cur_constraint_id.data(), cur_local_speed.data(), cur_transition_counts.data(),
-         cur_init_speed, bx, by, bz);
-  } else if (N >= 1000 && N < 5000) {
-    ConstructConstraint(FunctorSize::kCon_1000);
-    CHECK_EQ(cur_constraint_id.size(), FunctorSize::kCon_1000);
-    grid = ConstructProblem<Functor1000, FunctorSize::kVar_1000, FunctorSize::kCon_1000>
-        (start_id, N, problem, cur_constraint_id.data(), cur_local_speed.data(), cur_transition_counts.data(),
-         cur_init_speed, bx, by, bz);
-  } else if (N >= 5000 && N < 10100) {
-    ConstructConstraint(FunctorSize::kCon_5000);
-    CHECK_EQ(cur_constraint_id.size(), FunctorSize::kCon_5000);
-    grid = ConstructProblem<Functor5000, FunctorSize::kVar_5000, FunctorSize::kCon_5000>
-        (start_id, N, problem, cur_constraint_id.data(), cur_local_speed.data(), cur_transition_counts.data(),
-         cur_init_speed, bx, by, bz);
-  } else {
-    ConstructConstraint(FunctorSize::kCon_large);
-    CHECK_EQ(cur_constraint_id.size(), FunctorSize::kCon_large);
-    grid = ConstructProblem<FunctorLarge, FunctorSize::kVar_large, FunctorSize::kCon_large>
-        (start_id, N, problem, cur_constraint_id.data(), cur_local_speed.data(), cur_transition_counts.data(),
-         cur_init_speed, bx, by, bz);
-  }
-
-  ceres::Solver::Options solver_options;
-  solver_options.max_num_iterations = 3;
-  solver_options.linear_solver_type = ceres::DENSE_QR;
-
-  auto clock = cv::getTickCount();
-
-  ceres::Solver::Summary summary;
-  ceres::Solve(solver_options, &problem, &summary);
-  LOG(INFO) << summary.BriefReport();
-
-  time_optimization_.push_back((cv::getTickCount() - clock) / static_cast<float>(cv::getTickFrequency()));
-
-  CommitOptimizationResult(grid, start_id, bx.data(), by.data(), bz.data());
+//  CommitOptimizationResult(grid, start_id, bx.data(), by.data(), bz.data());
+//  for (int i = start_id + 1; i < num_frames_; ++i) {
+//    if (i > rotation_vector_.size()) break;
+//    const double dt = ts_[i] - ts_[i - 1];
+//    speed_[i] = rotation_vector_[i - 1] * speed_[i - 1];
+//    position_[i] = position_[i - 1] + speed_[i - 1] * dt;
+//  }
 }
 
 void IMUTrajectory::StartOptmizationThread() {
