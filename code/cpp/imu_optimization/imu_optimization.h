@@ -167,8 +167,8 @@ struct LocalSpeedFunctor {
 #endif
 
  private:
-  std::shared_ptr<SparseGrid> grid_;
   const double* time_stamp_;
+  std::shared_ptr<SparseGrid> grid_;
   const Eigen::Vector3d* linacce_;
   const Eigen::Quaterniond* orientation_;
   const Eigen::Quaterniond* R_GW_;

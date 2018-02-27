@@ -20,6 +20,9 @@ class ModelWrapper{
   virtual bool LoadFromFile(const std::string& path) = 0;
   virtual void Predict(const cv::Mat& feature, Eigen::VectorXd* response) const = 0;
   virtual void Predict(const cv::Mat& feature, Eigen::VectorXd* response, int* label) const = 0;
+  virtual int GetNumClasses() const { return 0; }
+
+  virtual int GetNumChannels() const{ return 0; }
 };
 
 struct SVRCascadeOption{

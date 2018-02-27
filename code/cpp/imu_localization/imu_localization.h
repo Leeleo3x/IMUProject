@@ -32,7 +32,9 @@ enum RegressionOption {
   // Only constraints the speed along the local Z direction.
   Z_ONLY,
   // Assume constant speed.
-  CONST
+  CONST,
+  // Esitimate angular velocity
+  ANG
 };
 
 struct IMULocalizationOption {
@@ -45,10 +47,10 @@ struct IMULocalizationOption {
   double weight_ls = 1.0;
   double weight_vs = 1.0;
 
-  RegressionOption reg_option = FULL;
+  RegressionOption reg_option = ANG;
   double const_speed = 1.0;
 
-  static constexpr int reg_interval = 50;
+  static constexpr int reg_interval = 200;
 
   // The following two terms are used to identify unreliable classification/regression results. It works as follows:
   // For i'th predicted label, we consider the window: [i - $label_filter_radius, i + $label_filter_radius].
@@ -231,6 +233,15 @@ class IMUTrajectory {
     if (opt_thread_.joinable()) {
       opt_thread_.join();
     }
+    Eigen::Vector3d init_speed;
+    init_speed << 0, 0, 1;
+    speed_[0] = init_speed;
+    for (int i = 1; i < rotation_vector_.size(); ++i) {
+      std::cout << speed_[i-1] << std::endl;
+      speed_[i] = rotation_vector_[i - 1] * speed_[i - 1];
+      std::cout << position_[i-1] << std::endl;
+      position_[i] = position_[i - 1] + speed_[i - 1];
+    }
   }
 
   void CommitOptimizationResult(const SparseGrid *grid, const int start_id,
@@ -262,6 +273,7 @@ class IMUTrajectory {
   std::vector<int> labels_;
   std::vector<int> transition_counts_;
   std::vector<Eigen::Vector3d> local_speed_;
+  std::vector<Eigen::Quaterniond> rotation_vector_;
   int last_constraint_ind_;
 
   const IMUProject::ModelWrapper* model_;
