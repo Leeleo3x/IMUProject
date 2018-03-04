@@ -96,19 +96,23 @@ int IMUTrajectory::RegressSpeed(const int end_ind) {
     labels_.emplace_back(predicted_label);
     transition_counts_.emplace_back(0);
 
+//    std::cout << feature << std::endl;
+//    std::cout << last_constraint_ind_ << ": " << regressed << std::endl;
+    printf("%5d: %d %lf\n", last_constraint_ind_, predicted_label, regressed[0]);
+
 //    const double ls_x = regressed[0];
 //    const double ls_z = regressed[1];
-    auto t = ts_[i] - ts_[i - td_option_.window_size];
-    Eigen::Vector3d angular_velocity = regressed.tail<3>() * t;
-    auto ang_norm = angular_velocity.norm();
-    Eigen::Quaterniond q;
-    q.w() = cos(ang_norm / 2);
-    q.vec() =  sin(ang_norm / 2) * angular_velocity / ang_norm;
+//    auto t = ts_[i] - ts_[i - td_option_.window_size];
+//    Eigen::Vector3d angular_velocity = regressed.tail<3>() * t;
+//    auto ang_norm = angular_velocity.norm();
+//    Eigen::Quaterniond q;
+//    q.w() = cos(ang_norm / 2);
+//    q.vec() =  sin(ang_norm / 2) * angular_velocity / ang_norm;
 
 
     constraint_ind_.push_back(i);
     local_speed_.emplace_back(regressed[0], 0, 0);
-    rotation_vector_.emplace_back(q);
+//    rotation_vector_.emplace_back(q);
     // The forward direction is defined in the stabilized IMU frame, therefore no gravity compensation is needed.
 //    Eigen::Vector3d forward_dir(0, 0, -1);
 

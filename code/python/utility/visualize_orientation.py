@@ -31,8 +31,8 @@ def orientation(magnet, acce):
 
 
 def show(folder, start, num):
-    tango_start = 678161033916680
-    pixel_start = 229911409921890
+    tango_start = 1109611481633654
+    pixel_start = 121901693862541
     fig = plt.figure(num)
     def move(df):
         df[:, [4, 1, 2, 3]] = df[:, [1, 2, 3, 4]]
@@ -44,11 +44,11 @@ def show(folder, start, num):
 
     fig = plt.figure()
     ax = fig.gca(projection='3d')
-    ax.set_xlim3d([-1.5, 1.5])
+    ax.set_xlim3d([-4.5, 4.5])
     ax.set_xlabel('X')
-    ax.set_ylim3d([-1.5, 1.5])
+    ax.set_ylim3d([-4.5, 4.5])
     ax.set_ylabel('Y')
-    ax.set_zlim3d([-1.5, 1.5])
+    ax.set_zlim3d([-4.5, 4.5])
     ax.set_zlabel('Z')
     # ax.plot(position[:, 1], position[:, 2], position[:, 3])
     init = np.array(
@@ -114,8 +114,10 @@ def show(folder, start, num):
         return [line0, line1, line2]
 
     anim = animation.FuncAnimation(fig, insert, frames=min(len(dir_pixel), len(dir_tango)), interval=5, blit=True)
+    plt.figure(1)
+    plt.plot(angle)
 
-    anim.save('example.mp4', fps=30)
+    # anim.save('example.mp4', fps=30)
     plt.show()
 
 

@@ -39,7 +39,7 @@ enum RegressionOption {
 
 struct IMULocalizationOption {
   // Number of frames between two consecutive optimizations.
-  int local_opt_interval = 200;
+  int local_opt_interval = 50;
   // Temporal window size (in frames) for each optimization.
   int local_opt_window = 1000;
 
@@ -236,9 +236,20 @@ class IMUTrajectory {
     Eigen::Vector3d init_speed;
     init_speed << 0, 0, 1;
     speed_[0] = init_speed;
-    for (int i = 1; i < rotation_vector_.size(); ++i) {
+    Eigen::Vector3d init_pos;
+    init_pos << 0, 0, 0;
+    position_[0] = init_pos;
+    for (int i = 1; i < local_speed_.size(); ++i) {
       std::cout << speed_[i-1] << std::endl;
-      speed_[i] = rotation_vector_[i - 1] * speed_[i - 1];
+      auto theta = local_speed_[i][0];
+      std::cout << theta << std::endl;
+      Eigen::Matrix3d r;
+      r << cos(theta), 0, -sin(theta),
+          0, 1, 0,
+          sin(theta), 0, cos(theta);
+      std::cout << r << std::endl;
+      speed_[i] = r * speed_[i - 1];
+      std::cout << speed_[i] << std::endl;
       std::cout << position_[i-1] << std::endl;
       position_[i] = position_[i - 1] + speed_[i - 1];
     }

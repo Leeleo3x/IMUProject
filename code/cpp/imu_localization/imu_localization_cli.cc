@@ -17,7 +17,8 @@
 #include "utility/utility.h"
 #include "utility/stlplus3/file_system.hpp"
 
-DEFINE_string(model_path, "/home/leo/Data/train_result", "Path to model");
+DEFINE_string(model_path, "/home/leo/Data/imu/tmp",
+              "Path to model");
 DEFINE_string(mapinfo_path, "default", "path to map info");
 DEFINE_int32(log_interval, 1000, "logging interval");
 DEFINE_string(color, "blue", "color");
@@ -216,53 +217,51 @@ int main(int argc, char **argv) {
   const std::vector<Eigen::Vector3d> &gt_positions = dataset.GetPosition();
   Eigen::Vector3d sum_gt_position = std::accumulate(gt_positions.begin(), gt_positions.end(),
 						    Eigen::Vector3d(0, 0, 0));
-  bool is_gt_valid = sum_gt_position.norm() > std::numeric_limits<double>::epsilon();
-  if (FLAGS_register_to_reference_global) {
-    printf("Estimating global transformation\n");
-    Eigen::Matrix4d global_transform;
-    Eigen::Matrix3d global_rotation = Eigen::Matrix3d::Identity();
-    Eigen::Vector3d global_translation;
-    if(is_gt_valid) {
-      IMUProject::EstimateTransformation(output_positions, gt_positions, &global_transform, &global_rotation,
-                                         &global_translation);
-    }
-    for (int i = 0; i < output_positions.size(); ++i) {
-      output_positions[i] = global_rotation * (output_positions[i] - gt_positions[0]) + gt_positions[0];
-      output_orientation[i] = global_rotation * output_orientation[i];
-    }
-
-    if (FLAGS_register_start_portion_2d && is_gt_valid) {
-      if (FLAGS_start_portion_length < 0) {
-        FLAGS_start_portion_length = static_cast<int>(output_positions.size());
-      }
-      printf("Registring start portion. Length: %d\n", FLAGS_start_portion_length);
-      CHECK_GT(FLAGS_start_portion_length, 3) << "The start portion length must be larger than 3";
-      std::vector<Eigen::Vector2d> source;
-      std::vector<Eigen::Vector2d> target;
-      for (int i = 0; i < FLAGS_start_portion_length; ++i) {
-        source.push_back(output_positions[i].block<2, 1>(0, 0));
-        target.push_back(gt_positions[i].block<2, 1>(0, 0));
-      }
-      Eigen::Matrix3d transform_2d;
-      Eigen::Matrix2d rotation_2d;
-      Eigen::Vector2d translation_2d;
-      IMUProject::EstimateTransformation<2>(source, target, &transform_2d, &rotation_2d, &translation_2d);
-      Eigen::Matrix3d rotation_2d_as_3d = Eigen::Matrix3d::Identity();
-      rotation_2d_as_3d.block<2, 2>(0, 0) = rotation_2d;
-      for (int i = 0; i < output_positions.size(); ++i) {
-//        Eigen::Vector2d transformed = rotation_2d * (output_positions[i].block<2, 1>(0, 0) - translation_2d)
-//            + translation_2d;
-        Eigen::Vector2d pt_centered = (output_positions[i] - gt_positions[0]).block<2, 1>(0, 0);
-        Eigen::Vector2d transformed = rotation_2d * pt_centered + gt_positions[0].block<2, 1>(0, 0);
-
-        output_positions[i][0] = transformed[0];
-        output_positions[i][1] = transformed[1];
-        output_orientation[i] = rotation_2d_as_3d * output_orientation[i];
-      }
-    }
-
-
-  }
+//  bool is_gt_valid = sum_gt_position.norm() > std::numeric_limits<double>::epsilon();
+//  if (FLAGS_register_to_reference_global) {
+//    printf("Estimating global transformation\n");
+//    Eigen::Matrix4d global_transform;
+//    Eigen::Matrix3d global_rotation = Eigen::Matrix3d::Identity();
+//    Eigen::Vector3d global_translation;
+//    if(is_gt_valid) {
+//      IMUProject::EstimateTransformation(output_positions, gt_positions, &global_transform, &global_rotation,
+//                                         &global_translation);
+//    }
+//    for (int i = 0; i < output_positions.size(); ++i) {
+//      output_positions[i] = global_rotation * (output_positions[i] - gt_positions[0]) + gt_positions[0];
+//      output_orientation[i] = global_rotation * output_orientation[i];
+//    }
+//
+//    if (FLAGS_register_start_portion_2d && is_gt_valid) {
+//      if (FLAGS_start_portion_length < 0) {
+//        FLAGS_start_portion_length = static_cast<int>(output_positions.size());
+//      }
+//      printf("Registring start portion. Length: %d\n", FLAGS_start_portion_length);
+//      CHECK_GT(FLAGS_start_portion_length, 3) << "The start portion length must be larger than 3";
+//      std::vector<Eigen::Vector2d> source;
+//      std::vector<Eigen::Vector2d> target;
+//      for (int i = 0; i < FLAGS_start_portion_length; ++i) {
+//        source.push_back(output_positions[i].block<2, 1>(0, 0));
+//        target.push_back(gt_positions[i].block<2, 1>(0, 0));
+//      }
+//      Eigen::Matrix3d transform_2d;
+//      Eigen::Matrix2d rotation_2d;
+//      Eigen::Vector2d translation_2d;
+//      IMUProject::EstimateTransformation<2>(source, target, &transform_2d, &rotation_2d, &translation_2d);
+//      Eigen::Matrix3d rotation_2d_as_3d = Eigen::Matrix3d::Identity();
+//      rotation_2d_as_3d.block<2, 2>(0, 0) = rotation_2d;
+//      for (int i = 0; i < output_positions.size(); ++i) {
+////        Eigen::Vector2d transformed = rotation_2d * (output_positions[i].block<2, 1>(0, 0) - translation_2d)
+////            + translation_2d;
+//        Eigen::Vector2d pt_centered = (output_positions[i] - gt_positions[0]).block<2, 1>(0, 0);
+//        Eigen::Vector2d transformed = rotation_2d * pt_centered + gt_positions[0].block<2, 1>(0, 0);
+//
+//        output_positions[i][0] = transformed[0];
+//        output_positions[i][1] = transformed[1];
+//        output_orientation[i] = rotation_2d_as_3d * output_orientation[i];
+//      }
+//    }
+//  }
 
   const int kFrames = output_positions.size();
   sprintf(buffer, "%s/result_trajectory_%s.ply", result_dir_path, FLAGS_suffix.c_str());
