@@ -103,14 +103,12 @@ void SVRCascade::Predict(const cv::Mat &feature, Eigen::VectorXd* response, int 
   CHECK_LT(*label, GetNumClasses()) << "The predicted label is unknown: " << *label;
   // If the label is "transition", return an impossible value (1000, 1000). This is not a good way, but it doesn't rely
   // on the label, thus is compatible with the old all-on-one model.
-  *label = 3;
   if (class_names_[*label] == kIgnoreLabel_){
     for (int chn = 0; chn < GetNumChannels(); ++chn){
       (*response)[chn] = 1000;
     }
   }else {
     for (int chn = 0; chn < GetNumChannels(); ++chn) {
-//      (*response)[chn] = regressors_[(*label) * GetNumChannels() + chn]->predict(feature);
       (*response)[chn] = regressors_[(*label) * GetNumChannels() + chn]->predict(feature);
     }
   }

@@ -17,7 +17,7 @@
 #include "utility/utility.h"
 #include "utility/stlplus3/file_system.hpp"
 
-DEFINE_string(model_path, "/home/leo/Data/imu/tmp",
+DEFINE_string(model_path, "/home/leo/Data/imu/models/body_svm_more_data",
               "Path to model");
 DEFINE_string(mapinfo_path, "default", "path to map info");
 DEFINE_int32(log_interval, 1000, "logging interval");

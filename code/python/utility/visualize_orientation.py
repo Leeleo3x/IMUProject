@@ -30,25 +30,74 @@ def orientation(magnet, acce):
     return [azimuth, pitch, roll]
 
 
-def show(folder, start, num):
-    tango_start = 1109611481633654
-    pixel_start = 121901693862541
+def show(folder, start, num, shift=0):
+    # backpack1
+    offset = 687306761259439
+    # backpack2
+    offset = 687306761428561
+    # backpack3
+    # offset = 687306763240999
+    # backpack4
+    offset = -11189698165640
     fig = plt.figure(num)
     def move(df):
         df[:, [4, 1, 2, 3]] = df[:, [1, 2, 3, 4]]
         return df
     # poses = np.genfromtxt(folder+"/tango/pose.txt")
-    rotation = move(np.genfromtxt(folder + "/tango/orientation.txt"))
-    pixel = move(np.genfromtxt(folder + "/pixel/orientation.txt"))
-    position = np.genfromtxt(folder+"/tango/pose.txt")[:, 0:4]
+    def view(array, fig):
+        array = np.array(array)
+        ax = fig.add_subplot(111)
+        ax.plot(array[:, 1], 'r', array[:, 2], 'g', array[:, 3], 'b')
+        def onclick(event):
+            ix = event.xdata
+            print(str(int(array[int(round(ix)), 0])))
+        fig.canvas.mpl_connect('button_press_event', onclick)
+    acce_tango = np.genfromtxt(folder+'/tango/acce.txt')
+    acce_pixel = np.genfromtxt(folder+'/pixel/acce.txt')
+    print(1e9 / ((acce_tango[-1, 0] - acce_tango[0, 0]) / acce_tango.shape[0]))
+    print(1e9 / ((acce_pixel[-1, 0] - acce_pixel[0, 0]) / acce_pixel.shape[0]))
+
+    view(acce_tango, plt.figure(100))
+    view(acce_pixel, plt.figure(101))
+    plt.show()
+
+    quaternion_pixel = []
+    quaternion_tango = []
+    angle = []
+    dir_pixel = []
+    dir_tango = []
+    v = np.array([1, 0, 0])
+    for x in pixel:
+        if (x[0] + offset) >= rotation[0, 0]:
+            quaternion_pixel.append(Quaternion(x[1:5]))
+            dir_pixel.append(quaternion_pixel[-1].rotate(v))
+    # pixel_s = 1400
+    # dir_pixel = dir_pixel[pixel_s:]
+    # quaternion_pixel = quaternion_pixel[pixel_s:]
+    # tango_s = 1400 + shift
+    for x in rotation:
+        if (x[0] - offset) > pixel[0, 0]:
+            quaternion_tango.append(Quaternion(x[1:5]))
+            dir_tango.append(quaternion_tango[-1].rotate(v))
+
+    # dir_tango = dir_tango[tango_s:]
+    # quaternion_tango = quaternion_tango[tango_s:]
+
+
+    for i in range(min(len(quaternion_pixel), len(quaternion_tango))):
+        x = quaternion_pixel[i].rotate(v)
+        y = quaternion_tango[i].rotate(v)
+        res = np.dot(x, y)
+        angle.append(math.acos(res) / math.pi * 180)
+    # return np.linalg.norm(angle)
 
     fig = plt.figure()
     ax = fig.gca(projection='3d')
-    ax.set_xlim3d([-4.5, 4.5])
+    ax.set_xlim3d([-1.5, 1.5])
     ax.set_xlabel('X')
-    ax.set_ylim3d([-4.5, 4.5])
+    ax.set_ylim3d([-1.5, 1.5])
     ax.set_ylabel('Y')
-    ax.set_zlim3d([-4.5, 4.5])
+    ax.set_zlim3d([-1.5, 1.5])
     ax.set_zlabel('Z')
     # ax.plot(position[:, 1], position[:, 2], position[:, 3])
     init = np.array(
@@ -59,39 +108,11 @@ def show(folder, start, num):
     line2 = ax.plot([0], [0], [0], 'b')[0]
     ax.legend()
 
-    quaternion_pixel = []
-    quaternion_tango = []
-    angle = []
-    dir_pixel = []
-    dir_tango = []
-    v = np.array([1, 0, 0])
-    for x in pixel:
-        print((x[0] - pixel_start)/1000000)
-        if (x[0] - pixel_start) / 1000000 > 0:
-            quaternion_pixel.append(Quaternion(x[1:5]))
-            dir_pixel.append(quaternion_pixel[-1].rotate(v))
-    for x in rotation:
-        if (x[0] - tango_start) / 1000000 > 0:
-            quaternion_tango.append(Quaternion(x[1:5]))
-            dir_tango.append(quaternion_tango[-1].rotate(v))
-
-
-    for i in range(min(len(quaternion_pixel), len(quaternion_tango))):
-        x = quaternion_pixel[i].rotate(v)
-        y = quaternion_tango[i].rotate(v)
-        res = np.dot(x, y)
-        angle.append(math.acos(res) / math.pi * 180)
-
     ppp = []
     pre = 0
     current = -1
     for x in position:
-        idx = int((x[0] - tango_start) / 5000000)
-        if idx < 0:
-            continue
-        if idx != current:
-            current = idx
-            ppp.append(x[1:4]*0.1-np.array([0.5, 1.3, 0.5]))
+        ppp.append(x[1:4]*0.05-np.array([-0.5, 1.5, 0.5]))
 
     ppp = np.array(ppp)
     ppp[:, 0] *= -1
@@ -120,11 +141,6 @@ def show(folder, start, num):
     # anim.save('example.mp4', fps=30)
     plt.show()
 
-
-
-    def view(array):
-        array = np.array(array)
-        plt.plot(array[:, 0], 'r', array[:, 1], 'g', array[:, 2], 'b')
 
     plt.figure(num+1)
     view(dir_pixel)
@@ -213,6 +229,7 @@ def show(folder, start, num):
     # fig = plt.figure(num+2)
 
 
+
 def diff(d1, d2):
     s1 = 0
     s2 = 0
@@ -239,6 +256,11 @@ if __name__ == "__main__":
     # tasc - 3
     # 1959 - 2071
     # show(os.path.join(args.dir, 'pixel'), 0, 0)
-    show(args.dir, 0, 1)
+    result = []
+    # for i in range(1000):
+    show(args.dir, 0, 1, 80)
+    #     print(i)
+    #     print(result[-1])
+    # print(result)
     # diff(r1, r2)
     plt.show()

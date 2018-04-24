@@ -223,6 +223,7 @@ def run_training(features, targets, valid_features, valid_targets, num_epoch, ve
 
     return training_losses, validation_losses
 
+
 def load_dataset(listpath, imu_columns, feature_smooth_sigma, target_smooth_sigma):
     root_dir = os.path.dirname(listpath)
     features_all = []
@@ -250,6 +251,7 @@ def load_dataset(listpath, imu_columns, feature_smooth_sigma, target_smooth_sigm
         features_all.append(feature_vectors)
         targets_all.append(target_speed[:, [0, 2]])
     return features_all, targets_all
+
 
 if __name__ == '__main__':
     import pandas
@@ -302,7 +304,7 @@ if __name__ == '__main__':
     print('Total number of training samples: ', sum([len(target) for target in targets_train]))
     print('Total number of validation samples: ', sum([len(target) for target in targets_validation]))
     print('Running training')
-    training_losses, validation_losses  = run_training(features_train, targets_train, features_validation, targets_validation, args.num_epoch,
+    training_losses, validation_losses = run_training(features_train, targets_train, features_validation, targets_validation, args.num_epoch,
                                                        output_path=model_path, tensorboard_path=tfboard_path, checkpoint_path=chpt_path)
 
     if output_root is not None:
